@@ -286,10 +286,16 @@ async function initDb() {
   `);
 
   // Optional bootstrap admin
-  const bootstrapUser = process.env.ADMIN_USERNAME;
-  const bootstrapEmail = process.env.BOOTSTRAP_ADMIN_EMAIL || (bootstrapUser ? `${bootstrapUser}@dashbo.local` : undefined);
-  const bootstrapPassword = process.env.BOOTSTRAP_ADMIN_PASSWORD || process.env.ADMIN_PASSWORD;
+  const bootstrapUser = process.env.ADMIN_USERNAME || process.env.BOOTSTRAP_ADMIN_USERNAME || process.env.BOOTSTRAP_USERNAME;
   const bootstrapName = process.env.BOOTSTRAP_ADMIN_NAME || bootstrapUser || 'Admin';
+  const bootstrapEmail =
+    process.env.BOOTSTRAP_ADMIN_EMAIL ||
+    process.env.ADMIN_EMAIL ||
+    (bootstrapUser ? `${bootstrapUser}@dashbo.local` : bootstrapName ? `${bootstrapName}@dashbo.local` : undefined);
+  const bootstrapPassword =
+    process.env.BOOTSTRAP_ADMIN_PASSWORD ||
+    process.env.ADMIN_PASSWORD ||
+    process.env.BOOTSTRAP_PASSWORD;
 
   if (bootstrapEmail && bootstrapPassword) {
     const existing = await p.query('SELECT COUNT(*)::int AS c FROM users;');
