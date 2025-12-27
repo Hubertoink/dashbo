@@ -22,15 +22,22 @@ async function listEvents(req, res) {
   const effectiveFrom = from || new Date(Date.now() - 7 * 24 * 3600 * 1000);
   const effectiveTo = to || new Date(Date.now() + 30 * 24 * 3600 * 1000);
 
-  const [rows, outlook] = await Promise.all([
-    listEventsBetween({ userId, from, to }),
-    listOutlookEventsBetween({ userId, from: effectiveFrom, to: effectiveTo }),
-  ]);
+  try {
+    const [rows, outlook] = await Promise.all([
+      listEventsBetween({ userId, from, to }),
+      listOutlookEventsBetween({ userId, from: effectiveFrom, to: effectiveTo }),
+    ]);
 
-  const merged = [...rows, ...outlook];
-  merged.sort((a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime());
+    const merged = [...rows, ...outlook];
+    merged.sort((a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime());
 
-  res.json(merged);
+    res.json(merged);
+  } catch (e) {
+    // Express 4 does not reliably handle rejected promises from async handlers.
+    // Never let this bubble up and crash the process.
+    console.error('[events] listEvents failed', e);
+    res.status(500).json({ error: 'internal_error' });
+  }
 }
 
 async function createEvent(req, res) {

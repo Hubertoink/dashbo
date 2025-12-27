@@ -120,8 +120,11 @@ async function refreshToken({ refreshToken }) {
     client_secret: cfg.clientSecret,
     grant_type: 'refresh_token',
     refresh_token: String(refreshToken),
+    // IMPORTANT:
+    // Do NOT send `scope` on refresh. If env scopes change later (e.g. add Tasks.ReadWrite),
+    // Microsoft may reject the refresh token (AADSTS70000) because the originally granted
+    // scopes don't match. Refresh without scope keeps the originally granted scopes.
     redirect_uri: cfg.redirectUri,
-    scope: cfg.scopes,
   });
 
   const resp = await fetch(cfg.tokenUrl, {
@@ -574,18 +577,33 @@ async function listOutlookEventsBetween({ userId, from, to }) {
 
   if (connections.length > 0) {
     for (const c of connections) {
-      const accessToken = await getValidAccessTokenForConnection({ userId, connectionId: c.id });
-      if (!accessToken) continue;
-      const color = ALLOWED_COLOR_KEYS.has(c.color) ? c.color : 'cyan';
-      const events = await fetchCalendarViewFor({ accessToken, connectionId: c.id, color, label: c.label });
-      all.push(...events);
+      try {
+        const accessToken = await getValidAccessTokenForConnection({ userId, connectionId: c.id });
+        if (!accessToken) continue;
+        const color = ALLOWED_COLOR_KEYS.has(c.color) ? c.color : 'cyan';
+        const events = await fetchCalendarViewFor({ accessToken, connectionId: c.id, color, label: c.label });
+        all.push(...events);
+      } catch (e) {
+        // Never crash the whole /events endpoint because one Outlook connection can't refresh.
+        // Typical reason: scopes changed and the user needs to re-consent.
+        console.warn('[outlook] connection failed, skipping', {
+          userId,
+          connectionId: c.id,
+          error: e?.message || String(e),
+        });
+      }
     }
   } else {
     // Legacy fallback: treat single token as one connection.
-    const accessToken = await getValidAccessToken({ userId });
-    if (!accessToken) return [];
-    const events = await fetchCalendarViewFor({ accessToken, connectionId: 0, color: 'cyan', label: 'Outlook' });
-    all.push(...events);
+    try {
+      const accessToken = await getValidAccessToken({ userId });
+      if (!accessToken) return [];
+      const events = await fetchCalendarViewFor({ accessToken, connectionId: 0, color: 'cyan', label: 'Outlook' });
+      all.push(...events);
+    } catch (e) {
+      console.warn('[outlook] legacy token failed, skipping', { userId, error: e?.message || String(e) });
+      return [];
+    }
   }
 
   all.sort((a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime());

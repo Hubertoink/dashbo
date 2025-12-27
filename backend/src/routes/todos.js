@@ -24,7 +24,8 @@ todosRouter.get('/', requireAuth, async (req, res) => {
       });
     }
 
-    throw e;
+    console.error('[todos] list failed', e);
+    return res.status(500).json({ error: 'internal_error' });
   }
 });
 
@@ -72,7 +73,8 @@ todosRouter.post('/update', requireAuth, async (req, res) => {
       return res.status(404).json({ error: 'not_found' });
     }
 
-    throw e;
+    console.error('[todos] update failed', { code, status }, e);
+    return res.status(500).json({ error: 'internal_error' });
   }
 });
 
