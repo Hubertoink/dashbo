@@ -3,11 +3,27 @@ const bcrypt = require('bcryptjs');
 
 let pool;
 
+function buildDatabaseUrlFromParts() {
+  const host = process.env.DB_HOST;
+  const port = process.env.DB_PORT;
+  const name = process.env.DB_NAME;
+  const user = process.env.DB_USER;
+  const password = process.env.DB_PASSWORD;
+
+  if (!host || !name || !user) return null;
+
+  const safeUser = encodeURIComponent(String(user));
+  const safePass = password != null ? encodeURIComponent(String(password)) : '';
+  const auth = safePass ? `${safeUser}:${safePass}` : safeUser;
+  const p = port ? String(port) : '5432';
+  return `postgres://${auth}@${host}:${p}/${name}`;
+}
+
 function getPool() {
   if (!pool) {
-    const connectionString = process.env.DATABASE_URL;
+    const connectionString = process.env.DATABASE_URL || buildDatabaseUrlFromParts();
     if (!connectionString) {
-      throw new Error('DATABASE_URL is required');
+      throw new Error('DATABASE_URL is required (or DB_HOST/DB_PORT/DB_NAME/DB_USER/DB_PASSWORD)');
     }
     pool = new Pool({ connectionString });
   }
@@ -267,9 +283,10 @@ async function initDb() {
   `);
 
   // Optional bootstrap admin
-  const bootstrapEmail = process.env.BOOTSTRAP_ADMIN_EMAIL;
-  const bootstrapPassword = process.env.BOOTSTRAP_ADMIN_PASSWORD;
-  const bootstrapName = process.env.BOOTSTRAP_ADMIN_NAME || 'Admin';
+  const bootstrapUser = process.env.ADMIN_USERNAME;
+  const bootstrapEmail = process.env.BOOTSTRAP_ADMIN_EMAIL || (bootstrapUser ? `${bootstrapUser}@dashbo.local` : undefined);
+  const bootstrapPassword = process.env.BOOTSTRAP_ADMIN_PASSWORD || process.env.ADMIN_PASSWORD;
+  const bootstrapName = process.env.BOOTSTRAP_ADMIN_NAME || bootstrapUser || 'Admin';
 
   if (bootstrapEmail && bootstrapPassword) {
     const existing = await p.query('SELECT COUNT(*)::int AS c FROM users;');
