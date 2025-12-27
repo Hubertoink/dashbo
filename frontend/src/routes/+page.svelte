@@ -406,18 +406,31 @@
           bgRotateInterval = null;
         }
 
-        if (uploadedBackgroundUrls.length > 0) {
-          const preferred = s.background ? `/api/media/${s.background}` : null;
-          const preferredIndex = preferred ? uploadedBackgroundUrls.indexOf(preferred) : -1;
-          bgIndex = preferredIndex >= 0 ? preferredIndex : Math.floor(Math.random() * uploadedBackgroundUrls.length);
-          await applyBackground(uploadedBackgroundUrls[bgIndex] ?? '/background.jpg');
+        const rotateEnabled = Boolean(s.backgroundRotateEnabled);
 
-          if (uploadedBackgroundUrls.length > 1) {
-            bgRotateInterval = setInterval(() => {
-              bgIndex = (bgIndex + 1) % uploadedBackgroundUrls.length;
-              const next = uploadedBackgroundUrls[bgIndex];
-              if (next) void applyBackground(next);
-            }, BG_ROTATE_MS);
+        if (uploadedBackgroundUrls.length > 0) {
+          if (rotateEnabled) {
+            // Rotation enabled: start on a random uploaded image.
+            bgIndex = Math.floor(Math.random() * uploadedBackgroundUrls.length);
+            await applyBackground(uploadedBackgroundUrls[bgIndex] ?? '/background.jpg');
+
+            if (uploadedBackgroundUrls.length > 1) {
+              bgRotateInterval = setInterval(() => {
+                // pick a random next index (avoid immediate repeat when possible)
+                const max = uploadedBackgroundUrls.length;
+                let nextIndex = Math.floor(Math.random() * max);
+                if (max > 1 && nextIndex === bgIndex) nextIndex = (nextIndex + 1) % max;
+                bgIndex = nextIndex;
+                const next = uploadedBackgroundUrls[bgIndex];
+                if (next) void applyBackground(next);
+              }, BG_ROTATE_MS);
+            }
+          } else {
+            // Rotation disabled: keep chosen background (if any).
+            const preferred = s.background ? `/api/media/${s.background}` : null;
+            const preferredIndex = preferred ? uploadedBackgroundUrls.indexOf(preferred) : -1;
+            bgIndex = preferredIndex >= 0 ? preferredIndex : 0;
+            await applyBackground(uploadedBackgroundUrls[bgIndex] ?? '/background.jpg');
           }
         } else if (s.backgroundUrl) {
           await applyBackground(`/api${s.backgroundUrl}`);

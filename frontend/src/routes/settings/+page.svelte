@@ -19,6 +19,7 @@
     setWeatherLocation,
     setHolidaysEnabled,
     uploadBackgroundWithProgress,
+    setBackgroundRotateEnabled,
     listTags,
     createTag,
     deleteTag,
@@ -84,6 +85,13 @@
   let uploadTotalLabel: string | null = null;
   let uploadError: string | null = null;
 
+  let backgroundRotateEnabled = false;
+  let rotateSaving = false;
+  let rotateError: string | null = null;
+
+  let folderConfirmOpen = false;
+  let pendingFolderFiles: File[] = [];
+
   let folderInputEl: HTMLInputElement | null = null;
 
   let deleteBgFor: string | null = null;
@@ -124,6 +132,20 @@
     settings = await fetchSettings();
     weatherLocation = settings?.weatherLocation ?? '';
     holidaysEnabled = Boolean(settings?.holidaysEnabled);
+    backgroundRotateEnabled = Boolean(settings?.backgroundRotateEnabled);
+  }
+
+  async function saveBackgroundRotate() {
+    rotateError = null;
+    rotateSaving = true;
+    try {
+      await setBackgroundRotateEnabled(backgroundRotateEnabled);
+      await refreshSettings();
+    } catch {
+      rotateError = 'Speichern fehlgeschlagen.';
+    } finally {
+      rotateSaving = false;
+    }
   }
 
   async function refreshUsers() {
@@ -284,10 +306,35 @@
   }
 
   function onChooseUploadFiles(files: FileList | null | undefined) {
+    onChooseUploadFilesFrom('files', files);
+  }
+
+  function onChooseUploadFilesFrom(source: 'files' | 'folder', files: FileList | null | undefined) {
     uploadError = null;
     uploadProgress = 0;
     uploadTotalLabel = null;
-    uploadFiles = files ? Array.from(files) : [];
+
+    const arr = files ? Array.from(files) : [];
+    if (source === 'folder' && arr.length > 0) {
+      pendingFolderFiles = arr;
+      folderConfirmOpen = true;
+      return;
+    }
+
+    uploadFiles = arr;
+  }
+
+  function confirmFolderSelection() {
+    uploadFiles = pendingFolderFiles;
+    pendingFolderFiles = [];
+    folderConfirmOpen = false;
+  }
+
+  function cancelFolderSelection() {
+    pendingFolderFiles = [];
+    folderConfirmOpen = false;
+    uploadFiles = [];
+    if (folderInputEl) folderInputEl.value = '';
   }
 
   async function chooseBg(filename: string) {
@@ -744,13 +791,36 @@
         <div class="bg-white/5 rounded-xl p-4">
           <div class="font-medium mb-3">Hintergrund</div>
 
+          <div class="flex items-center gap-3 mb-3">
+            <label class="flex items-center gap-2 text-sm text-white/80">
+              <input
+                type="checkbox"
+                class="rounded bg-white/10 border-0"
+                bind:checked={backgroundRotateEnabled}
+                disabled={!authed || !isAdmin || rotateSaving}
+              />
+              Zufällig wechseln (alle 10 Minuten)
+            </label>
+            <button
+              class="ml-auto h-8 px-3 rounded-lg bg-white/20 hover:bg-white/25 text-xs font-medium disabled:opacity-50"
+              on:click={saveBackgroundRotate}
+              disabled={!authed || !isAdmin || rotateSaving}
+            >
+              Speichern
+            </button>
+          </div>
+
+          {#if rotateError}
+            <div class="text-red-400 text-xs mb-2">{rotateError}</div>
+          {/if}
+
           <div class="flex gap-2 mb-3">
             <input
               class="flex-1 text-sm text-white/70 file:mr-3 file:rounded-lg file:border-0 file:bg-white/10 file:px-3 file:py-1.5 file:text-white file:text-sm file:hover:bg-white/15"
               type="file"
               accept="image/png,image/jpeg,image/webp"
               multiple
-              on:change={(e) => onChooseUploadFiles((e.currentTarget as HTMLInputElement).files)}
+              on:change={(e) => onChooseUploadFilesFrom('files', (e.currentTarget as HTMLInputElement).files)}
               disabled={!authed || !isAdmin}
             />
 
@@ -771,12 +841,16 @@
               multiple
               webkitdirectory
               directory
-              on:change={(e) => onChooseUploadFiles((e.currentTarget as HTMLInputElement).files)}
+              on:change={(e) => onChooseUploadFilesFrom('folder', (e.currentTarget as HTMLInputElement).files)}
               disabled={!authed || !isAdmin}
             />
 
             <button
-              class="h-9 px-4 rounded-lg bg-white/20 hover:bg-white/25 text-sm font-medium disabled:opacity-50"
+              class={`h-9 px-4 rounded-lg text-sm font-medium disabled:opacity-50 ${
+                uploadFiles.length > 0 && !savingBg
+                  ? 'bg-emerald-500/30 hover:bg-emerald-500/40'
+                  : 'bg-white/20 hover:bg-white/25'
+              }`}
               on:click={doUpload}
               disabled={!authed || !isAdmin || uploadFiles.length === 0 || savingBg}
             >
@@ -949,6 +1023,37 @@
               disabled={deletingBg}
             >
               Löschen
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  {/if}
+
+  {#if folderConfirmOpen}
+    <!-- svelte-ignore a11y_no_static_element_interactions a11y_click_events_have_key_events -->
+    <div class="fixed inset-0 z-50 bg-black/60" on:click={cancelFolderSelection}>
+      <div class="min-h-full flex items-center justify-center p-6">
+        <div class="w-full max-w-md rounded-2xl bg-black/70 border border-white/10 backdrop-blur-md p-5" on:click|stopPropagation>
+          <div class="text-base font-semibold mb-1">Ordner-Upload übernehmen?</div>
+          <div class="text-sm text-white/70 mb-4">
+            {pendingFolderFiles.length} Datei(en) erkannt. Der Upload läuft anschließend Datei für Datei. Danach bitte auf <span class="font-medium">Upload</span> klicken.
+          </div>
+
+          <div class="flex items-center justify-end gap-2">
+            <button
+              class="h-9 px-4 rounded-lg bg-white/10 hover:bg-white/15 text-sm font-medium"
+              type="button"
+              on:click={cancelFolderSelection}
+            >
+              Abbrechen
+            </button>
+            <button
+              class="h-9 px-4 rounded-lg bg-white/20 hover:bg-white/25 text-sm font-medium"
+              type="button"
+              on:click={confirmFolderSelection}
+            >
+              Übernehmen
             </button>
           </div>
         </div>

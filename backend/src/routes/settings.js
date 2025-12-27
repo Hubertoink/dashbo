@@ -29,6 +29,7 @@ const upload = multer({
 settingsRouter.get('/', async (_req, res) => {
   const backgroundRaw = await getSetting('background');
   const background = backgroundRaw && String(backgroundRaw).trim() ? backgroundRaw : null;
+  const rotateEnabledRaw = await getSetting('background.rotate');
   const weatherLocation = await getSetting('weather.location');
   const holidaysEnabledRaw = await getSetting('holidays.enabled');
   const images = listImages();
@@ -36,7 +37,19 @@ settingsRouter.get('/', async (_req, res) => {
   const backgroundUrl = background ? `/media/${background}` : null;
 
   const holidaysEnabled = String(holidaysEnabledRaw ?? '').toLowerCase() === 'true';
-  res.json({ background, backgroundUrl, images, weatherLocation, holidaysEnabled });
+  const backgroundRotateEnabled = String(rotateEnabledRaw ?? '').toLowerCase() === 'true';
+  res.json({ background, backgroundUrl, images, backgroundRotateEnabled, weatherLocation, holidaysEnabled });
+});
+
+settingsRouter.post('/background/rotate', requireAuth, requireAdmin, async (req, res) => {
+  const schema = z.object({ enabled: z.boolean() });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: 'invalid_body', details: parsed.error.flatten() });
+  }
+
+  await setSetting('background.rotate', parsed.data.enabled ? 'true' : 'false');
+  return res.json({ ok: true });
 });
 
 settingsRouter.delete('/background/:filename', requireAuth, requireAdmin, async (req, res) => {

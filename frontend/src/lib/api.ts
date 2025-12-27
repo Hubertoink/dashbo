@@ -242,6 +242,7 @@ export type SettingsDto = {
   background: string | null;
   backgroundUrl: string | null;
   images: string[];
+  backgroundRotateEnabled?: boolean;
   weatherLocation?: string | null;
   holidaysEnabled?: boolean;
 };
@@ -262,6 +263,10 @@ export async function uploadBackground(file: File): Promise<{ filename: string; 
   const form = new FormData();
   form.append('file', file);
   return apiForm<{ filename: string; url: string }>('/settings/background/upload', form);
+}
+
+export async function setBackgroundRotateEnabled(enabled: boolean): Promise<{ ok: true }> {
+  return api<{ ok: true }>('/settings/background/rotate', { method: 'POST', body: JSON.stringify({ enabled }) });
 }
 
 export function uploadBackgroundWithProgress(
