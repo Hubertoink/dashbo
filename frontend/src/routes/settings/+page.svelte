@@ -10,8 +10,11 @@
     setBackground,
     deleteBackgroundImage,
     fetchOutlookStatus,
+    listOutlookConnections,
     getOutlookAuthUrl,
     disconnectOutlook,
+    disconnectOutlookConnection,
+    setOutlookConnectionColor,
     listUsers,
     createUser,
     deleteUser,
@@ -33,6 +36,7 @@
     type PersonDto,
     type PersonColorKey,
     type OutlookStatusDto
+    , type OutlookConnectionDto
   } from '$lib/api';
 
   let email = '';
@@ -125,8 +129,11 @@
   let deletingFor: UserDto | null = null;
 
   let outlookStatus: OutlookStatusDto | null = null;
+  let outlookConnections: OutlookConnectionDto[] = [];
   let outlookError: string | null = null;
   let outlookBusy = false;
+
+  let outlookColorMenuFor: number | null = null;
 
   async function refreshSettings() {
     settings = await fetchSettings();
@@ -164,12 +171,15 @@
     outlookError = null;
     if (!authed) {
       outlookStatus = null;
+      outlookConnections = [];
       return;
     }
     try {
       outlookStatus = await fetchOutlookStatus();
+      outlookConnections = await listOutlookConnections();
     } catch {
       outlookStatus = null;
+      outlookConnections = [];
       outlookError = 'Outlook Status konnte nicht geladen werden.';
     }
   }
@@ -236,6 +246,35 @@
     }
   }
 
+  async function doOutlookDisconnectConnection(id: number) {
+    if (!authed || outlookBusy) return;
+    outlookBusy = true;
+    outlookError = null;
+    try {
+      await disconnectOutlookConnection(id);
+      await refreshOutlook();
+    } catch {
+      outlookError = 'Outlook Verbindung konnte nicht getrennt werden.';
+    } finally {
+      outlookBusy = false;
+    }
+  }
+
+  async function doOutlookSetConnectionColor(id: number, c: TagColorKey) {
+    if (!authed || outlookBusy) return;
+    outlookBusy = true;
+    outlookError = null;
+    try {
+      await setOutlookConnectionColor(id, c);
+      outlookColorMenuFor = null;
+      await refreshOutlook();
+    } catch {
+      outlookError = 'Farbe konnte nicht gespeichert werden.';
+    } finally {
+      outlookBusy = false;
+    }
+  }
+
   async function doCreateTag() {
     if (!newTagName.trim()) return;
     tagError = null;
@@ -258,6 +297,7 @@
   function onGlobalClick() {
     tagColorMenuOpen = false;
     personColorMenuOpen = false;
+    outlookColorMenuFor = null;
   }
 
   async function doDeleteTag(id: number) {
@@ -698,31 +738,94 @@
           {:else}
             <div class="flex items-center justify-between gap-3">
               <div class="text-sm text-white/70">
-                {#if outlookStatus?.connected}
+                {#if (outlookConnections?.length ?? 0) > 0}
+                  Verbunden ({outlookConnections.length})
+                {:else if outlookStatus?.connected}
                   Verbunden
                 {:else}
                   Nicht verbunden
                 {/if}
               </div>
 
-              {#if outlookStatus?.connected}
-                <button
-                  class="h-9 px-4 rounded-lg bg-white/10 hover:bg-white/15 text-sm font-medium disabled:opacity-50"
-                  on:click={doOutlookDisconnect}
-                  disabled={outlookBusy}
-                >
-                  Trennen
-                </button>
-              {:else}
+              <div class="flex items-center gap-2">
                 <button
                   class="h-9 px-4 rounded-lg bg-white/20 hover:bg-white/25 text-sm font-medium disabled:opacity-50"
                   on:click={doOutlookConnect}
                   disabled={outlookBusy}
                 >
-                  Verbinden
+                  {#if (outlookConnections?.length ?? 0) > 0}
+                    Weiteren verbinden
+                  {:else}
+                    Verbinden
+                  {/if}
                 </button>
-              {/if}
+
+                {#if (outlookConnections?.length ?? 0) > 1}
+                  <button
+                    class="h-9 px-4 rounded-lg bg-white/10 hover:bg-white/15 text-sm font-medium disabled:opacity-50"
+                    on:click={doOutlookDisconnect}
+                    disabled={outlookBusy}
+                  >
+                    Alle trennen
+                  </button>
+                {/if}
+              </div>
             </div>
+
+            {#if (outlookConnections?.length ?? 0) > 0}
+              <div class="mt-3 space-y-2">
+                {#each outlookConnections as c (c.id)}
+                  <div class="flex items-center justify-between gap-3 bg-white/5 rounded-lg px-3 py-2">
+                    <div class="min-w-0 flex items-center gap-3">
+                      <div class="relative">
+                        <button
+                          type="button"
+                          class="h-9 px-3 rounded-lg bg-white/10 hover:bg-white/15 text-sm font-medium flex items-center gap-2"
+                          aria-label="Farbe"
+                          disabled={outlookBusy}
+                          on:click|stopPropagation={() => (outlookColorMenuFor = outlookColorMenuFor === c.id ? null : c.id)}
+                        >
+                          <span class={`w-3 h-3 rounded-full ${colorBg[c.color as TagColorKey]}`}></span>
+                          <span class="text-white/70">Farbe</span>
+                          <span class="text-white/50">▼</span>
+                        </button>
+
+                        {#if outlookColorMenuFor === c.id}
+                          <div class="absolute z-20 mt-2 w-44 rounded-xl bg-black/80 backdrop-blur border border-white/10 overflow-hidden">
+                            {#each colorNames as col}
+                              <button
+                                class="w-full px-3 py-2 flex items-center gap-2 text-sm hover:bg-white/10"
+                                on:click={() => doOutlookSetConnectionColor(c.id, col as TagColorKey)}
+                              >
+                                <span class={`w-3 h-3 rounded-full ${colorBg[col]}`}></span>
+                                <span class="capitalize">{col}</span>
+                              </button>
+                            {/each}
+                          </div>
+                        {/if}
+                      </div>
+
+                      <div class="min-w-0">
+                        <div class="text-sm font-medium text-white/90 truncate">
+                          {c.displayName ?? c.email ?? 'Outlook'}
+                        </div>
+                        {#if c.email && c.displayName}
+                          <div class="text-xs text-white/50 truncate">{c.email}</div>
+                        {/if}
+                      </div>
+                    </div>
+
+                    <button
+                      class="h-9 px-4 rounded-lg bg-white/10 hover:bg-white/15 text-sm font-medium disabled:opacity-50"
+                      on:click={() => doOutlookDisconnectConnection(c.id)}
+                      disabled={outlookBusy}
+                    >
+                      Trennen
+                    </button>
+                  </div>
+                {/each}
+              </div>
+            {/if}
 
             {#if outlookError}
               <div class="mt-2 text-red-400 text-xs">{outlookError}</div>

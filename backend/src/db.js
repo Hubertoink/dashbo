@@ -229,6 +229,44 @@ async function initDb() {
     CREATE INDEX IF NOT EXISTS outlook_oauth_states_user_id_idx ON outlook_oauth_states (user_id);
   `);
 
+  // Outlook (Microsoft Graph) multi-account connections (read-only calendars)
+  await p.query(`
+    CREATE TABLE IF NOT EXISTS outlook_connections (
+      id BIGSERIAL PRIMARY KEY,
+      user_id BIGINT NOT NULL,
+      outlook_user_id TEXT NOT NULL,
+      email TEXT,
+      display_name TEXT,
+      color TEXT NOT NULL DEFAULT 'cyan',
+      access_token TEXT NOT NULL,
+      refresh_token TEXT,
+      scope TEXT,
+      expires_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE (user_id, outlook_user_id)
+    );
+  `);
+
+  await p.query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'outlook_connections_user_id_fkey'
+      ) THEN
+        ALTER TABLE outlook_connections
+        ADD CONSTRAINT outlook_connections_user_id_fkey
+        FOREIGN KEY (user_id)
+        REFERENCES users(id)
+        ON DELETE CASCADE;
+      END IF;
+    END $$;
+  `);
+
+  await p.query(`
+    CREATE INDEX IF NOT EXISTS outlook_connections_user_id_idx ON outlook_connections (user_id);
+  `);
+
   // Bind events to user (family) and optionally to a person
   await p.query(`
     ALTER TABLE events

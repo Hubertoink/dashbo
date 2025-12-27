@@ -7,6 +7,9 @@ const {
   completeOutlookCallback,
   getOutlookStatus,
   disconnectOutlook,
+  listOutlookConnections,
+  setOutlookConnectionColor,
+  disconnectOutlookConnection,
   getOutlookConfig,
 } = require('../services/outlookService');
 
@@ -34,6 +37,41 @@ outlookRouter.post('/auth-url', requireAuth, async (req, res) => {
 outlookRouter.post('/disconnect', requireAuth, async (req, res) => {
   const userId = Number(req.auth?.sub);
   await disconnectOutlook({ userId });
+  res.json({ ok: true });
+});
+
+outlookRouter.get('/connections', requireAuth, async (req, res) => {
+  const userId = Number(req.auth?.sub);
+  const connections = await listOutlookConnections({ userId });
+  res.json(connections);
+});
+
+outlookRouter.post('/connections/:id/color', requireAuth, async (req, res) => {
+  const userId = Number(req.auth?.sub);
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id) || id <= 0) return res.status(400).json({ error: 'invalid_id' });
+
+  const schema = z.object({ color: z.string().min(1) });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: 'invalid_body' });
+
+  try {
+    const r = await setOutlookConnectionColor({ userId, connectionId: id, color: parsed.data.color });
+    if (!r.ok) return res.status(404).json({ error: 'not_found' });
+    res.json({ ok: true });
+  } catch (e) {
+    const msg = String(e?.message || e);
+    if (msg.includes('invalid_color')) return res.status(400).json({ error: 'invalid_color' });
+    throw e;
+  }
+});
+
+outlookRouter.post('/connections/:id/disconnect', requireAuth, async (req, res) => {
+  const userId = Number(req.auth?.sub);
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id) || id <= 0) return res.status(400).json({ error: 'invalid_id' });
+  const r = await disconnectOutlookConnection({ userId, connectionId: id });
+  if (!r.ok) return res.status(404).json({ error: 'not_found' });
   res.json({ ok: true });
 });
 

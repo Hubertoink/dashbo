@@ -22,6 +22,15 @@ export type OutlookStatusDto = {
   scope: string | null;
 };
 
+export type OutlookConnectionDto = {
+  id: number;
+  email: string | null;
+  displayName: string | null;
+  color: TagColorKey;
+  expiresAt: string | null;
+  scope: string | null;
+};
+
 export type TagColorKey = 'fuchsia' | 'cyan' | 'emerald' | 'amber' | 'rose' | 'violet' | 'sky' | 'lime';
 
 export type PersonColorKey = TagColorKey;
@@ -116,6 +125,18 @@ export async function getOutlookAuthUrl(): Promise<{ url: string }> {
 
 export async function disconnectOutlook(): Promise<{ ok: true }> {
   return api<{ ok: true }>('/outlook/disconnect', { method: 'POST' });
+}
+
+export async function listOutlookConnections(): Promise<OutlookConnectionDto[]> {
+  return api<OutlookConnectionDto[]>('/outlook/connections');
+}
+
+export async function setOutlookConnectionColor(id: number, color: TagColorKey): Promise<{ ok: true }> {
+  return api<{ ok: true }>(`/outlook/connections/${id}/color`, { method: 'POST', body: JSON.stringify({ color }) });
+}
+
+export async function disconnectOutlookConnection(id: number): Promise<{ ok: true }> {
+  return api<{ ok: true }>(`/outlook/connections/${id}/disconnect`, { method: 'POST' });
 }
 
 export async function createEvent(input: {
