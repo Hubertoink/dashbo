@@ -13,6 +13,7 @@ FROM nginx:1.27-alpine
 
 ENV API_PROXY_PASS=http://backend:3000/
 ENV API_PROXY_HOST=backend
+ENV CLIENT_MAX_BODY_SIZE=12m
 
 # Use nginx's built-in template envsubst support.
 # The entrypoint renders /etc/nginx/templates/*.template -> /etc/nginx/conf.d/*.conf at container start.
