@@ -34,7 +34,8 @@ todosRouter.get('/', requireAuth, async (req, res) => {
     }
 
     console.error('[todos] list failed', { userId, code, status, message }, e);
-    return res.status(500).json({ error: 'todo_error', message, details: { code, status } });
+    const httpStatus = status >= 400 && status < 500 ? status : 500;
+    return res.status(httpStatus).json({ error: 'todo_error', message, details: { code, status } });
   }
 });
 

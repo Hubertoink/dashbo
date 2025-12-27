@@ -31,11 +31,23 @@ function getTodoListName() {
   return (process.env.TODO_LIST_NAME || 'Dashbo').trim() || 'Dashbo';
 }
 
+function getGraphTodoBaseUrl(version) {
+  const v = String(version || '').trim() || 'v1.0';
+  return `https://graph.microsoft.com/${v}`;
+}
+
+function isInvalidRequestGraphError({ respStatus, json }) {
+  const code = String(json?.error?.code || '');
+  const msg = String(json?.error?.message || '');
+  return respStatus === 400 && (code.toLowerCase() === 'badrequest' || code.toLowerCase() === 'invalidrequest') && msg.toLowerCase().includes('invalid request');
+}
+
 async function graphJson({ accessToken, url, method = 'GET', body }) {
   const resp = await fetch(url, {
     method,
     headers: {
       Authorization: `Bearer ${accessToken}`,
+      Accept: 'application/json',
       ...(body ? { 'Content-Type': 'application/json' } : {}),
     },
     body: body ? JSON.stringify(body) : undefined,
@@ -45,10 +57,26 @@ async function graphJson({ accessToken, url, method = 'GET', body }) {
   return { resp, json };
 }
 
+async function graphTodoJson({ accessToken, path, method = 'GET', body }) {
+  // Try v1.0 first, fall back to beta only if Graph responds with the generic
+  // BadRequest 'Invalid request' that some accounts return for To Do endpoints.
+  const urlV1 = `${getGraphTodoBaseUrl('v1.0')}${path}`;
+  const r1 = await graphJson({ accessToken, url: urlV1, method, body });
+  if (r1.resp.ok) return r1;
+
+  if (isInvalidRequestGraphError({ respStatus: r1.resp.status, json: r1.json })) {
+    const urlBeta = `${getGraphTodoBaseUrl('beta')}${path}`;
+    const r2 = await graphJson({ accessToken, url: urlBeta, method, body });
+    return r2;
+  }
+
+  return r1;
+}
+
 async function resolveTodoListId({ accessToken, listName }) {
-  const { resp, json } = await graphJson({
+  const { resp, json } = await graphTodoJson({
     accessToken,
-    url: 'https://graph.microsoft.com/v1.0/me/todo/lists?$select=id,displayName',
+    path: '/me/todo/lists?$select=id,displayName',
   });
 
   if (!resp.ok) {
@@ -73,9 +101,9 @@ async function listTodoTasks({ accessToken, listId }) {
     $select: 'id,title,status,bodyPreview,dueDateTime,createdDateTime,lastModifiedDateTime',
   });
 
-  const { resp, json } = await graphJson({
+  const { resp, json } = await graphTodoJson({
     accessToken,
-    url: `https://graph.microsoft.com/v1.0/me/todo/lists/${encodeURIComponent(listId)}/tasks?${qs.toString()}`,
+    path: `/me/todo/lists/${encodeURIComponent(listId)}/tasks?${qs.toString()}`,
   });
 
   if (!resp.ok) {
@@ -185,8 +213,8 @@ async function updateTodo({ userId, connectionId, listId, taskId, patch }) {
   if (patch.title != null) body.title = String(patch.title);
   if (patch.status != null) body.status = String(patch.status);
 
-  const url = `https://graph.microsoft.com/v1.0/me/todo/lists/${encodeURIComponent(String(listId))}/tasks/${encodeURIComponent(String(taskId))}`;
-  const { resp, json } = await graphJson({ accessToken, url, method: 'PATCH', body });
+  const path = `/me/todo/lists/${encodeURIComponent(String(listId))}/tasks/${encodeURIComponent(String(taskId))}`;
+  const { resp, json } = await graphTodoJson({ accessToken, path, method: 'PATCH', body });
 
   if (!resp.ok) {
     const code = json?.error?.code || '';
