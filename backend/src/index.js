@@ -4,13 +4,14 @@ const { createApp } = require('./app');
 const { initDb } = require('./db');
 
 const port = Number(process.env.PORT || 3000);
+const host = process.env.HOST || '0.0.0.0';
 
 async function main() {
   await initDb();
 
   const app = createApp();
-  app.listen(port, () => {
-    console.log(`[dashbo-backend] listening on :${port}`);
+  app.listen(port, host, () => {
+    console.log(`[dashbo-backend] listening on ${host}:${port}`);
   });
 }
 
