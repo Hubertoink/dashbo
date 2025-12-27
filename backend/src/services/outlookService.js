@@ -245,7 +245,7 @@ async function disconnectOutlook({ userId }) {
 
 async function listOutlookConnections({ userId }) {
   const pool = getPool();
-  const r = await pool.query(
+  let r = await pool.query(
     `
     SELECT id, email, display_name, color, expires_at, scope
     FROM outlook_connections
@@ -254,6 +254,57 @@ async function listOutlookConnections({ userId }) {
     `,
     [userId]
   );
+
+  // Backward compatible: if a user connected Outlook before we introduced multi-account,
+  // they may only have a row in outlook_tokens. In that case, migrate lazily so the UI
+  // can show the connected account and allow color/removal.
+  if (r.rowCount === 0) {
+    const legacy = await pool.query(
+      'SELECT access_token, refresh_token, scope, expires_at FROM outlook_tokens WHERE user_id = $1;',
+      [userId]
+    );
+
+    if (legacy.rowCount > 0) {
+      try {
+        const accessToken = await getValidAccessToken({ userId });
+        if (accessToken) {
+          const me = await fetchGraphMe({ accessToken });
+          const row = legacy.rows[0];
+          const refreshTokenValue = row.refresh_token ? String(row.refresh_token) : null;
+          const scope = row.scope ? String(row.scope) : null;
+          const expiresAtIso = row.expires_at ? new Date(row.expires_at).toISOString() : null;
+
+          await pool.query(
+            `
+            INSERT INTO outlook_connections (user_id, outlook_user_id, email, display_name, color, access_token, refresh_token, scope, expires_at, updated_at)
+            VALUES ($1, $2, $3, $4, 'cyan', $5, $6, $7, $8, NOW())
+            ON CONFLICT (user_id, outlook_user_id) DO UPDATE SET
+              email = COALESCE(EXCLUDED.email, outlook_connections.email),
+              display_name = COALESCE(EXCLUDED.display_name, outlook_connections.display_name),
+              access_token = EXCLUDED.access_token,
+              refresh_token = COALESCE(EXCLUDED.refresh_token, outlook_connections.refresh_token),
+              scope = EXCLUDED.scope,
+              expires_at = EXCLUDED.expires_at,
+              updated_at = NOW();
+            `,
+            [userId, me.outlookUserId, me.email, me.displayName, accessToken, refreshTokenValue, scope, expiresAtIso]
+          );
+
+          r = await pool.query(
+            `
+            SELECT id, email, display_name, color, expires_at, scope
+            FROM outlook_connections
+            WHERE user_id = $1
+            ORDER BY id ASC;
+            `,
+            [userId]
+          );
+        }
+      } catch (e) {
+        console.warn('[dashbo-backend] outlook legacy migration failed', e?.message || e);
+      }
+    }
+  }
 
   return r.rows.map((row) => ({
     id: Number(row.id),
@@ -401,8 +452,7 @@ function normalizeExclusiveAllDayEnd({ startAt, endAt, allDay }) {
   if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return endAt;
 
   // Microsoft Graph uses an exclusive end for all-day events (often next-day 00:00).
-  // Our UI treats endAt as inclusive for day-spanning logic, so convert exclusive midnight
-  // to an inclusive timestamp on the previous day.
+  // Our UI treats endAt as inclusive for day-spanning logic.
   const isMidnightUtc =
     end.getUTCHours() === 0 &&
     end.getUTCMinutes() === 0 &&
@@ -412,7 +462,19 @@ function normalizeExclusiveAllDayEnd({ startAt, endAt, allDay }) {
   if (!isMidnightUtc) return endAt;
   if (end.getTime() <= start.getTime()) return endAt;
 
-  return new Date(end.getTime() - 1).toISOString();
+  // Calculate the span in days (exclusive end means we subtract 1 day to get inclusive)
+  const diffMs = end.getTime() - start.getTime();
+  const oneDayMs = 24 * 60 * 60 * 1000;
+  const spanDays = Math.round(diffMs / oneDayMs);
+
+  // Single-day all-day event: set endAt to null so frontend treats it as single day
+  if (spanDays === 1) {
+    return null;
+  }
+
+  // Multi-day all-day event: subtract 1 day from exclusive end to make it inclusive
+  // Use the same time as start (midnight) but on the previous day
+  return new Date(end.getTime() - oneDayMs).toISOString();
 }
 
 async function listOutlookEventsBetween({ userId, from, to }) {

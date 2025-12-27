@@ -753,14 +753,14 @@
                   on:click={doOutlookConnect}
                   disabled={outlookBusy}
                 >
-                  {#if (outlookConnections?.length ?? 0) > 0}
+                  {#if (outlookConnections?.length ?? 0) > 0 || outlookStatus?.connected}
                     Weiteren verbinden
                   {:else}
                     Verbinden
                   {/if}
                 </button>
 
-                {#if (outlookConnections?.length ?? 0) > 1}
+                {#if outlookStatus?.connected}
                   <button
                     class="h-9 px-4 rounded-lg bg-white/10 hover:bg-white/15 text-sm font-medium disabled:opacity-50"
                     on:click={doOutlookDisconnect}

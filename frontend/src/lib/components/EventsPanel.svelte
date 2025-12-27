@@ -145,7 +145,7 @@
     <div class="grid">
       {#key header}
         <div
-          class="text-4xl md:text-5xl font-semibold tracking-wide col-start-1 row-start-1"
+          class="text-2xl md:text-3xl font-semibold tracking-wide col-start-1 row-start-1"
           in:fly={{ y: 8, duration: 140 }}
           out:fade={{ duration: 120 }}
         >
@@ -179,29 +179,21 @@
     {/if}
   </div>
 
-  <div class="mt-4 flex-1 min-h-0 overflow-hidden">
+  <div class="mt-2 flex-1 min-h-0 overflow-hidden">
     <div class="grid h-full">
       {#key selectedDate.toDateString()}
         <div class="col-start-1 row-start-1 h-full" in:fade={{ duration: 180 }} out:fade={{ duration: 160 }}>
           <div class="h-full overflow-y-auto pr-1">
             {#if !hasAnyItems}
-              <div class="text-white/70 text-base">Keine Termine.</div>
+              <div class="text-white/60 text-sm">Keine Termine.</div>
             {:else}
-              <div class="space-y-4">
+              <div class="flex flex-wrap gap-x-6 gap-y-2 items-start">
                 {#each dayHolidays as h (h.date + ':' + h.title)}
-                  <div class="w-fit max-w-full text-left relative" in:fly={{ y: 6, duration: 140 }}>
-                    <div class="flex items-start gap-4">
-                      <div class="mt-2 flex items-center gap-2">
-                        <div class="h-4 w-4 rounded-full border border-white/60"></div>
-                      </div>
-                      <div class="flex-1 min-w-0">
-                        <div class="flex items-center gap-2 min-w-0">
-                          <div class="text-2xl md:text-3xl font-semibold leading-tight truncate">{h.title}</div>
-                        </div>
-                        <div class="text-white/70 text-base md:text-lg leading-tight">
-                          <span class="text-white/60">Feiertag</span> | <span class="text-white/60">Ganztägig</span>
-                        </div>
-                      </div>
+                  <div class="flex items-center gap-2 max-w-full" in:fly={{ y: 4, duration: 120 }}>
+                    <div class="h-3 w-3 rounded-full border border-white/50 shrink-0"></div>
+                    <div class="min-w-0">
+                      <div class="text-base md:text-lg font-semibold leading-tight truncate">{h.title}</div>
+                      <div class="text-white/50 text-xs leading-tight">Feiertag · Ganztägig</div>
                     </div>
                   </div>
                 {/each}
@@ -211,68 +203,43 @@
                   {@const isPrompt = editPromptFor === k}
                   <button
                     type="button"
-                    class="w-fit max-w-full text-left relative"
+                    class="flex items-center gap-2 max-w-full text-left relative"
                     on:click|stopPropagation={() => requestEdit(e)}
-                    in:fly={{ y: 6, duration: 140 }}
+                    in:fly={{ y: 4, duration: 120 }}
                   >
-                    <div class="flex items-start gap-4">
-                      <div class="mt-2 flex items-center gap-2">
-                        <div
-                          class={`h-4 w-4 rounded-full ${e.tag ? (dotBg[e.tag.color] ?? 'bg-white/25') : e.person ? (dotBg[e.person.color] ?? 'bg-white/25') : 'bg-white/25'}`}
-                        ></div>
-                      </div>
-                      <div class="flex-1 min-w-0 relative">
-                        {#if isPrompt}
-                          <div class="absolute left-0 top-0 z-10" in:fly={{ y: -6, duration: 160 }} out:fade={{ duration: 120 }}>
-                            <div class="px-5 py-2.5 rounded-2xl bg-black/70 backdrop-blur-md text-2xl font-semibold">Bearbeiten?</div>
-                          </div>
-                        {/if}
+                    <div
+                      class={`h-3 w-3 rounded-full shrink-0 ${e.tag ? (dotBg[e.tag.color] ?? 'bg-white/25') : e.person ? (dotBg[e.person.color] ?? 'bg-white/25') : 'bg-white/25'}`}
+                    ></div>
+                    <div class="min-w-0 relative">
+                      {#if isPrompt}
+                        <div class="absolute left-0 top-0 z-10" in:fly={{ y: -4, duration: 140 }} out:fade={{ duration: 100 }}>
+                          <div class="px-3 py-1.5 rounded-xl bg-black/70 backdrop-blur-md text-sm font-semibold">Bearbeiten?</div>
+                        </div>
+                      {/if}
 
-                        <div class={isPrompt ? 'blur-sm' : ''}>
-                          <div class="flex items-center gap-2 min-w-0">
-                            <div class="text-2xl md:text-3xl font-semibold leading-tight truncate">{e.title}</div>
-                            {#if e.recurrence?.freq}
-                              <svg
-                                class="shrink-0 text-white/60"
-                                width="18"
-                                height="18"
-                                viewBox="0 0 24 24"
-                                fill="none"
-                                stroke="currentColor"
-                                stroke-width="2"
-                                stroke-linecap="round"
-                                stroke-linejoin="round"
-                                aria-label="Wiederholung"
-                              >
-                                <path d="M21 12a9 9 0 1 1-3-6.7" />
-                                <path d="M21 3v6h-6" />
-                              </svg>
-                            {/if}
-                          </div>
-
-                          <div class="text-white/70 text-base md:text-lg leading-tight">
-                            {#if isMultiDayEvent(e)}
-                              <span class="text-white/70">{fmtDateRange(e)} | </span>
-                            {/if}
-
-                            {#if e.allDay}
-                              <span class="text-white/60">Ganztägig</span>
-                            {:else}
-                              {fmtTimeRange(e.startAt, e.endAt)}
-                            {/if}
-                            {#if e.location} | {e.location}{/if}
-                            {#if e.tag} | {e.tag.name}{/if}
-                            {#if e.person}
-                              <span>
-                                | <span class={`${textFg[e.person.color] ?? 'text-white/80'} font-semibold`}>{e.person.name}</span>
-                              </span>
-                            {/if}
-                          </div>
-
-                          {#if e.description}
-                            <div class="text-white/60 text-base leading-tight mt-1">{e.description}</div>
+                      <div class={isPrompt ? 'blur-sm' : ''}>
+                        <div class="flex items-center gap-1.5 min-w-0">
+                          <span class="text-base md:text-lg font-semibold leading-tight truncate">{e.title}</span>
+                          {#if e.recurrence?.freq}
+                            <svg
+                              class="shrink-0 text-white/50"
+                              width="14"
+                              height="14"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              stroke-width="2"
+                              stroke-linecap="round"
+                              stroke-linejoin="round"
+                              aria-label="Wiederholung"
+                            >
+                              <path d="M21 12a9 9 0 1 1-3-6.7" />
+                              <path d="M21 3v6h-6" />
+                            </svg>
                           {/if}
                         </div>
+
+                        <div class="text-white/50 text-xs leading-tight">{#if isMultiDayEvent(e)}{fmtDateRange(e)} · {/if}{#if e.allDay}Ganztägig{:else}{fmtTimeRange(e.startAt, e.endAt)}{/if}{#if e.location} · {e.location}{/if}{#if e.tag} · {e.tag.name}{/if}{#if e.person} · <span class={`${textFg[e.person.color] ?? 'text-white/70'} font-medium`}>{e.person.name}</span>{/if}</div>
                       </div>
                     </div>
                   </button>
