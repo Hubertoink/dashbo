@@ -2,6 +2,8 @@
   import { onMount, tick } from 'svelte';
   import { fetchTodos, updateTodo, type TodoItemDto } from '$lib/api';
 
+  export let variant: 'panel' | 'plain' = 'panel';
+
   let listName = 'Dashbo';
   let items: TodoItemDto[] = [];
   let loading = true;
@@ -92,6 +94,9 @@
     const nowTs = Date.now();
     return nowTs - completedTs <= HIDE_COMPLETED_AFTER_MS;
   });
+
+  $: containerClass =
+    variant === 'plain' ? 'text-white' : 'rounded-lg bg-white/5 p-3 text-white';
 
   async function commitEdit(item: TodoItemDto) {
     if (!editingId) return;
@@ -206,7 +211,7 @@
 
 <!-- Only render when there are visible items (graceful hide when To Do not available) -->
 {#if visibleItems.length > 0}
-<div class="rounded-lg bg-white/5 p-3 text-white">
+<div class={containerClass}>
   <div class="mb-2 flex items-center justify-between">
     <div class="text-base font-semibold">To Do</div>
   </div>

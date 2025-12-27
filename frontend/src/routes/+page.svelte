@@ -330,7 +330,8 @@
     tone = await computeToneFromImage(nextUrl);
   }
 
-  async function loadEvents() {
+  async function loadEvents(opts?: { includeHolidays?: boolean }) {
+    const includeHolidays = opts?.includeHolidays !== false;
     try {
       if (upcomingMode) {
         const start = new Date();
@@ -339,11 +340,11 @@
         end.setDate(end.getDate() + 90);
         end.setHours(23, 59, 59, 999);
         events = await fetchEvents(start, end);
-        if (holidaysEnabled) {
+        if (!holidaysEnabled) {
+          holidays = [];
+        } else if (includeHolidays) {
           const h = await fetchHolidays(start, end);
           holidays = h.ok && h.enabled ? h.holidays : [];
-        } else {
-          holidays = [];
         }
         return;
       }
@@ -352,11 +353,11 @@
         const start = mondayStart(selectedDate);
         const end = endOfDay(new Date(start.getFullYear(), start.getMonth(), start.getDate() + 6));
         events = await fetchEvents(start, end);
-        if (holidaysEnabled) {
+        if (!holidaysEnabled) {
+          holidays = [];
+        } else if (includeHolidays) {
           const h = await fetchHolidays(start, end);
           holidays = h.ok && h.enabled ? h.holidays : [];
-        } else {
-          holidays = [];
         }
         return;
       }
@@ -373,11 +374,11 @@
       end.setHours(23, 59, 59, 999);
 
       events = await fetchEvents(start, end);
-      if (holidaysEnabled) {
+      if (!holidaysEnabled) {
+        holidays = [];
+      } else if (includeHolidays) {
         const h = await fetchHolidays(start, end);
         holidays = h.ok && h.enabled ? h.holidays : [];
-      } else {
-        holidays = [];
       }
     } catch (e) {
       console.error(e);
@@ -402,10 +403,10 @@
 
     void loadEvents();
 
-    // Auto-refresh events (and holidays via loadEvents) so users don't need to reload manually.
+    // Auto-refresh events; holidays only on explicit refresh/manual reload.
     if (dataRefreshInterval) clearInterval(dataRefreshInterval);
     dataRefreshInterval = setInterval(() => {
-      void loadEvents();
+      void loadEvents({ includeHolidays: false });
     }, DATA_REFRESH_MS);
     void (async () => {
       try {
@@ -506,20 +507,20 @@
   {/if}
 
   <div class="relative z-10 flex h-screen overflow-hidden items-stretch">
-    <!-- Left: ToDo + weather + clock -->
+    <!-- Left: weather + ToDo + clock -->
     {#if !upcomingMode}
-      <div class="w-[34%] min-w-[320px] hidden md:flex flex-col justify-between p-10 h-screen">
-        {#if todoEnabled}
-          <div class={tone === 'dark' ? 'text-black' : 'text-white'}>
-            <TodoWidget />
-          </div>
-        {/if}
-
+      <div class="w-[34%] min-w-[320px] hidden md:flex flex-col p-10 h-screen">
         <div class={tone === 'dark' ? 'text-black' : 'text-white'}>
           <WeatherWidget {tone} />
         </div>
 
-        <div class="pb-2">
+        {#if todoEnabled}
+          <div class={`mt-6 pb-8 ${tone === 'dark' ? 'text-black' : 'text-white'}`}>
+            <TodoWidget />
+          </div>
+        {/if}
+
+        <div class="mt-auto pb-2">
           <div class={tone === 'dark' ? 'text-black' : 'text-white'}>
             <Clock {tone} />
           </div>
@@ -630,19 +631,19 @@
       {:else}
         <div class="h-screen overflow-hidden" in:fly={{ x: 120, duration: 220 }}>
           <div class="h-full flex">
-            <!-- Left: weather + clock -->
-            <div class="hidden md:flex w-[34%] min-w-[280px] flex-col justify-between p-10 h-full">
-              {#if todoEnabled}
-                <div class={tone === 'dark' ? 'text-black' : 'text-white'}>
-                  <TodoWidget />
-                </div>
-              {/if}
-
+            <!-- Left: forecast + todo + clock -->
+            <div class="hidden md:flex w-[34%] min-w-[280px] flex-col p-10 h-full">
               <div class={tone === 'dark' ? 'text-black' : 'text-white'}>
                 <ForecastWidget {tone} />
               </div>
 
-              <div class="pb-2">
+              {#if todoEnabled}
+                <div class={`mt-6 pb-8 ${tone === 'dark' ? 'text-black' : 'text-white'}`}>
+                  <TodoWidget variant="plain" />
+                </div>
+              {/if}
+
+              <div class="mt-auto pb-2">
                 <div class={tone === 'dark' ? 'text-black' : 'text-white'}>
                   <div class="text-xl md:text-2xl font-semibold tracking-wide mb-3">{todayFullDate}</div>
                   <Clock {tone} />
