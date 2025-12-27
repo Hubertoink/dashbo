@@ -11,6 +11,7 @@ const { tagsRouter } = require('./routes/tags');
 const { personsRouter } = require('./routes/persons');
 const { ensureUploadDir } = require('./services/mediaService');
 const { outlookRouter } = require('./routes/outlook');
+const { todosRouter } = require('./routes/todos');
 
 function createApp() {
   const app = express();
@@ -38,6 +39,7 @@ function createApp() {
   app.use('/persons', personsRouter);
   app.use('/events', eventsRouter);
   app.use('/outlook', outlookRouter);
+  app.use('/todos', todosRouter);
   app.use('/weather', weatherRouter);
   app.use('/holidays', holidaysRouter);
 

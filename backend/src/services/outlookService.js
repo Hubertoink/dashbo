@@ -9,7 +9,7 @@ function getOutlookConfig({ allowMissing = false } = {}) {
   const clientId = process.env.OUTLOOK_CLIENT_ID;
   const clientSecret = process.env.OUTLOOK_CLIENT_SECRET;
   const redirectUri = process.env.OUTLOOK_REDIRECT_URI;
-  const scopes = (process.env.OUTLOOK_SCOPES || 'offline_access Calendars.Read User.Read').trim();
+  const scopes = (process.env.OUTLOOK_SCOPES || 'offline_access Calendars.Read User.Read Tasks.ReadWrite').trim();
 
   if (!clientId || !clientSecret || !redirectUri) {
     if (allowMissing) return null;
@@ -602,4 +602,6 @@ module.exports = {
   disconnectOutlookConnection,
   listOutlookEventsBetween,
   getOutlookConfig,
+  getValidAccessToken,
+  getValidAccessTokenForConnection,
 };

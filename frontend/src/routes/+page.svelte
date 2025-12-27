@@ -4,6 +4,7 @@
   import { fade, fly } from 'svelte/transition';
   import Clock from '$lib/components/Clock.svelte';
   import WeatherWidget from '$lib/components/WeatherWidget.svelte';
+  import TodoWidget from '$lib/components/TodoWidget.svelte';
   import ForecastWidget from '$lib/components/ForecastWidget.svelte';
   import CalendarMonth from '$lib/components/CalendarMonth.svelte';
   import WeekView from '$lib/components/WeekView.svelte';
@@ -491,6 +492,10 @@
       <div class="w-[34%] min-w-[320px] hidden md:flex flex-col justify-between p-10 h-screen">
         <div class={tone === 'dark' ? 'text-black' : 'text-white'}>
           <WeatherWidget {tone} />
+        </div>
+
+        <div class={tone === 'dark' ? 'text-black' : 'text-white'}>
+          <TodoWidget />
         </div>
 
         <div class="pb-2">

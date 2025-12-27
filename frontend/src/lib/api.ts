@@ -31,6 +31,25 @@ export type OutlookConnectionDto = {
   scope: string | null;
 };
 
+export type TodoItemDto = {
+  connectionId: number;
+  connectionLabel: string;
+  color: TagColorKey;
+  listId: string;
+  taskId: string;
+  title: string;
+  status: string;
+  completed: boolean;
+  dueAt: string | null;
+  bodyPreview: string | null;
+  updatedAt: string | null;
+};
+
+export type TodosResponseDto = {
+  listName: string;
+  items: TodoItemDto[];
+};
+
 export type TagColorKey = 'fuchsia' | 'cyan' | 'emerald' | 'amber' | 'rose' | 'violet' | 'sky' | 'lime';
 
 export type PersonColorKey = TagColorKey;
@@ -137,6 +156,20 @@ export async function setOutlookConnectionColor(id: number, color: TagColorKey):
 
 export async function disconnectOutlookConnection(id: number): Promise<{ ok: true }> {
   return api<{ ok: true }>(`/outlook/connections/${id}/disconnect`, { method: 'POST' });
+}
+
+export async function fetchTodos(): Promise<TodosResponseDto> {
+  return api<TodosResponseDto>('/todos');
+}
+
+export async function updateTodo(input: {
+  connectionId: number;
+  listId: string;
+  taskId: string;
+  title?: string;
+  completed?: boolean;
+}): Promise<{ ok: true }> {
+  return api<{ ok: true }>('/todos/update', { method: 'POST', body: JSON.stringify(input) });
 }
 
 export async function createEvent(input: {
