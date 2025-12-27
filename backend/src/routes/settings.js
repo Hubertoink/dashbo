@@ -6,6 +6,7 @@ const { z } = require('zod');
 const { requireAuth, requireAdmin } = require('../middleware/auth');
 const { ensureUploadDir, listImages, deleteImage } = require('../services/mediaService');
 const { getSetting, setSetting } = require('../services/settingsService');
+const { getTodoListName } = require('../services/todoService');
 
 const settingsRouter = express.Router();
 
@@ -32,13 +33,17 @@ settingsRouter.get('/', async (_req, res) => {
   const rotateEnabledRaw = await getSetting('background.rotate');
   const weatherLocation = await getSetting('weather.location');
   const holidaysEnabledRaw = await getSetting('holidays.enabled');
+  const todoEnabledRaw = await getSetting('todo.enabled');
   const images = listImages();
 
   const backgroundUrl = background ? `/media/${background}` : null;
 
   const holidaysEnabled = String(holidaysEnabledRaw ?? '').toLowerCase() === 'true';
   const backgroundRotateEnabled = String(rotateEnabledRaw ?? '').toLowerCase() === 'true';
-  res.json({ background, backgroundUrl, images, backgroundRotateEnabled, weatherLocation, holidaysEnabled });
+  // Default to true for backwards compatibility
+  const todoEnabled = todoEnabledRaw === null ? true : String(todoEnabledRaw).toLowerCase() === 'true';
+  const todoListName = getTodoListName();
+  res.json({ background, backgroundUrl, images, backgroundRotateEnabled, weatherLocation, holidaysEnabled, todoEnabled, todoListName });
 });
 
 settingsRouter.post('/background/rotate', requireAuth, requireAdmin, async (req, res) => {
@@ -100,6 +105,17 @@ settingsRouter.post('/holidays', requireAuth, requireAdmin, async (req, res) => 
   }
 
   await setSetting('holidays.enabled', parsed.data.enabled ? 'true' : 'false');
+  return res.json({ ok: true });
+});
+
+settingsRouter.post('/todo', requireAuth, requireAdmin, async (req, res) => {
+  const schema = z.object({ enabled: z.boolean() });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: 'invalid_body', details: parsed.error.flatten() });
+  }
+
+  await setSetting('todo.enabled', parsed.data.enabled ? 'true' : 'false');
   return res.json({ ok: true });
 });
 

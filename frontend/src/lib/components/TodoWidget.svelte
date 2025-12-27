@@ -12,8 +12,10 @@
   let editingTitle = '';
   let editInput: HTMLInputElement | null = null;
 
-  async function load() {
-    loading = true;
+  const HIDE_COMPLETED_AFTER_MS = 2 * 24 * 60 * 60 * 1000; // 2 Tage
+
+  async function load(showLoading = true) {
+    if (showLoading) loading = true;
     error = null;
     try {
       const r = await fetchTodos();
@@ -29,16 +31,34 @@
   async function toggleCompleted(item: TodoItemDto) {
     const key = `${item.connectionId}:${item.listId}:${item.taskId}`;
     saving.add(key);
+    // Optimistic update: toggle immediately in UI
+    const newCompleted = !item.completed;
+    items = items.map((i) =>
+      i.taskId === item.taskId && i.listId === item.listId && i.connectionId === item.connectionId
+        ? { ...i, completed: newCompleted, status: newCompleted ? 'completed' : 'notStarted' }
+        : i
+    );
+    // Re-sort after optimistic update
+    items = items.sort((a, b) => {
+      if (a.completed !== b.completed) return a.completed ? 1 : -1;
+      const ad = a.dueAt ? new Date(a.dueAt).getTime() : Number.POSITIVE_INFINITY;
+      const bd = b.dueAt ? new Date(b.dueAt).getTime() : Number.POSITIVE_INFINITY;
+      if (ad !== bd) return ad - bd;
+      return a.title.localeCompare(b.title);
+    });
     try {
       await updateTodo({
         connectionId: item.connectionId,
         listId: item.listId,
         taskId: item.taskId,
-        completed: !item.completed,
+        completed: newCompleted,
       });
-      await load();
+      // Background refresh without loading indicator
+      await load(false);
     } catch (e: any) {
       error = e?.message || 'Fehler beim Speichern';
+      // Revert on error
+      await load(false);
     } finally {
       saving.delete(key);
     }
@@ -50,6 +70,15 @@
     void tick().then(() => editInput?.focus());
   }
 
+  $: visibleItems = items.filter((item) => {
+    if (!item.completed) return true;
+    if (!item.completedAt) return true;
+    const completedTs = new Date(item.completedAt).getTime();
+    if (Number.isNaN(completedTs)) return true;
+    const nowTs = Date.now();
+    return nowTs - completedTs <= HIDE_COMPLETED_AFTER_MS;
+  });
+
   async function commitEdit(item: TodoItemDto) {
     if (!editingId) return;
 
@@ -60,6 +89,12 @@
 
     const key = `${item.connectionId}:${item.listId}:${item.taskId}`;
     saving.add(key);
+    // Optimistic update for title
+    items = items.map((i) =>
+      i.taskId === item.taskId && i.listId === item.listId && i.connectionId === item.connectionId
+        ? { ...i, title: newTitle }
+        : i
+    );
     try {
       await updateTodo({
         connectionId: item.connectionId,
@@ -67,9 +102,10 @@
         taskId: item.taskId,
         title: newTitle,
       });
-      await load();
+      await load(false);
     } catch (e: any) {
       error = e?.message || 'Fehler beim Speichern';
+      await load(false);
     } finally {
       saving.delete(key);
     }
@@ -134,15 +170,14 @@
   });
 </script>
 
-<!-- Only render when there are items (graceful hide when To Do not available) -->
-{#if !loading && items.length > 0}
+<!-- Only render when there are visible items (graceful hide when To Do not available) -->
+{#if !loading && visibleItems.length > 0}
 <div class="rounded-lg bg-white/5 p-3 text-white">
   <div class="mb-2 flex items-center justify-between">
     <div class="text-sm font-semibold">To Do</div>
-    <div class="text-xs opacity-80">{listName}</div>
   </div>
     <div class="space-y-2">
-      {#each items.slice(0, 6) as item (item.taskId)}
+      {#each visibleItems.slice(0, 6) as item (item.taskId)}
         {@const key = `${item.connectionId}:${item.listId}:${item.taskId}`}
         <div class="flex items-center gap-2">
           <button

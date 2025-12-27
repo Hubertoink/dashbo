@@ -21,6 +21,7 @@
     resetUserPassword,
     setWeatherLocation,
     setHolidaysEnabled,
+    setTodoEnabled,
     uploadBackgroundWithProgress,
     setBackgroundRotateEnabled,
     listTags,
@@ -63,6 +64,10 @@
   let holidaysEnabled = false;
   let holidaysSaving = false;
   let holidaysError: string | null = null;
+
+  let todoEnabled = true;
+  let todoSaving = false;
+  let todoError: string | null = null;
 
   let tags: TagDto[] = [];
   let newTagName = '';
@@ -139,6 +144,7 @@
     settings = await fetchSettings();
     weatherLocation = settings?.weatherLocation ?? '';
     holidaysEnabled = Boolean(settings?.holidaysEnabled);
+    todoEnabled = settings?.todoEnabled !== false;
     backgroundRotateEnabled = Boolean(settings?.backgroundRotateEnabled);
   }
 
@@ -518,6 +524,21 @@
     }
   }
 
+  async function saveTodo() {
+    if (!authed || !isAdmin) return;
+    todoError = null;
+    todoSaving = true;
+    try {
+      await setTodoEnabled(todoEnabled);
+      await refreshSettings();
+      showToast(todoEnabled ? 'To-Do aktiviert' : 'To-Do deaktiviert');
+    } catch {
+      todoError = 'Fehler beim Speichern.';
+    } finally {
+      todoSaving = false;
+    }
+  }
+
   function showToast(msg: string) {
     weatherToast = msg;
     if (weatherToastTimer) clearTimeout(weatherToastTimer);
@@ -883,6 +904,33 @@
 
           {#if holidaysError}
             <div class="text-red-400 text-xs mt-1">{holidaysError}</div>
+          {/if}
+
+          {#if settings?.todoListName}
+            <div class="text-white/40 text-xs mt-2">
+              Verwendete To-Do-Liste: <span class="font-medium">{settings.todoListName}</span>
+            </div>
+          {/if}
+
+          <label class="flex items-center gap-2 text-sm text-white/80 mt-3">
+            <input
+              type="checkbox"
+              class="rounded bg-white/10 border-0"
+              bind:checked={todoEnabled}
+              disabled={!authed || !isAdmin}
+            />
+            To-Do Liste anzeigen
+            <button
+              class="ml-auto h-8 px-3 rounded-lg bg-white/20 hover:bg-white/25 text-xs font-medium disabled:opacity-50"
+              on:click={saveTodo}
+              disabled={!authed || !isAdmin || todoSaving}
+            >
+              Speichern
+            </button>
+          </label>
+
+          {#if todoError}
+            <div class="text-red-400 text-xs mt-1">{todoError}</div>
           {/if}
 
           {#if !authed || !isAdmin}

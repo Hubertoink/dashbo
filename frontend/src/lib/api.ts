@@ -43,6 +43,7 @@ export type TodoItemDto = {
   dueAt: string | null;
   bodyPreview: string | null;
   updatedAt: string | null;
+  completedAt: string | null;
 };
 
 export type TodosResponseDto = {
@@ -305,6 +306,8 @@ export type SettingsDto = {
   backgroundRotateEnabled?: boolean;
   weatherLocation?: string | null;
   holidaysEnabled?: boolean;
+  todoEnabled?: boolean;
+   todoListName?: string | null;
 };
 
 export async function fetchSettings(): Promise<SettingsDto> {
@@ -375,6 +378,10 @@ export async function setWeatherLocation(location: string): Promise<{ ok: true }
 
 export async function setHolidaysEnabled(enabled: boolean): Promise<{ ok: true }> {
   return api<{ ok: true }>('/settings/holidays', { method: 'POST', body: JSON.stringify({ enabled }) });
+}
+
+export async function setTodoEnabled(enabled: boolean): Promise<{ ok: true }> {
+  return api<{ ok: true }>('/settings/todo', { method: 'POST', body: JSON.stringify({ enabled }) });
 }
 
 export type HolidayDto = {

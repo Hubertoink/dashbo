@@ -150,7 +150,7 @@ async function listTodoTasks({ accessToken, listId }) {
   const qs = new URLSearchParams({
     $top: '50',
     $orderby: 'lastModifiedDateTime desc',
-    $select: 'id,title,status,bodyPreview,dueDateTime,createdDateTime,lastModifiedDateTime',
+    $select: 'id,title,status,bodyPreview,dueDateTime,createdDateTime,lastModifiedDateTime,completedDateTime',
   });
 
   // Same idea: sometimes OData options cause invalidRequest; try without them.
@@ -227,6 +227,7 @@ async function listTodos({ userId }) {
       const dueAt = parseGraphDateTime(t?.dueDateTime) || null;
       const bodyPreview = t?.bodyPreview ? String(t.bodyPreview) : null;
       const updatedAt = t?.lastModifiedDateTime ? new Date(String(t.lastModifiedDateTime)).toISOString() : null;
+      const completedAt = t?.completedDateTime ? parseGraphDateTime(t.completedDateTime) : null;
 
       out.push({
         connectionId,
@@ -240,6 +241,7 @@ async function listTodos({ userId }) {
         dueAt,
         bodyPreview,
         updatedAt,
+        completedAt,
       });
     }
   }

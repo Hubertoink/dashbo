@@ -34,6 +34,7 @@
   let standbyUnlockTimer: ReturnType<typeof setTimeout> | null = null;
 
   let holidaysEnabled = false;
+  let todoEnabled = true;
   let holidays: HolidayDto[] = [];
 
   let standbyTimer: ReturnType<typeof setTimeout> | null = null;
@@ -440,11 +441,15 @@
         }
 
         const nextHolidaysEnabled = Boolean(s.holidaysEnabled);
-        const enabledChanged = nextHolidaysEnabled !== holidaysEnabled;
+        const holidaysChanged = nextHolidaysEnabled !== holidaysEnabled;
         holidaysEnabled = nextHolidaysEnabled;
 
-        // If holidays setting changed (or first load), reload to reflect immediately.
-        if (enabledChanged) void loadEvents();
+        const nextTodoEnabled = s.todoEnabled !== false;
+        const todoChanged = nextTodoEnabled !== todoEnabled;
+        todoEnabled = nextTodoEnabled;
+
+        // If holidays or todo setting changed (or first load), reload to reflect immediately.
+        if (holidaysChanged || todoChanged) void loadEvents();
       } catch {
         // ignore
         if (staticImages.length > 0) await applyBackground(staticImages[Math.floor(Math.random() * staticImages.length)]);
@@ -487,16 +492,18 @@
   {/if}
 
   <div class="relative z-10 flex h-screen overflow-hidden items-stretch">
-    <!-- Left: clock + weather -->
+    <!-- Left: clock + weather (+ optional ToDo) -->
     {#if !upcomingMode}
       <div class="w-[34%] min-w-[320px] hidden md:flex flex-col justify-between p-10 h-screen">
         <div class={tone === 'dark' ? 'text-black' : 'text-white'}>
           <WeatherWidget {tone} />
         </div>
 
-        <div class={tone === 'dark' ? 'text-black' : 'text-white'}>
-          <TodoWidget />
-        </div>
+        {#if todoEnabled}
+          <div class={tone === 'dark' ? 'text-black' : 'text-white'}>
+            <TodoWidget />
+          </div>
+        {/if}
 
         <div class="pb-2">
           <div class={tone === 'dark' ? 'text-black' : 'text-white'}>
@@ -517,6 +524,13 @@
               <div class={tone === 'dark' ? 'text-black' : 'text-white'}>
                 <ForecastWidget {tone} />
               </div>
+
+              {#if todoEnabled}
+                <div class={tone === 'dark' ? 'text-black' : 'text-white'}>
+                  <TodoWidget />
+                </div>
+              {/if}
+
               <div class="pb-2">
                 <div class={tone === 'dark' ? 'text-black' : 'text-white'}>
                   <div class="text-xl md:text-2xl font-semibold tracking-wide mb-3">{todayFullDate}</div>
