@@ -906,12 +906,6 @@
             <div class="text-red-400 text-xs mt-1">{holidaysError}</div>
           {/if}
 
-          {#if settings?.todoListName}
-            <div class="text-white/40 text-xs mt-2">
-              Verwendete To-Do-Liste: <span class="font-medium">{settings.todoListName}</span>
-            </div>
-          {/if}
-
           <label class="flex items-center gap-2 text-sm text-white/80 mt-3">
             <input
               type="checkbox"
@@ -920,6 +914,9 @@
               disabled={!authed || !isAdmin}
             />
             To-Do Liste anzeigen
+            {#if settings?.todoListName}
+              <span class="text-white/50">({settings.todoListName})</span>
+            {/if}
             <button
               class="ml-auto h-8 px-3 rounded-lg bg-white/20 hover:bg-white/25 text-xs font-medium disabled:opacity-50"
               on:click={saveTodo}

@@ -43,6 +43,9 @@
   const STANDBY_PAGE_SIZE = 5;
   const STANDBY_PAGE_MS = 10_000;
 
+  const DATA_REFRESH_MS = 60_000;
+  let dataRefreshInterval: ReturnType<typeof setInterval> | null = null;
+
   let standbyPageIndex = 0;
   let standbyRotateInterval: ReturnType<typeof setInterval> | null = null;
   let standbyRotationKey = '';
@@ -259,6 +262,7 @@
     clearStandbyTransitionTimers();
     if (standbyRotateInterval) clearInterval(standbyRotateInterval);
     if (bgRotateInterval) clearInterval(bgRotateInterval);
+    if (dataRefreshInterval) clearInterval(dataRefreshInterval);
   });
 
   function mondayStart(d: Date) {
@@ -397,6 +401,12 @@
     }
 
     void loadEvents();
+
+    // Auto-refresh events (and holidays via loadEvents) so users don't need to reload manually.
+    if (dataRefreshInterval) clearInterval(dataRefreshInterval);
+    dataRefreshInterval = setInterval(() => {
+      void loadEvents();
+    }, DATA_REFRESH_MS);
     void (async () => {
       try {
         const s = await fetchSettings();
@@ -465,6 +475,10 @@
     return () => {
       if (standbyTimer) clearTimeout(standbyTimer);
       for (const ev of events) window.removeEventListener(ev, onUserActivity);
+      if (dataRefreshInterval) {
+        clearInterval(dataRefreshInterval);
+        dataRefreshInterval = null;
+      }
     };
   });
 </script>
@@ -492,18 +506,18 @@
   {/if}
 
   <div class="relative z-10 flex h-screen overflow-hidden items-stretch">
-    <!-- Left: clock + weather (+ optional ToDo) -->
+    <!-- Left: ToDo + weather + clock -->
     {#if !upcomingMode}
       <div class="w-[34%] min-w-[320px] hidden md:flex flex-col justify-between p-10 h-screen">
-        <div class={tone === 'dark' ? 'text-black' : 'text-white'}>
-          <WeatherWidget {tone} />
-        </div>
-
         {#if todoEnabled}
           <div class={tone === 'dark' ? 'text-black' : 'text-white'}>
             <TodoWidget />
           </div>
         {/if}
+
+        <div class={tone === 'dark' ? 'text-black' : 'text-white'}>
+          <WeatherWidget {tone} />
+        </div>
 
         <div class="pb-2">
           <div class={tone === 'dark' ? 'text-black' : 'text-white'}>
@@ -521,15 +535,15 @@
         <div class="h-screen overflow-hidden">
           <div class="h-full flex" on:click|stopPropagation={exitStandby}>
             <div class="hidden md:flex w-[34%] min-w-[280px] flex-col justify-between p-10 h-full">
-              <div class={tone === 'dark' ? 'text-black' : 'text-white'}>
-                <ForecastWidget {tone} />
-              </div>
-
               {#if todoEnabled}
                 <div class={tone === 'dark' ? 'text-black' : 'text-white'}>
                   <TodoWidget />
                 </div>
               {/if}
+
+              <div class={tone === 'dark' ? 'text-black' : 'text-white'}>
+                <ForecastWidget {tone} />
+              </div>
 
               <div class="pb-2">
                 <div class={tone === 'dark' ? 'text-black' : 'text-white'}>
@@ -618,9 +632,16 @@
           <div class="h-full flex">
             <!-- Left: weather + clock -->
             <div class="hidden md:flex w-[34%] min-w-[280px] flex-col justify-between p-10 h-full">
+              {#if todoEnabled}
+                <div class={tone === 'dark' ? 'text-black' : 'text-white'}>
+                  <TodoWidget />
+                </div>
+              {/if}
+
               <div class={tone === 'dark' ? 'text-black' : 'text-white'}>
                 <ForecastWidget {tone} />
               </div>
+
               <div class="pb-2">
                 <div class={tone === 'dark' ? 'text-black' : 'text-white'}>
                   <div class="text-xl md:text-2xl font-semibold tracking-wide mb-3">{todayFullDate}</div>

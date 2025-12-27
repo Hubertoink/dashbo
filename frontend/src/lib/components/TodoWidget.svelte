@@ -12,6 +12,9 @@
   let editingTitle = '';
   let editInput: HTMLInputElement | null = null;
 
+  const TODOS_CACHE_KEY = 'dashbo_todos_cache_v1';
+  const TODOS_CACHE_TTL_MS = 5 * 60 * 1000;
+
   const HIDE_COMPLETED_AFTER_MS = 2 * 24 * 60 * 60 * 1000; // 2 Tage
 
   async function load(showLoading = true) {
@@ -21,6 +24,17 @@
       const r = await fetchTodos();
       listName = r.listName;
       items = r.items;
+
+      if (typeof localStorage !== 'undefined') {
+        try {
+          localStorage.setItem(
+            TODOS_CACHE_KEY,
+            JSON.stringify({ at: Date.now(), listName: r.listName, items: r.items })
+          );
+        } catch {
+          // ignore storage errors
+        }
+      }
     } catch (e: any) {
       error = e?.message || 'Fehler beim Laden';
     } finally {
@@ -164,30 +178,50 @@
   }
 
   onMount(() => {
-    load();
-    const t = setInterval(load, 60_000);
+    // Try cache first so the widget appears instantly when switching screens.
+    if (typeof localStorage !== 'undefined') {
+      try {
+        const raw = localStorage.getItem(TODOS_CACHE_KEY);
+        if (raw) {
+          const parsed = JSON.parse(raw) as { at?: number; listName?: string; items?: TodoItemDto[] };
+          const at = typeof parsed?.at === 'number' ? parsed.at : 0;
+          const isFresh = at > 0 && Date.now() - at <= TODOS_CACHE_TTL_MS;
+          if (isFresh && typeof parsed?.listName === 'string' && Array.isArray(parsed?.items)) {
+            listName = parsed.listName;
+            items = parsed.items;
+            loading = false;
+          }
+        }
+      } catch {
+        // ignore cache errors
+      }
+    }
+
+    // Always refresh in background.
+    void load(false);
+    const t = setInterval(() => void load(false), 60_000);
     return () => clearInterval(t);
   });
 </script>
 
 <!-- Only render when there are visible items (graceful hide when To Do not available) -->
-{#if !loading && visibleItems.length > 0}
+{#if visibleItems.length > 0}
 <div class="rounded-lg bg-white/5 p-3 text-white">
   <div class="mb-2 flex items-center justify-between">
-    <div class="text-sm font-semibold">To Do</div>
+    <div class="text-base font-semibold">To Do</div>
   </div>
     <div class="space-y-2">
       {#each visibleItems.slice(0, 6) as item (item.taskId)}
         {@const key = `${item.connectionId}:${item.listId}:${item.taskId}`}
         <div class="flex items-center gap-2">
           <button
-            class="h-5 w-5 rounded border border-white/30 flex items-center justify-center"
+            class="h-6 w-6 rounded border border-white/30 flex items-center justify-center"
             on:click={() => toggleCompleted(item)}
             disabled={saving.has(key)}
             aria-label="Toggle completed"
           >
             {#if item.completed}
-              <span class="text-xs">✓</span>
+              <span class="text-sm">✓</span>
             {/if}
           </button>
 
@@ -209,7 +243,7 @@
             />
           {:else}
             <button
-              class={`flex-1 text-left text-sm ${item.completed ? 'line-through opacity-60' : ''}`}
+              class={`flex-1 text-left text-base ${item.completed ? 'line-through opacity-60' : ''}`}
               on:click={() => startEdit(item)}
               title={item.connectionLabel}
             >
