@@ -134,19 +134,13 @@
   });
 </script>
 
+<!-- Only render when there are items (graceful hide when To Do not available) -->
+{#if !loading && items.length > 0}
 <div class="rounded-lg bg-white/5 p-3 text-white">
   <div class="mb-2 flex items-center justify-between">
     <div class="text-sm font-semibold">To Do</div>
     <div class="text-xs opacity-80">{listName}</div>
   </div>
-
-  {#if error}
-    <div class="text-xs text-red-300">{error}</div>
-  {:else if loading}
-    <div class="text-xs opacity-80">Lade…</div>
-  {:else if items.length === 0}
-    <div class="text-xs opacity-80">Keine Aufgaben</div>
-  {:else}
     <div class="space-y-2">
       {#each items.slice(0, 6) as item (item.taskId)}
         {@const key = `${item.connectionId}:${item.listId}:${item.taskId}`}
@@ -190,5 +184,5 @@
         </div>
       {/each}
     </div>
-  {/if}
 </div>
+{/if}

@@ -114,37 +114,35 @@ async function graphTodoJsonVariants({ accessToken, paths, method = 'GET', body 
 async function resolveTodoListId({ accessToken, listName }) {
   // Some Graph deployments return 400 invalidRequest for $select on todo lists.
   // Try a couple of variants from strict -> permissive.
-  const r = await graphTodoJsonVariants({
-    accessToken,
-    paths: ['/me/todo/lists?$select=id,displayName', '/me/todo/lists'],
-  });
+  let r;
+  try {
+    r = await graphTodoJsonVariants({
+      accessToken,
+      paths: ['/me/todo/lists?$select=id,displayName', '/me/todo/lists'],
+    });
+  } catch (e) {
+    // Network error or similar – treat as "list not available"
+    console.warn('[todo] resolveTodoListId fetch error', e?.message);
+    return null;
+  }
 
   const resp = r?.resp;
   const json = r?.json;
 
-  if (!resp.ok) {
+  if (!resp?.ok) {
+    // Graph error (400/401/403/etc.) – log and return null (graceful, no crash)
     const code = json?.error?.code || '';
-    const msg = json?.error?.message || `todo_lists_failed (${resp.status})`;
-    const err = new Error(String(msg));
-    err.code = String(code);
-    err.status = resp.status;
-    err.details = {
-      listName,
-      attempts: (Array.isArray(r?.attempts) ? r.attempts : [r]).map((a) => ({
-        url: a?.url,
-        status: a?.resp?.status,
-        code: a?.json?.error?.code,
-        message: a?.json?.error?.message,
-        requestId: a?.requestId,
-        clientRequestId: a?.clientRequestId,
-      })),
-    };
-    throw err;
+    const msg = json?.error?.message || `todo_lists_failed (${resp?.status})`;
+    console.warn('[todo] resolveTodoListId Graph error', { status: resp?.status, code, msg, listName });
+    return null;
   }
 
   const items = Array.isArray(json.value) ? json.value : [];
   const target = items.find((l) => String(l.displayName || '').trim().toLowerCase() === listName.trim().toLowerCase());
-  if (!target?.id) return null;
+  if (!target?.id) {
+    // List with that name doesn't exist – not an error, just no todos
+    return null;
+  }
   return String(target.id);
 }
 
@@ -204,10 +202,22 @@ async function listTodos({ userId }) {
   const out = [];
 
   async function fetchFor({ connectionId, label, color, accessToken }) {
-    const listId = await resolveTodoListId({ accessToken, listName });
-    if (!listId) return;
+    let listId;
+    try {
+      listId = await resolveTodoListId({ accessToken, listName });
+    } catch (e) {
+      console.warn('[todo] fetchFor resolveTodoListId error', { connectionId, label }, e?.message);
+      return;
+    }
+    if (!listId) return; // List not found or Graph error – skip silently
 
-    const tasks = await listTodoTasks({ accessToken, listId });
+    let tasks;
+    try {
+      tasks = await listTodoTasks({ accessToken, listId });
+    } catch (e) {
+      console.warn('[todo] fetchFor listTodoTasks error', { connectionId, label, listId }, e?.message);
+      return;
+    }
     for (const t of tasks) {
       const taskId = t?.id ? String(t.id) : null;
       if (!taskId) continue;

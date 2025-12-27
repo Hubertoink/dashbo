@@ -33,6 +33,16 @@ todosRouter.get('/', requireAuth, async (req, res) => {
       });
     }
 
+    // Graph 400 invalidRequest often means the token lacks Tasks.ReadWrite scope
+    // (connection was made before scope was added) or the account type doesn't support To Do.
+    if (status === 400 && (code.toLowerCase() === 'invalidrequest' || code.toLowerCase() === 'badrequest')) {
+      return res.status(400).json({
+        error: 'todo_scope_or_account',
+        message: `Microsoft To Do API abgelehnt (400 ${code}). Bitte alle Outlook-Verbindungen trennen und erneut verbinden, damit die neuen Scopes (Tasks.ReadWrite) übernommen werden. Hinweis: Google-Konten haben keinen Zugriff auf Microsoft To Do.`,
+        details: { code, status, message, listName: getTodoListName() },
+      });
+    }
+
     console.error('[todos] list failed', { userId, code, status, message, details: e?.details }, e);
     const httpStatus = status >= 400 && status < 500 ? status : 500;
     return res.status(httpStatus).json({ error: 'todo_error', message, details: { code, status } });
