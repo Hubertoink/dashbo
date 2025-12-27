@@ -1,0 +1,54 @@
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-dashbo}
+      POSTGRES_USER: ${POSTGRES_USER:-dashbo}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-dashbo}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+
+  backend:
+    build:
+      context: ./backend
+    environment:
+      PORT: ${BACKEND_PORT:-3000}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:8080}
+      JWT_SECRET: ${JWT_SECRET:-dashbo-dev-secret-change-me}
+      BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL:-}
+      BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-}
+      BOOTSTRAP_ADMIN_NAME: ${BOOTSTRAP_ADMIN_NAME:-Admin}
+      DATABASE_URL: postgres://${POSTGRES_USER:-dashbo}:${POSTGRES_PASSWORD:-dashbo}@db:5432/${POSTGRES_DB:-dashbo}
+      OWM_API_KEY: ${OWM_API_KEY}
+      OWM_LAT: ${OWM_LAT:-49.4875}
+      OWM_LON: ${OWM_LON:-8.4660}
+      OWM_UNITS: ${OWM_UNITS:-metric}
+      OWM_LANG: ${OWM_LANG:-de}
+      UPLOAD_DIR: /data/uploads
+      OUTLOOK_TENANT: ${OUTLOOK_TENANT:-consumers}
+      OUTLOOK_CLIENT_ID: ${OUTLOOK_CLIENT_ID:-}
+      OUTLOOK_CLIENT_SECRET: ${OUTLOOK_CLIENT_SECRET:-}
+      OUTLOOK_REDIRECT_URI: ${OUTLOOK_REDIRECT_URI:-}
+      OUTLOOK_SCOPES: ${OUTLOOK_SCOPES:-offline_access Calendars.Read User.Read}
+      OUTLOOK_SUCCESS_REDIRECT: ${OUTLOOK_SUCCESS_REDIRECT:-/settings}
+      OUTLOOK_ERROR_REDIRECT: ${OUTLOOK_ERROR_REDIRECT:-/settings?outlook=error}
+    depends_on:
+      - db
+    ports:
+      - "${BACKEND_PORT:-3000}:3000"
+    volumes:
+      - backend_data:/data
+
+  frontend:
+    build:
+      context: ./frontend
+    depends_on:
+      - backend
+    ports:
+      - "8080:80"
+
+volumes:
+  db_data:
+  backend_data:
