@@ -21,7 +21,10 @@ function buildDatabaseUrlFromParts() {
 
 function getPool() {
   if (!pool) {
-    const connectionString = process.env.DATABASE_URL || buildDatabaseUrlFromParts();
+    // Prefer DB_* parts when present. Hosting UIs often generate a DATABASE_URL
+    // that is not properly URL-encoded (e.g. passwords containing '@').
+    const fromParts = buildDatabaseUrlFromParts();
+    const connectionString = fromParts || process.env.DATABASE_URL;
     if (!connectionString) {
       throw new Error('DATABASE_URL is required (or DB_HOST/DB_PORT/DB_NAME/DB_USER/DB_PASSWORD)');
     }
