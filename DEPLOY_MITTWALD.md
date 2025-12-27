@@ -11,9 +11,16 @@ Diese Anleitung ist bewusst pragmatisch gehalten: Repo klonen → ENV setzen →
 - Domain (`dashbohub.de` / `www.dashbohub.de`) im Mittwald Projekt auf den Web/Container-Service zeigen lassen.
 - SSL-Zertifikat aktivieren/abwarten.
 
-## 2) Repo auf Mittwald bereitstellen
-- Repository: `https://github.com/Hubertoink/dashbo.git`
-- Mittwald: Projekt/Deployment so konfigurieren, dass der Code ausgecheckt wird.
+## 2) Images bauen (Registry)
+Mittwald Container Hosting startet Container **aus einem Container-Image** (Docker Hub / GHCR / private Registry). Es baut nicht automatisch aus deinem Git-Repo.
+
+Empfehlung: GitHub Container Registry (GHCR) nutzen.
+- Workflow ist im Repo enthalten: [.github/workflows/docker-images.yml](.github/workflows/docker-images.yml)
+- Images danach:
+	- `ghcr.io/<owner>/dashbo-frontend:latest`
+	- `ghcr.io/<owner>/dashbo-backend:latest`
+
+Wenn das Repo private ist, musst du in Mittwald die GHCR Registry Credentials im Projekt hinterlegen (Registries Tab / API `PATCH /v2/registries/{registryId}`).
 
 ## 3) Environment Variablen setzen
 Mittwald sollte ENV Variablen/Secrets pro Projekt/Service unterstützen. Nutze als Basis `.env.example` und setze mindestens:
@@ -37,10 +44,20 @@ Mittwald sollte ENV Variablen/Secrets pro Projekt/Service unterstützen. Nutze a
 Wichtig: dieselbe Redirect URL auch in der Azure App Registration eintragen.
 
 ## 4) Container starten
-Im Projektverzeichnis:
-- `docker compose up -d --build`
+In Mittwald erstellst du Services/Container (UI oder API). Minimal brauchst du:
+- `frontend` (nginx) → Port `80/tcp`
+- `backend` (node) → Port `3000/tcp`
+- `db` (postgres) → Port `5432/tcp` + persistentes Volume
 
-Hinweis: je nach Mittwald Setup ist `--build` bei jeder Änderung sinnvoll (oder ein Build-Pipeline Schritt).
+Wichtig: Der Container-Name bestimmt die interne DNS. Unser nginx proxy’t auf `http://backend:3000/`, daher sollte der Backend-Container **backend** heißen.
+
+### API (optional)
+Du kannst das auch per API machen:
+- Stack finden: `GET /v2/projects/{projectId}/stacks` (default stack heißt `default`)
+- Services/Volumes deklarieren: `PUT /v2/stacks/{stackId}` (idempotent)
+- Image-Update: `POST /v2/stacks/{stackId}/services/{serviceId}/actions/pull` (für `:latest`) + ggf. `.../actions/recreate`
+
+Domains werden per Ingress mit einem Service-Port verbunden (siehe Mittwald Doku: `POST /v2/ingresses`).
 
 ## 5) Persistenz (Volumes)
 In `docker-compose.yml` werden Volumes genutzt:
