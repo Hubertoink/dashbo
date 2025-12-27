@@ -171,7 +171,10 @@
               bind:this={editInput}
               on:blur={() => commitEdit(item)}
               on:keydown={(e) => {
-                if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+                if (e.key === 'Enter') {
+                  const el = e.currentTarget;
+                  if (el instanceof HTMLInputElement) el.blur();
+                }
                 if (e.key === 'Escape') editingId = null;
               }}
             />

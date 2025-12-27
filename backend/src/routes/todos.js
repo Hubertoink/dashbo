@@ -15,17 +15,26 @@ todosRouter.get('/', requireAuth, async (req, res) => {
   } catch (e) {
     const status = Number(e?.status || 500);
     const code = String(e?.code || 'todo_error');
+    const message = e?.message ? String(e.message) : 'todo_error';
 
     if (status === 401 || status === 403) {
       return res.status(400).json({
         error: 'todo_permission_missing',
         message: `Microsoft To Do Berechtigung fehlt. Bitte OUTLOOK_SCOPES um Tasks.ReadWrite erweitern und erneut verbinden. (Liste: ${getTodoListName()})`,
-        details: { code },
+        details: { code, status, message },
       });
     }
 
-    console.error('[todos] list failed', e);
-    return res.status(500).json({ error: 'internal_error' });
+    if (status === 404) {
+      return res.status(400).json({
+        error: 'todo_not_available',
+        message: `Microsoft To Do ist für dieses Konto nicht verfügbar oder die API-Antwort war 404. (Liste: ${getTodoListName()})`,
+        details: { code, status, message },
+      });
+    }
+
+    console.error('[todos] list failed', { userId, code, status, message }, e);
+    return res.status(500).json({ error: 'todo_error', message, details: { code, status } });
   }
 });
 

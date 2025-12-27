@@ -101,6 +101,12 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
   });
 
   if (!resp.ok) {
+    const contentType = resp.headers.get('content-type') || '';
+    if (contentType.includes('application/json')) {
+      const data = (await resp.json().catch(() => null)) as any;
+      const msg = typeof data?.message === 'string' ? data.message : JSON.stringify(data);
+      throw new Error(`API ${resp.status}: ${msg}`);
+    }
     const text = await resp.text();
     throw new Error(`API ${resp.status}: ${text}`);
   }
