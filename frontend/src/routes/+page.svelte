@@ -399,7 +399,7 @@
     void (async () => {
       try {
         const s = await fetchSettings();
-        const uploaded = (s.images ?? []).map((img) => `/api/media/${img}`);
+        const uploaded = (s.images ?? []).map((img: string) => `/api/media/${img}`);
         uploadedBackgroundUrls = uploaded;
 
         if (bgRotateInterval) {

@@ -322,7 +322,7 @@
     let completedBytes = 0;
     try {
       for (const file of uploadFiles) {
-        await uploadBackgroundWithProgress(file, (loaded, total) => {
+        await uploadBackgroundWithProgress(file, (loaded: number, total: number) => {
           const denom = totalBytes > 0 ? totalBytes : 1;
           const currentTotal = total || file.size || 0;
           const currentLoaded = loaded || 0;
@@ -943,7 +943,6 @@
               accept="image/png,image/jpeg,image/webp"
               multiple
               webkitdirectory
-              directory
               on:change={(e) => onChooseUploadFilesFrom('folder', (e.currentTarget as HTMLInputElement).files)}
               disabled={!authed || !isAdmin}
             />
