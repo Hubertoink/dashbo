@@ -254,10 +254,54 @@ export async function setBackground(filename: string): Promise<{ ok: true }> {
   return api<{ ok: true }>('/settings/background', { method: 'POST', body: JSON.stringify({ filename }) });
 }
 
+export async function deleteBackgroundImage(filename: string): Promise<{ ok: true }> {
+  return api<{ ok: true }>(`/settings/background/${encodeURIComponent(filename)}`, { method: 'DELETE' });
+}
+
 export async function uploadBackground(file: File): Promise<{ filename: string; url: string }> {
   const form = new FormData();
   form.append('file', file);
   return apiForm<{ filename: string; url: string }>('/settings/background/upload', form);
+}
+
+export function uploadBackgroundWithProgress(
+  file: File,
+  onProgress?: (loadedBytes: number, totalBytes: number) => void
+): Promise<{ filename: string; url: string }> {
+  const token = getToken();
+  const url = `${API_BASE}/settings/background/upload`;
+
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', url);
+    if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+
+    xhr.upload.onprogress = (evt) => {
+      if (!onProgress) return;
+      if (evt.lengthComputable) onProgress(evt.loaded, evt.total);
+    };
+
+    xhr.onerror = () => reject(new Error('API network error'));
+
+    xhr.onload = () => {
+      const ok = xhr.status >= 200 && xhr.status < 300;
+      if (!ok) {
+        reject(new Error(`API ${xhr.status}: ${xhr.responseText || ''}`.trim()));
+        return;
+      }
+
+      try {
+        const parsed = JSON.parse(xhr.responseText) as { filename: string; url: string };
+        resolve(parsed);
+      } catch {
+        reject(new Error('API invalid JSON'));
+      }
+    };
+
+    const form = new FormData();
+    form.append('file', file);
+    xhr.send(form);
+  });
 }
 
 export async function setWeatherLocation(location: string): Promise<{ ok: true }> {

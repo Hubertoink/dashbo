@@ -23,4 +23,26 @@ function listImages() {
     .sort((a, b) => a.localeCompare(b));
 }
 
-module.exports = { getUploadDir, ensureUploadDir, listImages };
+function deleteImage(filename) {
+  const dir = ensureUploadDir();
+
+  const name = String(filename || '');
+  if (!name || name.includes('/') || name.includes('\\') || name.includes('..')) {
+    return { ok: false, error: 'invalid_filename' };
+  }
+
+  const allowed = new Set(['.jpg', '.jpeg', '.png', '.webp']);
+  const ext = path.extname(name).toLowerCase();
+  if (!allowed.has(ext)) return { ok: false, error: 'invalid_extension' };
+
+  const full = path.join(dir, name);
+  try {
+    fs.unlinkSync(full);
+    return { ok: true };
+  } catch (e) {
+    if (e && typeof e === 'object' && 'code' in e && e.code === 'ENOENT') return { ok: false, error: 'file_not_found' };
+    return { ok: false, error: 'delete_failed' };
+  }
+}
+
+module.exports = { getUploadDir, ensureUploadDir, listImages, deleteImage };

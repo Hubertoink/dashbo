@@ -7,7 +7,7 @@ export default defineConfig({
     sveltekit(),
     SvelteKitPWA({
       registerType: 'autoUpdate',
-      includeAssets: ['background.jpg', 'icon.svg', 'maskable-icon.svg'],
+      includeAssets: ['background.jpg', 'icon.svg', 'maskable-icon.svg', 'favicon.ico'],
       manifest: {
         name: 'Dashbo',
         short_name: 'Dashbo',

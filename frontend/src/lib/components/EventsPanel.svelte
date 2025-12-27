@@ -140,12 +140,12 @@
 </script>
 
 <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-<div class="h-full flex flex-col min-h-0 px-6 md:px-8 py-4" on:click={activatePanel}>
+<div class="h-full flex flex-col min-h-0 px-6 md:px-8 py-3" on:click={activatePanel}>
   <div class="flex items-end justify-between gap-6 shrink-0">
     <div class="grid">
       {#key header}
         <div
-          class="text-5xl md:text-6xl font-semibold tracking-wide col-start-1 row-start-1"
+          class="text-4xl md:text-5xl font-semibold tracking-wide col-start-1 row-start-1"
           in:fly={{ y: 8, duration: 140 }}
           out:fade={{ duration: 120 }}
         >
@@ -185,7 +185,7 @@
         <div class="col-start-1 row-start-1 h-full" in:fade={{ duration: 180 }} out:fade={{ duration: 160 }}>
           <div class="h-full overflow-y-auto pr-1">
             {#if !hasAnyItems}
-              <div class="text-white/70 text-lg">Keine Termine.</div>
+              <div class="text-white/70 text-base">Keine Termine.</div>
             {:else}
               <div class="space-y-4">
                 {#each dayHolidays as h (h.date + ':' + h.title)}

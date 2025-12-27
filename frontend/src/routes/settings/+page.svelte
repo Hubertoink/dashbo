@@ -7,8 +7,8 @@
     setToken,
     getStoredToken,
     fetchSettings,
-    uploadBackground,
     setBackground,
+    deleteBackgroundImage,
     fetchOutlookStatus,
     getOutlookAuthUrl,
     disconnectOutlook,
@@ -18,6 +18,7 @@
     resetUserPassword,
     setWeatherLocation,
     setHolidaysEnabled,
+    uploadBackgroundWithProgress,
     listTags,
     createTag,
     deleteTag,
@@ -77,8 +78,32 @@
 
   const colorNames: TagColorKey[] = ['cyan', 'fuchsia', 'emerald', 'amber', 'rose', 'violet', 'sky', 'lime'];
 
-  let uploadFile: File | null = null;
+  let uploadFiles: File[] = [];
   let savingBg = false;
+  let uploadProgress = 0;
+  let uploadTotalLabel: string | null = null;
+  let uploadError: string | null = null;
+
+  let folderInputEl: HTMLInputElement | null = null;
+
+  let deleteBgFor: string | null = null;
+  let deletingBg = false;
+  let deleteBgError: string | null = null;
+
+  async function confirmDeleteBg() {
+    if (!deleteBgFor) return;
+    deletingBg = true;
+    deleteBgError = null;
+    try {
+      await deleteBackgroundImage(deleteBgFor);
+      deleteBgFor = null;
+      await refreshSettings();
+    } catch {
+      deleteBgError = 'Löschen fehlgeschlagen.';
+    } finally {
+      deletingBg = false;
+    }
+  }
 
   let newUserEmail = '';
   let newUserName = '';
@@ -224,15 +249,45 @@
   }
 
   async function doUpload() {
-    if (!uploadFile) return;
+    if (uploadFiles.length === 0) return;
     savingBg = true;
+    uploadError = null;
+    uploadProgress = 0;
+
+    const totalBytes = uploadFiles.reduce((sum, f) => sum + (f.size || 0), 0);
+    uploadTotalLabel = totalBytes > 0 ? `${uploadFiles.length} Datei(en)` : null;
+
+    let completedBytes = 0;
     try {
-      await uploadBackground(uploadFile);
-      uploadFile = null;
+      for (const file of uploadFiles) {
+        await uploadBackgroundWithProgress(file, (loaded, total) => {
+          const denom = totalBytes > 0 ? totalBytes : 1;
+          const currentTotal = total || file.size || 0;
+          const currentLoaded = loaded || 0;
+          const overall = (completedBytes + Math.min(currentLoaded, currentTotal)) / denom;
+          uploadProgress = Math.max(0, Math.min(1, overall));
+        });
+        completedBytes += file.size || 0;
+        uploadProgress = totalBytes > 0 ? Math.max(uploadProgress, completedBytes / totalBytes) : uploadProgress;
+      }
+
+      uploadFiles = [];
+      uploadTotalLabel = null;
+      uploadProgress = 0;
       await refreshSettings();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      uploadError = msg || 'Upload fehlgeschlagen.';
     } finally {
       savingBg = false;
     }
+  }
+
+  function onChooseUploadFiles(files: FileList | null | undefined) {
+    uploadError = null;
+    uploadProgress = 0;
+    uploadTotalLabel = null;
+    uploadFiles = files ? Array.from(files) : [];
   }
 
   async function chooseBg(filename: string) {
@@ -668,7 +723,7 @@
             />
             Feiertage anzeigen
             <button
-              class="ml-auto text-xs text-white/50 hover:text-white/70 disabled:opacity-50"
+              class="ml-auto h-8 px-3 rounded-lg bg-white/20 hover:bg-white/25 text-xs font-medium disabled:opacity-50"
               on:click={saveHolidays}
               disabled={!authed || !isAdmin || holidaysSaving}
             >
@@ -694,28 +749,90 @@
               class="flex-1 text-sm text-white/70 file:mr-3 file:rounded-lg file:border-0 file:bg-white/10 file:px-3 file:py-1.5 file:text-white file:text-sm file:hover:bg-white/15"
               type="file"
               accept="image/png,image/jpeg,image/webp"
-              on:change={(e) => (uploadFile = (e.currentTarget as HTMLInputElement).files?.[0] ?? null)}
+              multiple
+              on:change={(e) => onChooseUploadFiles((e.currentTarget as HTMLInputElement).files)}
               disabled={!authed || !isAdmin}
             />
+
+            <button
+              class="h-9 px-3 rounded-lg bg-white/10 hover:bg-white/15 text-sm font-medium disabled:opacity-50"
+              type="button"
+              on:click={() => folderInputEl?.click()}
+              disabled={!authed || !isAdmin}
+            >
+              Ordner
+            </button>
+
+            <input
+              class="hidden"
+              bind:this={folderInputEl}
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              multiple
+              webkitdirectory
+              directory
+              on:change={(e) => onChooseUploadFiles((e.currentTarget as HTMLInputElement).files)}
+              disabled={!authed || !isAdmin}
+            />
+
             <button
               class="h-9 px-4 rounded-lg bg-white/20 hover:bg-white/25 text-sm font-medium disabled:opacity-50"
               on:click={doUpload}
-              disabled={!authed || !isAdmin || !uploadFile || savingBg}
+              disabled={!authed || !isAdmin || uploadFiles.length === 0 || savingBg}
             >
               Upload
             </button>
           </div>
 
+          <div class="flex items-center justify-between text-xs text-white/50 mb-2">
+            <div>{uploadFiles.length > 0 ? `${uploadFiles.length} Datei(en) ausgewählt` : 'Mehrere Bilder oder einen Ordner auswählen (Browser-abhängig)'}</div>
+            {#if savingBg && uploadTotalLabel}
+              <div>{uploadTotalLabel}</div>
+            {/if}
+          </div>
+
+          {#if savingBg}
+            <div class="h-2 rounded-full bg-white/10 overflow-hidden mb-2">
+              <div class="h-full bg-white/40" style={`width: ${Math.round(uploadProgress * 100)}%`}></div>
+            </div>
+          {/if}
+
+          {#if uploadError}
+            <div class="text-red-400 text-xs mb-2">{uploadError}</div>
+          {/if}
+
           {#if (settings?.images?.length ?? 0) > 0}
             <div class="grid grid-cols-4 gap-2">
               {#each settings?.images ?? [] as img}
-                <button
-                  class={`aspect-video rounded-lg overflow-hidden border-2 ${settings?.background === img ? 'border-white/60' : 'border-transparent'} hover:border-white/30`}
-                  on:click={() => chooseBg(img)}
-                  disabled={!authed || !isAdmin || savingBg}
-                >
-                  <img class="w-full h-full object-cover" src={`/api/media/${img}`} alt={img} />
-                </button>
+                <div class="relative">
+                  <button
+                    class={`w-full aspect-video rounded-lg overflow-hidden border-2 ${settings?.background === img ? 'border-white/60' : 'border-transparent'} hover:border-white/30`}
+                    on:click={() => chooseBg(img)}
+                    disabled={!authed || !isAdmin || savingBg || deletingBg}
+                    aria-label="Hintergrund auswählen"
+                  >
+                    <img class="w-full h-full object-cover" src={`/api/media/${img}`} alt={img} />
+                  </button>
+
+                  <button
+                    type="button"
+                    class="absolute top-1 right-1 h-7 w-7 rounded-md bg-black/55 hover:bg-black/70 text-white/80 grid place-items-center disabled:opacity-50"
+                    aria-label="Bild löschen"
+                    on:click|stopPropagation={() => {
+                      deleteBgError = null;
+                      deleteBgFor = img;
+                    }}
+                    disabled={!authed || !isAdmin || savingBg || deletingBg}
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M3 6h18" />
+                      <path d="M8 6V4h8v2" />
+                      <path d="M19 6l-1 14H6L5 6" />
+                      <path d="M10 11v6" />
+                      <path d="M14 11v6" />
+                    </svg>
+                  </button>
+                </div>
               {/each}
             </div>
           {:else}
@@ -803,6 +920,41 @@
       </section>
     {/if}
   </div>
+
+  {#if deleteBgFor}
+    <!-- svelte-ignore a11y_no_static_element_interactions a11y_click_events_have_key_events -->
+    <div class="fixed inset-0 z-50 bg-black/60" on:click={() => (!deletingBg ? (deleteBgFor = null) : undefined)}>
+      <div class="min-h-full flex items-center justify-center p-6">
+        <div class="w-full max-w-md rounded-2xl bg-black/70 border border-white/10 backdrop-blur-md p-5" on:click|stopPropagation>
+          <div class="text-base font-semibold mb-1">Bild löschen?</div>
+          <div class="text-sm text-white/70 mb-4 break-all">{deleteBgFor}</div>
+
+          {#if deleteBgError}
+            <div class="text-red-400 text-xs mb-3">{deleteBgError}</div>
+          {/if}
+
+          <div class="flex justify-end gap-2">
+            <button
+              class="h-9 px-4 rounded-lg bg-white/10 hover:bg-white/15 text-sm font-medium disabled:opacity-50"
+              type="button"
+              on:click={() => (deleteBgFor = null)}
+              disabled={deletingBg}
+            >
+              Abbrechen
+            </button>
+            <button
+              class="h-9 px-4 rounded-lg bg-white/20 hover:bg-white/25 text-sm font-medium disabled:opacity-50"
+              type="button"
+              on:click={confirmDeleteBg}
+              disabled={deletingBg}
+            >
+              Löschen
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  {/if}
 </div>
 
 <!-- Reset Password Modal -->

@@ -4,7 +4,7 @@ const multer = require('multer');
 const { z } = require('zod');
 
 const { requireAuth, requireAdmin } = require('../middleware/auth');
-const { ensureUploadDir, listImages } = require('../services/mediaService');
+const { ensureUploadDir, listImages, deleteImage } = require('../services/mediaService');
 const { getSetting, setSetting } = require('../services/settingsService');
 
 const settingsRouter = express.Router();
@@ -27,7 +27,8 @@ const upload = multer({
 });
 
 settingsRouter.get('/', async (_req, res) => {
-  const background = await getSetting('background');
+  const backgroundRaw = await getSetting('background');
+  const background = backgroundRaw && String(backgroundRaw).trim() ? backgroundRaw : null;
   const weatherLocation = await getSetting('weather.location');
   const holidaysEnabledRaw = await getSetting('holidays.enabled');
   const images = listImages();
@@ -36,6 +37,34 @@ settingsRouter.get('/', async (_req, res) => {
 
   const holidaysEnabled = String(holidaysEnabledRaw ?? '').toLowerCase() === 'true';
   res.json({ background, backgroundUrl, images, weatherLocation, holidaysEnabled });
+});
+
+settingsRouter.delete('/background/:filename', requireAuth, requireAdmin, async (req, res) => {
+  const schema = z.object({ filename: z.string().min(1).max(500) });
+  const parsed = schema.safeParse(req.params);
+  if (!parsed.success) {
+    return res.status(400).json({ error: 'invalid_params', details: parsed.error.flatten() });
+  }
+
+  const imagesBefore = listImages();
+  if (!imagesBefore.includes(parsed.data.filename)) {
+    return res.status(404).json({ error: 'file_not_found' });
+  }
+
+  const deleted = deleteImage(parsed.data.filename);
+  if (!deleted.ok) {
+    return res.status(500).json({ error: deleted.error || 'delete_failed' });
+  }
+
+  const currentBgRaw = await getSetting('background');
+  const currentBg = currentBgRaw && String(currentBgRaw).trim() ? String(currentBgRaw) : null;
+  const imagesAfter = listImages();
+  if (currentBg && currentBg === parsed.data.filename) {
+    const next = imagesAfter[0] || '';
+    await setSetting('background', next);
+  }
+
+  return res.json({ ok: true });
 });
 
 settingsRouter.post('/weather', requireAuth, requireAdmin, async (req, res) => {

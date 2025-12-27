@@ -16,6 +16,10 @@
   let monthAnchor = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1);
   let events: EventDto[] = [];
   let backgroundUrl = '/background.jpg';
+  let uploadedBackgroundUrls: string[] = [];
+  let bgIndex = 0;
+  const BG_ROTATE_MS = 10 * 60 * 1000;
+  let bgRotateInterval: ReturnType<typeof setInterval> | null = null;
   let viewMode: 'month' | 'week' = 'month';
   let tone: 'light' | 'dark' = 'light';
 
@@ -252,6 +256,7 @@
   onDestroy(() => {
     clearStandbyTransitionTimers();
     if (standbyRotateInterval) clearInterval(standbyRotateInterval);
+    if (bgRotateInterval) clearInterval(bgRotateInterval);
   });
 
   function mondayStart(d: Date) {
@@ -312,6 +317,11 @@
     } catch {
       return 'light';
     }
+  }
+
+  async function applyBackground(nextUrl: string) {
+    backgroundUrl = nextUrl;
+    tone = await computeToneFromImage(nextUrl);
   }
 
   async function loadEvents() {
@@ -388,8 +398,32 @@
     void (async () => {
       try {
         const s = await fetchSettings();
-        if (s.backgroundUrl) backgroundUrl = `/api${s.backgroundUrl}`;
-        else if (staticImages.length > 0) backgroundUrl = staticImages[Math.floor(Math.random() * staticImages.length)];
+        const uploaded = (s.images ?? []).map((img) => `/api/media/${img}`);
+        uploadedBackgroundUrls = uploaded;
+
+        if (bgRotateInterval) {
+          clearInterval(bgRotateInterval);
+          bgRotateInterval = null;
+        }
+
+        if (uploadedBackgroundUrls.length > 0) {
+          const preferred = s.background ? `/api/media/${s.background}` : null;
+          const preferredIndex = preferred ? uploadedBackgroundUrls.indexOf(preferred) : -1;
+          bgIndex = preferredIndex >= 0 ? preferredIndex : Math.floor(Math.random() * uploadedBackgroundUrls.length);
+          await applyBackground(uploadedBackgroundUrls[bgIndex] ?? '/background.jpg');
+
+          if (uploadedBackgroundUrls.length > 1) {
+            bgRotateInterval = setInterval(() => {
+              bgIndex = (bgIndex + 1) % uploadedBackgroundUrls.length;
+              const next = uploadedBackgroundUrls[bgIndex];
+              if (next) void applyBackground(next);
+            }, BG_ROTATE_MS);
+          }
+        } else if (s.backgroundUrl) {
+          await applyBackground(`/api${s.backgroundUrl}`);
+        } else if (staticImages.length > 0) {
+          await applyBackground(staticImages[Math.floor(Math.random() * staticImages.length)]);
+        }
 
         const nextHolidaysEnabled = Boolean(s.holidaysEnabled);
         const enabledChanged = nextHolidaysEnabled !== holidaysEnabled;
@@ -399,10 +433,8 @@
         if (enabledChanged) void loadEvents();
       } catch {
         // ignore
-        if (staticImages.length > 0) backgroundUrl = staticImages[Math.floor(Math.random() * staticImages.length)];
+        if (staticImages.length > 0) await applyBackground(staticImages[Math.floor(Math.random() * staticImages.length)]);
       }
-
-      tone = await computeToneFromImage(backgroundUrl);
     })();
 
     // start in normal view, but enable auto-standby after inactivity
@@ -523,7 +555,7 @@
           </div>
         </div>
       {:else if !upcomingMode}
-        <div class="h-screen grid grid-rows-[1fr,minmax(180px,32vh)]" out:fly={{ x: 180, duration: 220 }}>
+        <div class="h-screen grid grid-rows-[1fr,minmax(140px,24vh)]" out:fly={{ x: 180, duration: 220 }}>
           <div class="min-h-0 overflow-hidden">
             {#if viewMode === 'month'}
               <div class="glass border-b border-white/10 h-full overflow-hidden" transition:fade={{ duration: 180 }}>
