@@ -33,7 +33,7 @@ todosRouter.get('/', requireAuth, async (req, res) => {
       });
     }
 
-    console.error('[todos] list failed', { userId, code, status, message }, e);
+    console.error('[todos] list failed', { userId, code, status, message, details: e?.details }, e);
     const httpStatus = status >= 400 && status < 500 ? status : 500;
     return res.status(httpStatus).json({ error: 'todo_error', message, details: { code, status } });
   }
@@ -83,7 +83,7 @@ todosRouter.post('/update', requireAuth, async (req, res) => {
       return res.status(404).json({ error: 'not_found' });
     }
 
-    console.error('[todos] update failed', { code, status }, e);
+    console.error('[todos] update failed', { code, status, details: e?.details }, e);
     return res.status(500).json({ error: 'internal_error' });
   }
 });

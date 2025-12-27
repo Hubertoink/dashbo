@@ -39,7 +39,18 @@ function getGraphTodoBaseUrl(version) {
 function isInvalidRequestGraphError({ respStatus, json }) {
   const code = String(json?.error?.code || '');
   const msg = String(json?.error?.message || '');
-  return respStatus === 400 && (code.toLowerCase() === 'badrequest' || code.toLowerCase() === 'invalidrequest') && msg.toLowerCase().includes('invalid request');
+  const normalizedCode = code.toLowerCase();
+  const normalizedMsg = msg.toLowerCase();
+
+  // Some accounts/tenants respond with a generic 400 invalidRequest for To Do endpoints
+  // even when the endpoint exists. We treat *any* 400 with BadRequest/invalidRequest
+  // as eligible for beta fallback (and other retry variants).
+  if (respStatus !== 400) return false;
+  if (normalizedCode !== 'badrequest' && normalizedCode !== 'invalidrequest') return false;
+
+  // Message varies; keep this permissive.
+  if (!normalizedMsg) return true;
+  return normalizedMsg.includes('invalid request') || normalizedMsg.includes('invalidrequest') || normalizedMsg.includes('bad request');
 }
 
 async function graphJson({ accessToken, url, method = 'GET', body }) {
@@ -48,13 +59,19 @@ async function graphJson({ accessToken, url, method = 'GET', body }) {
     headers: {
       Authorization: `Bearer ${accessToken}`,
       Accept: 'application/json',
+      // Helps correlate Graph errors in logs.
+      'client-request-id': `dashbo-${Date.now()}-${Math.random().toString(16).slice(2)}`,
       ...(body ? { 'Content-Type': 'application/json' } : {}),
     },
     body: body ? JSON.stringify(body) : undefined,
   });
 
   const json = await resp.json().catch(() => ({}));
-  return { resp, json };
+
+  const requestId = resp.headers.get('request-id') || null;
+  const clientRequestId = resp.headers.get('client-request-id') || null;
+
+  return { resp, json, url, requestId, clientRequestId };
 }
 
 async function graphTodoJson({ accessToken, path, method = 'GET', body }) {
@@ -67,17 +84,43 @@ async function graphTodoJson({ accessToken, path, method = 'GET', body }) {
   if (isInvalidRequestGraphError({ respStatus: r1.resp.status, json: r1.json })) {
     const urlBeta = `${getGraphTodoBaseUrl('beta')}${path}`;
     const r2 = await graphJson({ accessToken, url: urlBeta, method, body });
+    // Attach attempts for better error diagnostics upstream.
+    r2.attempts = [r1, r2];
     return r2;
   }
 
+  r1.attempts = [r1];
   return r1;
 }
 
+async function graphTodoJsonVariants({ accessToken, paths, method = 'GET', body }) {
+  const attempts = [];
+  for (const path of paths) {
+    const r = await graphTodoJson({ accessToken, path, method, body });
+    if (Array.isArray(r.attempts)) attempts.push(...r.attempts);
+    else attempts.push(r);
+    if (r.resp.ok) {
+      r.attempts = attempts;
+      return r;
+    }
+  }
+
+  // Return the last response, but keep the full attempts list.
+  const last = attempts[attempts.length - 1];
+  if (last) last.attempts = attempts;
+  return last;
+}
+
 async function resolveTodoListId({ accessToken, listName }) {
-  const { resp, json } = await graphTodoJson({
+  // Some Graph deployments return 400 invalidRequest for $select on todo lists.
+  // Try a couple of variants from strict -> permissive.
+  const r = await graphTodoJsonVariants({
     accessToken,
-    path: '/me/todo/lists?$select=id,displayName',
+    paths: ['/me/todo/lists?$select=id,displayName', '/me/todo/lists'],
   });
+
+  const resp = r?.resp;
+  const json = r?.json;
 
   if (!resp.ok) {
     const code = json?.error?.code || '';
@@ -85,6 +128,17 @@ async function resolveTodoListId({ accessToken, listName }) {
     const err = new Error(String(msg));
     err.code = String(code);
     err.status = resp.status;
+    err.details = {
+      listName,
+      attempts: (Array.isArray(r?.attempts) ? r.attempts : [r]).map((a) => ({
+        url: a?.url,
+        status: a?.resp?.status,
+        code: a?.json?.error?.code,
+        message: a?.json?.error?.message,
+        requestId: a?.requestId,
+        clientRequestId: a?.clientRequestId,
+      })),
+    };
     throw err;
   }
 
@@ -101,10 +155,12 @@ async function listTodoTasks({ accessToken, listId }) {
     $select: 'id,title,status,bodyPreview,dueDateTime,createdDateTime,lastModifiedDateTime',
   });
 
-  const { resp, json } = await graphTodoJson({
-    accessToken,
-    path: `/me/todo/lists/${encodeURIComponent(listId)}/tasks?${qs.toString()}`,
-  });
+  // Same idea: sometimes OData options cause invalidRequest; try without them.
+  const tasksPathWithQuery = `/me/todo/lists/${encodeURIComponent(listId)}/tasks?${qs.toString()}`;
+  const tasksPathPlain = `/me/todo/lists/${encodeURIComponent(listId)}/tasks`;
+  const r = await graphTodoJsonVariants({ accessToken, paths: [tasksPathWithQuery, tasksPathPlain] });
+  const resp = r?.resp;
+  const json = r?.json;
 
   if (!resp.ok) {
     const code = json?.error?.code || '';
@@ -112,6 +168,17 @@ async function listTodoTasks({ accessToken, listId }) {
     const err = new Error(String(msg));
     err.code = String(code);
     err.status = resp.status;
+    err.details = {
+      listId,
+      attempts: (Array.isArray(r?.attempts) ? r.attempts : [r]).map((a) => ({
+        url: a?.url,
+        status: a?.resp?.status,
+        code: a?.json?.error?.code,
+        message: a?.json?.error?.message,
+        requestId: a?.requestId,
+        clientRequestId: a?.clientRequestId,
+      })),
+    };
     throw err;
   }
 
