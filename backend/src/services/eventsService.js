@@ -1,28 +1,70 @@
 const { getPool } = require('../db');
 
-function toDbEvent(row) {
-  const tagId = row.tag_id != null ? Number(row.tag_id) : null;
-  const personId = row.person_id != null ? Number(row.person_id) : null;
-  const recurrenceFreq = row.recurrence_freq ? String(row.recurrence_freq) : null;
-  const recurrenceInterval = row.recurrence_interval != null ? Number(row.recurrence_interval) : 1;
-  const recurrenceUntil = row.recurrence_until ? new Date(row.recurrence_until).toISOString() : null;
+function uniqueNumbers(input) {
+  const out = [];
+  const seen = new Set();
+  for (const x of input) {
+    const n = Number(x);
+    if (!Number.isFinite(n)) continue;
+    if (seen.has(n)) continue;
+    seen.add(n);
+    out.push(n);
+  }
+  return out;
+}
 
-  const startAt = new Date(row.start_at).toISOString();
-  const endAt = row.end_at ? new Date(row.end_at).toISOString() : null;
-  const createdAt = row.created_at ? new Date(row.created_at).toISOString() : null;
-  const updatedAt = row.updated_at ? new Date(row.updated_at).toISOString() : null;
+function normalizePersonIds({ personIds, personId }) {
+  if (Array.isArray(personIds)) return uniqueNumbers(personIds).filter((n) => Number.isInteger(n) && n > 0);
+  if (personId == null) return [];
+  const n = Number(personId);
+  return Number.isInteger(n) && n > 0 ? [n] : [];
+}
 
-  const id = Number(row.id);
+async function assertPersonsBelongToUser({ pool, userId, personIds }) {
+  if (!personIds || personIds.length === 0) return;
+  const ids = uniqueNumbers(personIds);
+  const r = await pool.query('SELECT id FROM persons WHERE user_id = $1 AND id = ANY($2::bigint[]);', [userId, ids]);
+  if (r.rowCount !== ids.length) {
+    const err = new Error('invalid_person');
+    err.status = 400;
+    throw err;
+  }
+}
+
+function toEventFromRows(rows) {
+  if (!rows || rows.length === 0) return null;
+  const row0 = rows[0];
+
+  const tagId = row0.tag_id != null ? Number(row0.tag_id) : null;
+  const recurrenceFreq = row0.recurrence_freq ? String(row0.recurrence_freq) : null;
+  const recurrenceInterval = row0.recurrence_interval != null ? Number(row0.recurrence_interval) : 1;
+  const recurrenceUntil = row0.recurrence_until ? new Date(row0.recurrence_until).toISOString() : null;
+
+  const startAt = new Date(row0.start_at).toISOString();
+  const endAt = row0.end_at ? new Date(row0.end_at).toISOString() : null;
+  const createdAt = row0.created_at ? new Date(row0.created_at).toISOString() : null;
+  const updatedAt = row0.updated_at ? new Date(row0.updated_at).toISOString() : null;
+
+  const id = Number(row0.id);
+
+  const persons = [];
+  const seen = new Set();
+  for (const r of rows) {
+    const pid = r.person_id != null ? Number(r.person_id) : null;
+    if (!pid || seen.has(pid)) continue;
+    seen.add(pid);
+    persons.push({ id: pid, name: r.person_name, color: r.person_color });
+  }
 
   return {
     id,
     occurrenceId: `${id}:${startAt}`,
-    title: row.title,
-    description: row.description,
-    location: row.location,
+    title: row0.title,
+    description: row0.description,
+    location: row0.location,
     startAt,
     endAt,
-    allDay: row.all_day,
+    allDay: row0.all_day,
     recurrence: recurrenceFreq
       ? {
           freq: recurrenceFreq,
@@ -30,23 +72,31 @@ function toDbEvent(row) {
           until: recurrenceUntil,
         }
       : null,
-    person: personId
-      ? {
-          id: personId,
-          name: row.person_name,
-          color: row.person_color,
-        }
-      : null,
+    persons,
+    // Backwards compatibility for old clients
+    person: persons[0] ?? null,
     tag: tagId
       ? {
           id: tagId,
-          name: row.tag_name,
-          color: row.tag_color,
+          name: row0.tag_name,
+          color: row0.tag_color,
         }
       : null,
     createdAt,
     updatedAt,
   };
+}
+
+function groupEvents(rows) {
+  /** @type {Map<number, any[]>} */
+  const byId = new Map();
+  for (const r of rows) {
+    const id = Number(r.id);
+    const arr = byId.get(id);
+    if (arr) arr.push(r);
+    else byId.set(id, [r]);
+  }
+  return Array.from(byId.values()).map(toEventFromRows).filter(Boolean);
 }
 
 function clampDayOfMonth(year, monthIndex, day) {
@@ -163,13 +213,14 @@ async function getEventById({ userId, id }) {
       p.id AS person_id, p.name AS person_name, p.color AS person_color
     FROM events e
     LEFT JOIN tags t ON t.id = e.tag_id
-    LEFT JOIN persons p ON p.id = e.person_id
+    LEFT JOIN event_persons ep ON ep.event_id = e.id
+    LEFT JOIN persons p ON p.id = ep.person_id AND p.user_id = e.user_id
     WHERE e.id = $1 AND e.user_id = $2;
     `,
     [id, userId]
   );
   if (result.rowCount === 0) return null;
-  return toDbEvent(result.rows[0]);
+  return toEventFromRows(result.rows);
 }
 
 async function listEventsBetween({ userId, from, to }) {
@@ -186,7 +237,8 @@ async function listEventsBetween({ userId, from, to }) {
       p.id AS person_id, p.name AS person_name, p.color AS person_color
     FROM events e
     LEFT JOIN tags t ON t.id = e.tag_id AND t.user_id = e.user_id
-    LEFT JOIN persons p ON p.id = e.person_id
+    LEFT JOIN event_persons ep ON ep.event_id = e.id
+    LEFT JOIN persons p ON p.id = ep.person_id AND p.user_id = e.user_id
     WHERE e.user_id = $1 AND (
       -- Non-recurring events:
       -- If end_at is NULL, treat it as a point-in-time event at start_at.
@@ -203,12 +255,12 @@ async function listEventsBetween({ userId, from, to }) {
         AND (e.recurrence_until IS NULL OR e.recurrence_until >= $2)
       )
     )
-    ORDER BY e.start_at ASC;
+    ORDER BY e.start_at ASC, p.sort_order ASC, p.name ASC;
     `,
     [userId, effectiveFrom.toISOString(), effectiveTo.toISOString()]
   );
 
-  const baseEvents = result.rows.map(toDbEvent);
+  const baseEvents = groupEvents(result.rows);
   const expanded = [];
   for (const e of baseEvents) {
     if (e.recurrence) {
@@ -223,8 +275,22 @@ async function listEventsBetween({ userId, from, to }) {
   return expanded;
 }
 
-async function insertEvent({ userId, title, description, location, startAt, endAt, allDay, tagId, personId, recurrence }) {
+async function insertEvent({
+  userId,
+  title,
+  description,
+  location,
+  startAt,
+  endAt,
+  allDay,
+  tagId,
+  personId,
+  personIds,
+  recurrence,
+}) {
   const pool = getPool();
+
+  const normalizedPersonIds = normalizePersonIds({ personIds, personId });
 
   if (tagId != null) {
     const ok = await pool.query('SELECT 1 FROM tags WHERE id = $1 AND user_id = $2;', [tagId, userId]);
@@ -235,46 +301,59 @@ async function insertEvent({ userId, title, description, location, startAt, endA
     }
   }
 
-  if (personId != null) {
-    const ok = await pool.query('SELECT 1 FROM persons WHERE id = $1 AND user_id = $2;', [personId, userId]);
-    if (ok.rowCount === 0) {
-      const err = new Error('invalid_person');
-      err.status = 400;
-      throw err;
-    }
-  }
+  await assertPersonsBelongToUser({ pool, userId, personIds: normalizedPersonIds });
 
   const recurrenceFreq = recurrence ?? null;
   const recurrenceInterval = 1;
   const recurrenceUntil = null;
 
-  const result = await pool.query(
-    `
-    INSERT INTO events (user_id, title, description, location, start_at, end_at, all_day, tag_id, person_id, recurrence_freq, recurrence_interval, recurrence_until)
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-    RETURNING *;
-    `,
-    [
-      userId,
-      title,
-      description ?? null,
-      location ?? null,
-      new Date(startAt).toISOString(),
-      endAt ? new Date(endAt).toISOString() : null,
-      Boolean(allDay),
-      tagId ?? null,
-      personId ?? null,
-      recurrenceFreq,
-      recurrenceInterval,
-      recurrenceUntil,
-    ]
-  );
+  await pool.query('BEGIN;');
+  try {
+    const primaryPersonId = normalizedPersonIds[0] ?? null;
+    const result = await pool.query(
+      `
+      INSERT INTO events (user_id, title, description, location, start_at, end_at, all_day, tag_id, person_id, recurrence_freq, recurrence_interval, recurrence_until)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+      RETURNING id;
+      `,
+      [
+        userId,
+        title,
+        description ?? null,
+        location ?? null,
+        new Date(startAt).toISOString(),
+        endAt ? new Date(endAt).toISOString() : null,
+        Boolean(allDay),
+        tagId ?? null,
+        primaryPersonId,
+        recurrenceFreq,
+        recurrenceInterval,
+        recurrenceUntil,
+      ]
+    );
 
-  return getEventById({ userId, id: result.rows[0].id });
+    const eventId = Number(result.rows[0].id);
+    if (normalizedPersonIds.length > 0) {
+      for (const pid of normalizedPersonIds) {
+        await pool.query('INSERT INTO event_persons (event_id, person_id) VALUES ($1, $2) ON CONFLICT DO NOTHING;', [eventId, pid]);
+      }
+    }
+
+    await pool.query('COMMIT;');
+    return getEventById({ userId, id: eventId });
+  } catch (e) {
+    await pool.query('ROLLBACK;');
+    throw e;
+  }
 }
 
 async function patchEvent({ userId, id, patch }) {
   const pool = getPool();
+
+  const personsProvided = patch.personIds !== undefined || patch.personId !== undefined;
+  const normalizedPersonIds = personsProvided
+    ? normalizePersonIds({ personIds: patch.personIds, personId: patch.personId })
+    : null;
 
   const fields = [];
   const values = [];
@@ -302,16 +381,9 @@ async function patchEvent({ userId, id, patch }) {
     add('tag_id', patch.tagId ?? null);
   }
 
-  if (patch.personId !== undefined) {
-    if (patch.personId != null) {
-      const ok = await pool.query('SELECT 1 FROM persons WHERE id = $1 AND user_id = $2;', [patch.personId, userId]);
-      if (ok.rowCount === 0) {
-        const err = new Error('invalid_person');
-        err.status = 400;
-        throw err;
-      }
-    }
-    add('person_id', patch.personId ?? null);
+  if (personsProvided) {
+    await assertPersonsBelongToUser({ pool, userId, personIds: normalizedPersonIds });
+    add('person_id', (normalizedPersonIds && normalizedPersonIds[0]) ?? null);
   }
   if (patch.recurrence !== undefined) add('recurrence_freq', patch.recurrence ?? null);
 
@@ -321,18 +393,40 @@ async function patchEvent({ userId, id, patch }) {
 
   add('updated_at', new Date().toISOString());
 
-  const result = await pool.query(
-    `
-    UPDATE events
-    SET ${fields.join(', ')}
-    WHERE id = $${values.length + 1} AND user_id = $${values.length + 2}
-    RETURNING *;
-    `,
-    [...values, id, userId]
-  );
+  await pool.query('BEGIN;');
+  try {
+    const result = await pool.query(
+      `
+      UPDATE events
+      SET ${fields.join(', ')}
+      WHERE id = $${values.length + 1} AND user_id = $${values.length + 2}
+      RETURNING id;
+      `,
+      [...values, id, userId]
+    );
 
-  if (result.rowCount === 0) return null;
-  return getEventById({ userId, id: result.rows[0].id });
+    if (result.rowCount === 0) {
+      await pool.query('ROLLBACK;');
+      return null;
+    }
+
+    const eventId = Number(result.rows[0].id);
+
+    if (personsProvided) {
+      await pool.query('DELETE FROM event_persons WHERE event_id = $1;', [eventId]);
+      if (normalizedPersonIds && normalizedPersonIds.length > 0) {
+        for (const pid of normalizedPersonIds) {
+          await pool.query('INSERT INTO event_persons (event_id, person_id) VALUES ($1, $2) ON CONFLICT DO NOTHING;', [eventId, pid]);
+        }
+      }
+    }
+
+    await pool.query('COMMIT;');
+    return getEventById({ userId, id: eventId });
+  } catch (e) {
+    await pool.query('ROLLBACK;');
+    throw e;
+  }
 }
 
 async function removeEvent({ userId, id }) {

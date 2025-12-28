@@ -358,11 +358,67 @@ async function initDb() {
     ADD COLUMN IF NOT EXISTS person_id BIGINT;
   `);
 
+  // Many-to-many event ↔ persons (idempotent migration)
+  await p.query(`
+    CREATE TABLE IF NOT EXISTS event_persons (
+      event_id BIGINT NOT NULL,
+      person_id BIGINT NOT NULL,
+      PRIMARY KEY (event_id, person_id)
+    );
+  `);
+
+  await p.query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'event_persons_event_id_fkey'
+      ) THEN
+        ALTER TABLE event_persons
+        ADD CONSTRAINT event_persons_event_id_fkey
+        FOREIGN KEY (event_id)
+        REFERENCES events(id)
+        ON DELETE CASCADE;
+      END IF;
+    END $$;
+  `);
+
+  await p.query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'event_persons_person_id_fkey'
+      ) THEN
+        ALTER TABLE event_persons
+        ADD CONSTRAINT event_persons_person_id_fkey
+        FOREIGN KEY (person_id)
+        REFERENCES persons(id)
+        ON DELETE CASCADE;
+      END IF;
+    END $$;
+  `);
+
+  await p.query(`
+    CREATE INDEX IF NOT EXISTS event_persons_event_id_idx ON event_persons (event_id);
+  `);
+
+  await p.query(`
+    CREATE INDEX IF NOT EXISTS event_persons_person_id_idx ON event_persons (person_id);
+  `);
+
   // Backfill existing events to first user (idempotent)
   await p.query(`
     UPDATE events
     SET user_id = (SELECT id FROM users ORDER BY id ASC LIMIT 1)
     WHERE user_id IS NULL;
+  `);
+
+  // Backfill legacy single-person events into join table (idempotent)
+  await p.query(`
+    INSERT INTO event_persons (event_id, person_id)
+    SELECT e.id, e.person_id
+    FROM events e
+    WHERE e.person_id IS NOT NULL
+    ON CONFLICT DO NOTHING;
   `);
 
   await p.query(`

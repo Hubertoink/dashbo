@@ -20,6 +20,7 @@ const createSchema = z.object({
   allDay: z.boolean().optional(),
   tagId: z.coerce.number().int().positive().optional().nullable(),
   personId: z.coerce.number().int().positive().optional().nullable(),
+  personIds: z.array(z.coerce.number().int().positive()).max(20).optional().nullable(),
   recurrence: recurrenceFreq.optional().nullable(),
 });
 

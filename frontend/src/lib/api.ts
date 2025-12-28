@@ -11,6 +11,7 @@ export type EventDto = {
   allDay: boolean;
   tag: TagDto | null;
   person: PersonDto | null;
+  persons?: PersonDto[];
   recurrence: { freq: 'weekly' | 'monthly'; interval: number; until: string | null } | null;
   createdAt: string;
   updatedAt: string;
@@ -204,6 +205,7 @@ export async function createEvent(input: {
   allDay?: boolean;
   tagId?: number | null;
   personId?: number | null;
+  personIds?: number[] | null;
   recurrence?: 'weekly' | 'monthly' | null;
 }): Promise<EventDto> {
   return api<EventDto>('/events', { method: 'POST', body: JSON.stringify(input) });
@@ -220,6 +222,7 @@ export async function updateEvent(
     allDay?: boolean;
     tagId?: number | null;
     personId?: number | null;
+    personIds?: number[] | null;
     recurrence?: 'weekly' | 'monthly' | null;
   }
 ): Promise<EventDto> {

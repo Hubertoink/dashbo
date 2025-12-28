@@ -211,6 +211,8 @@
                 {#each dayEvents as e, idx}
                   {@const k = e.occurrenceId ?? `${e.id}:${e.startAt}`}
                   {@const isPrompt = editPromptFor === k}
+                  {@const ps = e.persons && e.persons.length > 0 ? e.persons : e.person ? [e.person] : []}
+                  {@const p0 = ps[0]}
                   <button
                     type="button"
                     class="flex items-center gap-2 max-w-full text-left relative"
@@ -223,8 +225,8 @@
                           ? isHexColor(e.tag.color)
                             ? 'bg-transparent'
                             : dotBg[e.tag.color as TagColorKey] ?? 'bg-white/25'
-                          : e.person
-                            ? dotBg[e.person.color as TagColorKey] ?? 'bg-white/25'
+                          : p0
+                            ? dotBg[p0.color as TagColorKey] ?? 'bg-white/25'
                             : 'bg-white/25'
                       }`}
                       style={e.tag && isHexColor(e.tag.color) ? `background-color: ${e.tag.color}` : ''}
@@ -258,7 +260,7 @@
                           {/if}
                         </div>
 
-                        <div class="text-white/50 text-xs leading-tight">{#if isMultiDayEvent(e)}{fmtDateRange(e)} · {/if}{#if e.allDay}Ganztägig{:else}{fmtTimeRange(e.startAt, e.endAt)}{/if}{#if e.location} · {e.location}{/if}{#if e.tag} · {e.tag.name}{/if}{#if e.person} · <span class={`${textFg[e.person.color] ?? 'text-white/70'} font-medium`}>{e.person.name}</span>{/if}</div>
+                        <div class="text-white/50 text-xs leading-tight">{#if isMultiDayEvent(e)}{fmtDateRange(e)} · {/if}{#if e.allDay}Ganztägig{:else}{fmtTimeRange(e.startAt, e.endAt)}{/if}{#if e.location} · {e.location}{/if}{#if e.tag} · {e.tag.name}{/if}{#if ps.length > 0} · <span class={`${p0 ? textFg[p0.color] ?? 'text-white/70' : 'text-white/70'} font-medium`}>{ps.map((p) => p.name).join(', ')}</span>{/if}</div>
                       </div>
                     </div>
                   </button>

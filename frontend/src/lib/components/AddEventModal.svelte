@@ -28,8 +28,7 @@
   let endTime = '';
   let tagId: number | null = null;
   let tagIdStr = '';
-  let personId: number | null = null;
-  let personIdStr = '';
+  let personIds: number[] = [];
   let recurrence: 'weekly' | 'monthly' | null = null;
   let recurrenceStr: '' | 'weekly' | 'monthly' = '';
   let saving = false;
@@ -112,8 +111,7 @@
     endTime = '';
     tagId = null;
     tagIdStr = '';
-    personId = null;
-    personIdStr = '';
+    personIds = [];
     recurrence = null;
     recurrenceStr = '';
     prefilledForEventId = null;
@@ -131,8 +129,14 @@
   $: tagId = tagIdStr ? Number(tagIdStr) : null;
   $: selectedTag = tagId != null ? tags.find((t) => t.id === tagId) : undefined;
 
-  $: personId = personIdStr ? Number(personIdStr) : null;
-  $: selectedPerson = personId != null ? persons.find((p) => p.id === personId) : undefined;
+  $: selectedPersons = persons.filter((p) => personIds.includes(p.id));
+  $: selectedPersonLabel =
+    selectedPersons.length === 0
+      ? 'Keine Person'
+      : selectedPersons.length === 1
+        ? selectedPersons[0]?.name ?? '1 Person'
+        : `${selectedPersons.length} Personen`;
+  $: primaryPerson = selectedPersons[0];
 
   $: recurrence = recurrenceStr ? recurrenceStr : null;
 
@@ -165,7 +169,11 @@
     startTime = hhmmFromIso(eventToEdit.startAt);
     endTime = eventToEdit.endAt ? hhmmFromIso(eventToEdit.endAt) : '';
     tagIdStr = eventToEdit.tag ? String(eventToEdit.tag.id) : '';
-    personIdStr = eventToEdit.person ? String(eventToEdit.person.id) : '';
+    personIds = (eventToEdit.persons && eventToEdit.persons.length > 0
+      ? eventToEdit.persons.map((p) => p.id)
+      : eventToEdit.person
+        ? [eventToEdit.person.id]
+        : []) as number[];
     recurrenceStr = eventToEdit.recurrence?.freq ?? '';
   }
 
@@ -219,7 +227,7 @@
         endAt: endAtIso,
         allDay,
         tagId,
-        personId,
+        personIds: personIds.length > 0 ? personIds : null,
         recurrence
       };
 
@@ -236,8 +244,7 @@
       endTime = '';
       tagId = null;
       tagIdStr = '';
-      personId = null;
-      personIdStr = '';
+      personIds = [];
       recurrence = null;
       recurrenceStr = '';
       prefilledForEventId = null;
@@ -259,8 +266,16 @@
   }
 
   function choosePerson(id: number | null) {
-    personIdStr = id == null ? '' : String(id);
-    personMenuOpen = false;
+    if (id == null) {
+      personIds = [];
+      personMenuOpen = false;
+      return;
+    }
+    if (personIds.includes(id)) {
+      personIds = personIds.filter((x) => x !== id);
+    } else {
+      personIds = [...personIds, id];
+    }
   }
 
   function chooseRecurrence(v: '' | 'weekly' | 'monthly') {
@@ -447,7 +462,7 @@
 
             {#if persons.length > 0}
               <div class="md:col-span-2">
-                <div class="text-white/70 text-sm mb-2">Person</div>
+                <div class="text-white/70 text-sm mb-2">Personen</div>
 
                 <div class="relative" on:click|stopPropagation>
                   <button
@@ -459,9 +474,9 @@
                   >
                     <div class="flex items-center gap-3 min-w-0">
                       <div
-                        class={`h-3 w-3 rounded-full ${selectedPerson ? tagBg[selectedPerson.color as TagColorKey] : 'bg-white/25'}`}
+                        class={`h-3 w-3 rounded-full ${primaryPerson ? tagBg[primaryPerson.color as TagColorKey] : 'bg-white/25'}`}
                       ></div>
-                      <div class="truncate">{selectedPerson ? selectedPerson.name : 'Keine Person'}</div>
+                      <div class="truncate">{selectedPersonLabel}</div>
                     </div>
 
                     <div class="text-white/60">▾</div>
@@ -471,12 +486,21 @@
                     <div
                       class="absolute z-10 mt-2 w-full rounded-2xl overflow-hidden border border-white/10 bg-black/60 backdrop-blur-md"
                       role="listbox"
+                      aria-multiselectable="true"
                     >
                       <button
                         type="button"
-                        class={`w-full px-4 py-3 flex items-center gap-3 text-left hover:bg-white/10 active:bg-white/15 transition ${personId == null ? 'bg-white/10' : ''}`}
+                        class="w-full px-4 py-3 text-left hover:bg-white/10 active:bg-white/15 transition"
+                        on:click={() => (personMenuOpen = false)}
+                      >
+                        <div class="text-white/70">Fertig</div>
+                      </button>
+
+                      <button
+                        type="button"
+                        class={`w-full px-4 py-3 flex items-center gap-3 text-left hover:bg-white/10 active:bg-white/15 transition ${personIds.length === 0 ? 'bg-white/10' : ''}`}
                         role="option"
-                        aria-selected={personId == null}
+                        aria-selected={personIds.length === 0}
                         on:click={() => choosePerson(null)}
                       >
                         <div class="h-3 w-3 rounded-full bg-white/25"></div>
@@ -484,15 +508,19 @@
                       </button>
 
                       {#each persons as p (p.id)}
+                        {@const selected = personIds.includes(p.id)}
                         <button
                           type="button"
-                          class={`w-full px-4 py-3 flex items-center gap-3 text-left hover:bg-white/10 active:bg-white/15 transition ${personId === p.id ? 'bg-white/10' : ''}`}
+                          class={`w-full px-4 py-3 flex items-center justify-between gap-3 text-left hover:bg-white/10 active:bg-white/15 transition ${selected ? 'bg-white/10' : ''}`}
                           role="option"
-                          aria-selected={personId === p.id}
+                          aria-selected={selected}
                           on:click={() => choosePerson(p.id)}
                         >
-                          <div class={`h-3 w-3 rounded-full ${tagBg[p.color as TagColorKey]}`}></div>
-                          <div class="truncate">{p.name}</div>
+                          <div class="flex items-center gap-3 min-w-0">
+                            <div class={`h-3 w-3 rounded-full ${tagBg[p.color as TagColorKey]}`}></div>
+                            <div class="truncate">{p.name}</div>
+                          </div>
+                          <div class="text-white/60">{selected ? '✓' : ''}</div>
                         </button>
                       {/each}
                     </div>

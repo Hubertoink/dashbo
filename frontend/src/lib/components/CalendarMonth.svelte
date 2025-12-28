@@ -152,6 +152,7 @@
       const segments: WeekSegment[] = [];
 
       for (const e of spanning) {
+        const p0 = (e.persons && e.persons.length > 0 ? e.persons[0] : e.person) ?? null;
         const s = startOfLocalDay(new Date(e.startAt));
         const end = e.endAt ? startOfLocalDay(new Date(e.endAt)) : s;
         if (end < weekStart || s > weekEnd) continue;
@@ -168,8 +169,8 @@
           ? isHexColor(e.tag.color)
             ? 'bg-transparent'
             : dotBg[e.tag.color as TagColorKey] ?? 'bg-white/25'
-          : e.person
-            ? dotBg[e.person.color as TagColorKey] ?? 'bg-white/25'
+          : p0
+            ? dotBg[p0.color as TagColorKey] ?? 'bg-white/25'
             : 'bg-white/25';
         const colorStyle = e.tag && isHexColor(e.tag.color) ? `background-color: ${e.tag.color};` : undefined;
         const key = e.occurrenceId ?? `${e.id}:${e.startAt}`;
@@ -326,14 +327,15 @@
                 <div class="pt-8 md:pt-10 pr-10">
                   {#if singleDayEvents.length > 0}
                     {@const ev0 = singleDayEvents[0]}
+                    {@const p0 = (ev0.persons && ev0.persons.length > 0 ? ev0.persons[0] : ev0.person) ?? null}
                     <div
                       class={`text-xs md:text-sm font-semibold leading-tight truncate ${
                         ev0.tag
                           ? isTagColorKey(ev0.tag.color)
                             ? textFg[ev0.tag.color]
                             : 'text-white/80'
-                          : ev0.person
-                            ? textFg[ev0.person.color as TagColorKey] ?? 'text-white/80'
+                          : p0
+                            ? textFg[p0.color as TagColorKey] ?? 'text-white/80'
                             : 'text-white/80'
                       }`}
                     >
@@ -349,14 +351,15 @@
                       <div class="h-2.5 w-2.5 rounded-full border border-white/60 bg-white/0"></div>
                     {/if}
                     {#each singleDayEvents.slice(0, maxEventDots) as ev (ev.occurrenceId ?? `${ev.id}:${ev.startAt}`)}
+                      {@const p0 = (ev.persons && ev.persons.length > 0 ? ev.persons[0] : ev.person) ?? null}
                       <div
                         class={`h-2.5 w-2.5 rounded-full ${
                           ev.tag
                             ? isHexColor(ev.tag.color)
                               ? 'bg-transparent'
                               : dotBg[ev.tag.color as TagColorKey] ?? 'bg-white/25'
-                            : ev.person
-                              ? dotBg[ev.person.color as TagColorKey] ?? 'bg-white/25'
+                            : p0
+                              ? dotBg[p0.color as TagColorKey] ?? 'bg-white/25'
                               : 'bg-white/25'
                         }`}
                         style={ev.tag && isHexColor(ev.tag.color) ? `background-color: ${ev.tag.color}` : ''}

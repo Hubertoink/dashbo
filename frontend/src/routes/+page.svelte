@@ -696,6 +696,8 @@
                   {#key standbyPageIndex}
                     <div class="space-y-5 absolute inset-0" in:fade={{ duration: 400, delay: 200 }} out:fade={{ duration: 300 }}>
                       {#each page as e (e.occurrenceId ?? `${e.id}:${e.startAt}`)}
+                        {@const ps = e.persons && e.persons.length > 0 ? e.persons : e.person ? [e.person] : []}
+                        {@const p0 = ps[0]}
                         <button
                           type="button"
                           class="w-full text-left py-4 border-b border-white/5 hover:bg-white/5 active:bg-white/8 transition -mx-4 px-4 rounded-xl"
@@ -708,8 +710,8 @@
                                   ? isHexColor(e.tag.color)
                                     ? 'bg-transparent'
                                     : dotBg[e.tag.color as TagColorKey] ?? 'bg-white/25'
-                                  : e.person
-                                    ? dotBg[e.person.color as TagColorKey] ?? 'bg-white/25'
+                                  : p0
+                                    ? dotBg[p0.color as TagColorKey] ?? 'bg-white/25'
                                     : 'bg-white/25'
                               }`}
                               style={e.tag && isHexColor(e.tag.color) ? `background-color: ${e.tag.color}` : ''}
@@ -724,9 +726,9 @@
                                   <span> · {fmtTimeRange(e.startAt, e.endAt)}</span>
                                 {/if}
                                 {#if e.location} <span> · {e.location}</span>{/if}
-                                {#if e.person}
+                                {#if ps.length > 0}
                                   <span>
-                                    · <span class={`${textFg[e.person.color] ?? 'text-white/80'} font-semibold`}>{e.person.name}</span>
+                                    · <span class={`${p0 ? textFg[p0.color] ?? 'text-white/80' : 'text-white/80'} font-semibold`}>{ps.map((p) => p.name).join(', ')}</span>
                                   </span>
                                 {/if}
                               </div>
@@ -860,6 +862,8 @@
                   {#key standbyPageIndex}
                     <div class="space-y-5 absolute inset-0" in:fade={{ duration: 400, delay: 200 }} out:fade={{ duration: 300 }}>
                       {#each page as e (e.occurrenceId ?? `${e.id}:${e.startAt}`)}
+                        {@const ps = e.persons && e.persons.length > 0 ? e.persons : e.person ? [e.person] : []}
+                        {@const p0 = ps[0]}
                         <button
                           type="button"
                           class="w-full text-left py-4 border-b border-white/5 hover:bg-white/5 active:bg-white/8 transition -mx-4 px-4 rounded-xl"
@@ -872,8 +876,8 @@
                                   ? isHexColor(e.tag.color)
                                     ? 'bg-transparent'
                                     : dotBg[e.tag.color as TagColorKey] ?? 'bg-white/25'
-                                  : e.person
-                                    ? dotBg[e.person.color as TagColorKey] ?? 'bg-white/25'
+                                  : p0
+                                    ? dotBg[p0.color as TagColorKey] ?? 'bg-white/25'
                                     : 'bg-white/25'
                               }`}
                               style={e.tag && isHexColor(e.tag.color) ? `background-color: ${e.tag.color}` : ''}
@@ -888,9 +892,9 @@
                                   <span> · {fmtTimeRange(e.startAt, e.endAt)}</span>
                                 {/if}
                                 {#if e.location} <span> · {e.location}</span>{/if}
-                                {#if e.person}
+                                {#if ps.length > 0}
                                   <span>
-                                    · <span class={`${textFg[e.person.color] ?? 'text-white/80'} font-semibold`}>{e.person.name}</span>
+                                    · <span class={`${p0 ? textFg[p0.color] ?? 'text-white/80' : 'text-white/80'} font-semibold`}>{ps.map((p) => p.name).join(', ')}</span>
                                   </span>
                                 {/if}
                               </div>
