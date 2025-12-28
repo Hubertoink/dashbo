@@ -745,38 +745,41 @@
               {#if newsEnabled}
                 <div class="mt-auto pt-6">
                   {#if standbyNewsItems.length > 0}
-                    {#key standbyNewsIndex}
-                      {@const n = standbyNewsItems[standbyNewsIndex]}
-                      <div
-                        class="standby-zeit-news relative w-full overflow-hidden rounded-2xl bg-white/5 backdrop-blur-md"
-                        in:fade={{ duration: 500, delay: 200 }}
-                        out:fade={{ duration: 400 }}
-                      >
-                        {#if n.imageUrl}
-                          <div class="absolute inset-0 bg-cover bg-center opacity-45" style={`background-image: url('${n.imageUrl}');`}></div>
-                          <div class="absolute inset-0 bg-gradient-to-r from-black/55 via-black/35 to-black/15"></div>
-                        {:else}
-                          <div class="absolute inset-0 bg-white/5"></div>
-                        {/if}
-                        <div class="relative p-6">
-                          <div class="flex items-center gap-2 text-xs tracking-widest uppercase text-white/50 font-medium">
-                            <span class="inline-block w-4 h-px bg-white/30"></span>
-                            ZEIT Online
-                          </div>
-                          <div class="mt-3 text-xl md:text-2xl font-semibold leading-snug">{n.title}</div>
-                          {#if n.teaser}
-                            <div class="mt-3 text-white/60 text-base leading-relaxed line-clamp-2">{n.teaser}</div>
+                    <div class="standby-news-container relative h-[180px] w-full">
+                      {#key standbyNewsIndex}
+                        {@const n = standbyNewsItems[standbyNewsIndex]}
+                        {@const validTeaser = n.teaser && n.teaser !== 'None' && n.teaser.trim() !== ''}
+                        <div
+                          class="standby-zeit-news absolute inset-0 w-full overflow-hidden rounded-2xl bg-white/5 backdrop-blur-md"
+                          in:fade={{ duration: 600, delay: 300 }}
+                          out:fade={{ duration: 300 }}
+                        >
+                          {#if n.imageUrl}
+                            <div class="absolute inset-0 bg-cover bg-center opacity-45" style={`background-image: url('${n.imageUrl}');`}></div>
+                            <div class="absolute inset-0 bg-gradient-to-r from-black/55 via-black/35 to-black/15"></div>
+                          {:else}
+                            <div class="absolute inset-0 bg-white/5"></div>
                           {/if}
-                          {#if standbyNewsItems.length > 1}
-                            <div class="mt-4 flex gap-1.5">
-                              {#each standbyNewsItems as _, i}
-                                <div class="h-1 rounded-full transition-all duration-300 {i === standbyNewsIndex ? 'w-6 bg-white/70' : 'w-1.5 bg-white/20'}"></div>
-                              {/each}
+                          <div class="relative p-6">
+                            <div class="flex items-center gap-2 text-xs tracking-widest uppercase text-white/50 font-medium">
+                              <span class="inline-block w-4 h-px bg-white/30"></span>
+                              ZEIT Online
                             </div>
-                          {/if}
+                            <div class="mt-3 text-xl md:text-2xl font-semibold leading-snug">{n.title}</div>
+                            {#if validTeaser}
+                              <div class="mt-3 text-white/60 text-base leading-relaxed line-clamp-2">{n.teaser}</div>
+                            {/if}
+                            {#if standbyNewsItems.length > 1}
+                              <div class="mt-4 flex gap-1.5">
+                                {#each standbyNewsItems as _, i}
+                                  <div class="h-1 rounded-full transition-all duration-300 {i === standbyNewsIndex ? 'w-6 bg-white/70' : 'w-1.5 bg-white/20'}"></div>
+                                {/each}
+                              </div>
+                            {/if}
+                          </div>
                         </div>
-                      </div>
-                    {/key}
+                      {/key}
+                    </div>
                   {:else}
                     <div class="standby-zeit-news w-full overflow-hidden rounded-2xl bg-white/5 backdrop-blur-md">
                       <div class="p-6">
@@ -906,38 +909,41 @@
               {#if newsEnabled}
                 <div class="mt-auto pt-6">
                   {#if standbyNewsItems.length > 0}
-                    {#key standbyNewsIndex}
-                      {@const n = standbyNewsItems[standbyNewsIndex]}
-                      <div
-                        class="standby-zeit-news relative w-full overflow-hidden rounded-2xl bg-white/5 backdrop-blur-md"
-                        in:fade={{ duration: 500, delay: 200 }}
-                        out:fade={{ duration: 400 }}
-                      >
-                        {#if n.imageUrl}
-                          <div class="absolute inset-0 bg-cover bg-center opacity-45" style={`background-image: url('${n.imageUrl}');`}></div>
-                          <div class="absolute inset-0 bg-gradient-to-r from-black/55 via-black/35 to-black/15"></div>
-                        {:else}
-                          <div class="absolute inset-0 bg-white/5"></div>
-                        {/if}
-                        <div class="relative p-6">
-                          <div class="flex items-center gap-2 text-xs tracking-widest uppercase text-white/50 font-medium">
-                            <span class="inline-block w-4 h-px bg-white/30"></span>
-                            ZEIT Online
-                          </div>
-                          <div class="mt-3 text-xl md:text-2xl font-semibold leading-snug">{n.title}</div>
-                          {#if n.teaser}
-                            <div class="mt-3 text-white/60 text-base leading-relaxed line-clamp-2">{n.teaser}</div>
+                    <div class="standby-news-container relative h-[180px] w-full">
+                      {#key standbyNewsIndex}
+                        {@const n = standbyNewsItems[standbyNewsIndex]}
+                        {@const validTeaser = n.teaser && n.teaser !== 'None' && n.teaser.trim() !== ''}
+                        <div
+                          class="standby-zeit-news absolute inset-0 w-full overflow-hidden rounded-2xl bg-white/5 backdrop-blur-md"
+                          in:fade={{ duration: 600, delay: 300 }}
+                          out:fade={{ duration: 300 }}
+                        >
+                          {#if n.imageUrl}
+                            <div class="absolute inset-0 bg-cover bg-center opacity-45" style={`background-image: url('${n.imageUrl}');`}></div>
+                            <div class="absolute inset-0 bg-gradient-to-r from-black/55 via-black/35 to-black/15"></div>
+                          {:else}
+                            <div class="absolute inset-0 bg-white/5"></div>
                           {/if}
-                          {#if standbyNewsItems.length > 1}
-                            <div class="mt-4 flex gap-1.5">
-                              {#each standbyNewsItems as _, i}
-                                <div class="h-1 rounded-full transition-all duration-300 {i === standbyNewsIndex ? 'w-6 bg-white/70' : 'w-1.5 bg-white/20'}"></div>
-                              {/each}
+                          <div class="relative p-6">
+                            <div class="flex items-center gap-2 text-xs tracking-widest uppercase text-white/50 font-medium">
+                              <span class="inline-block w-4 h-px bg-white/30"></span>
+                              ZEIT Online
                             </div>
-                          {/if}
+                            <div class="mt-3 text-xl md:text-2xl font-semibold leading-snug">{n.title}</div>
+                            {#if validTeaser}
+                              <div class="mt-3 text-white/60 text-base leading-relaxed line-clamp-2">{n.teaser}</div>
+                            {/if}
+                            {#if standbyNewsItems.length > 1}
+                              <div class="mt-4 flex gap-1.5">
+                                {#each standbyNewsItems as _, i}
+                                  <div class="h-1 rounded-full transition-all duration-300 {i === standbyNewsIndex ? 'w-6 bg-white/70' : 'w-1.5 bg-white/20'}"></div>
+                                {/each}
+                              </div>
+                            {/if}
+                          </div>
                         </div>
-                      </div>
-                    {/key}
+                      {/key}
+                    </div>
                   {:else}
                     <div class="standby-zeit-news w-full overflow-hidden rounded-2xl bg-white/5 backdrop-blur-md">
                       <div class="p-6">
