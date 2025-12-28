@@ -62,9 +62,20 @@ settingsRouter.post('/background/rotate', requireAuth, async (req, res) => {
   return res.json({ ok: true });
 });
 
-settingsRouter.delete('/background/:filename', requireAuth, async (req, res) => {
-  const schema = z.object({ filename: z.string().min(1).max(500) });
-  const parsed = schema.safeParse(req.params);
+// NOTE: Background ids are returned as `u<userId>/<filename>`.
+// Some proxies/servers decode `%2F` before routing; a simple `:filename` param would not match.
+// Use a wildcard to capture the full remainder including slashes.
+settingsRouter.delete('/background/*', requireAuth, async (req, res) => {
+  const raw = typeof req.params[0] === 'string' ? req.params[0] : '';
+  let filename = raw;
+  try {
+    filename = decodeURIComponent(raw);
+  } catch {
+    filename = raw;
+  }
+
+  const schema = z.string().min(1).max(500);
+  const parsed = schema.safeParse(filename);
   if (!parsed.success) {
     return res.status(400).json({ error: 'invalid_params', details: parsed.error.flatten() });
   }
@@ -72,11 +83,11 @@ settingsRouter.delete('/background/:filename', requireAuth, async (req, res) => 
   const userId = Number(req.auth?.sub);
 
   const imagesBefore = listImages({ userId });
-  if (!imagesBefore.includes(parsed.data.filename)) {
+  if (!imagesBefore.includes(parsed.data)) {
     return res.status(404).json({ error: 'file_not_found' });
   }
 
-  const deleted = deleteImage({ userId, filename: parsed.data.filename });
+  const deleted = deleteImage({ userId, filename: parsed.data });
   if (!deleted.ok) {
     return res.status(500).json({ error: deleted.error || 'delete_failed' });
   }
@@ -84,7 +95,7 @@ settingsRouter.delete('/background/:filename', requireAuth, async (req, res) => 
   const currentBgRaw = await getUserSetting({ userId, key: 'background' });
   const currentBg = currentBgRaw && String(currentBgRaw).trim() ? String(currentBgRaw) : null;
   const imagesAfter = listImages({ userId });
-  if (currentBg && currentBg === parsed.data.filename) {
+  if (currentBg && currentBg === parsed.data) {
     const next = imagesAfter[0] || '';
     await setUserSetting({ userId, key: 'background', value: next });
   }

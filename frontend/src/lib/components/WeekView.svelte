@@ -62,6 +62,11 @@
     lime: 'text-lime-300'
   };
 
+  const hexRe = /^#[0-9a-fA-F]{6}$/;
+  function isHexColor(value: unknown): value is string {
+    return typeof value === 'string' && hexRe.test(value);
+  }
+
   function mondayStart(d: Date) {
     const x = new Date(d);
     x.setHours(0, 0, 0, 0);
@@ -244,7 +249,16 @@
                 >
                   <div class="flex gap-2">
                     <div
-                      class={`mt-1 h-3 w-3 rounded-full ${e.tag ? dotBg[e.tag.color] : e.person ? dotBg[e.person.color] : 'bg-white/25'}`}
+                      class={`mt-1 h-3 w-3 rounded-full ${
+                        e.tag
+                          ? isHexColor(e.tag.color)
+                            ? 'bg-transparent'
+                            : dotBg[e.tag.color as TagColorKey] ?? 'bg-white/25'
+                          : e.person
+                            ? dotBg[e.person.color as TagColorKey] ?? 'bg-white/25'
+                            : 'bg-white/25'
+                      }`}
+                      style={e.tag && isHexColor(e.tag.color) ? `background-color: ${e.tag.color}` : ''}
                     ></div>
                     <div class="min-w-0 relative flex-1">
                       {#if isPrompt}

@@ -71,7 +71,7 @@
 
   let tags: TagDto[] = [];
   let newTagName = '';
-  let newTagColor: TagColorKey = 'cyan';
+  let newTagColor: string = 'cyan';
   let tagError: string | null = null;
   let tagColorMenuOpen = false;
 
@@ -87,6 +87,14 @@
   };
 
   const colorNames: TagColorKey[] = ['cyan', 'fuchsia', 'emerald', 'amber', 'rose', 'violet', 'sky', 'lime'];
+
+  function isTagColorKey(value: string): value is TagColorKey {
+    return value in colorBg;
+  }
+
+  function isHexColor(value: string): boolean {
+    return /^#[0-9a-fA-F]{6}$/.test(value);
+  }
 
   let uploadFiles: File[] = [];
   let savingBg = false;
@@ -285,7 +293,13 @@
     if (!newTagName.trim()) return;
     tagError = null;
     try {
-      await createTag({ name: newTagName.trim(), color: newTagColor });
+      const color = newTagColor.trim();
+      if (!isTagColorKey(color) && !isHexColor(color)) {
+        tagError = 'Ungültige Farbe.';
+        return;
+      }
+
+      await createTag({ name: newTagName.trim(), color });
       newTagName = '';
       newTagColor = 'cyan';
       tagColorMenuOpen = false;
@@ -297,6 +311,12 @@
 
   function chooseTagColor(c: TagColorKey) {
     newTagColor = c;
+    tagColorMenuOpen = false;
+  }
+
+  function chooseCustomTagColor(hex: string) {
+    if (!isHexColor(hex)) return;
+    newTagColor = hex;
     tagColorMenuOpen = false;
   }
 
@@ -638,7 +658,11 @@
                 on:click|stopPropagation={() => (tagColorMenuOpen = !tagColorMenuOpen)}
                 disabled={!authed}
               >
-                <span class={`w-3 h-3 rounded-full ${colorBg[newTagColor]}`}></span>
+                {#if isTagColorKey(newTagColor)}
+                  <span class={`w-3 h-3 rounded-full ${colorBg[newTagColor]}`}></span>
+                {:else}
+                  <span class="w-3 h-3 rounded-full" style={`background-color: ${newTagColor}`}></span>
+                {/if}
                 <span class="text-white/60">▾</span>
               </button>
               {#if tagColorMenuOpen}
@@ -652,6 +676,18 @@
                       <span class="capitalize">{c}</span>
                     </button>
                   {/each}
+
+                  <div class="px-3 py-2 border-t border-white/10">
+                    <label class="flex items-center justify-between gap-2 text-sm text-white/80">
+                      <span>Eigene Farbe</span>
+                      <input
+                        type="color"
+                        class="h-7 w-10 bg-transparent border-0 p-0"
+                        value={isHexColor(newTagColor) ? newTagColor : '#22d3ee'}
+                        on:input={(e) => chooseCustomTagColor((e.currentTarget as HTMLInputElement).value)}
+                      />
+                    </label>
+                  </div>
                 </div>
               {/if}
             </div>
@@ -671,7 +707,11 @@
           <div class="flex flex-wrap gap-2">
             {#each tags as t (t.id)}
               <div class="flex items-center gap-2 bg-white/10 rounded-lg px-3 py-1.5 text-sm">
-                <span class={`w-2.5 h-2.5 rounded-full ${colorBg[t.color]}`}></span>
+                {#if isTagColorKey(t.color)}
+                  <span class={`w-2.5 h-2.5 rounded-full ${colorBg[t.color]}`}></span>
+                {:else}
+                  <span class="w-2.5 h-2.5 rounded-full" style={`background-color: ${t.color}`}></span>
+                {/if}
                 <span>{t.name}</span>
                 {#if authed}
                   <button class="text-white/40 hover:text-white/70 ml-1" on:click={() => doDeleteTag(t.id)}>×</button>

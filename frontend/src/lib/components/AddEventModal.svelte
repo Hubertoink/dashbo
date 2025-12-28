@@ -60,6 +60,11 @@
     lime: 'bg-lime-400'
   };
 
+  const hexRe = /^#[0-9a-fA-F]{6}$/;
+  function isHexColor(value: unknown): value is string {
+    return typeof value === 'string' && hexRe.test(value);
+  }
+
   async function loadTags() {
     try {
       tags = await listTags();
@@ -388,7 +393,14 @@
                   >
                     <div class="flex items-center gap-3 min-w-0">
                       <div
-                        class={`h-3 w-3 rounded-full ${selectedTag ? tagBg[selectedTag.color] : 'bg-white/25'}`}
+                        class={`h-3 w-3 rounded-full ${
+                          selectedTag
+                            ? isHexColor(selectedTag.color)
+                              ? 'bg-transparent'
+                              : tagBg[selectedTag.color as TagColorKey] ?? 'bg-white/25'
+                            : 'bg-white/25'
+                        }`}
+                        style={selectedTag && isHexColor(selectedTag.color) ? `background-color: ${selectedTag.color}` : ''}
                       ></div>
                       <div class="truncate">{selectedTag ? selectedTag.name : 'Kein Tag'}</div>
                     </div>
@@ -420,7 +432,10 @@
                           aria-selected={tagId === t.id}
                           on:click={() => chooseTag(t.id)}
                         >
-                          <div class={`h-3 w-3 rounded-full ${tagBg[t.color]}`}></div>
+                          <div
+                            class={`h-3 w-3 rounded-full ${isHexColor(t.color) ? 'bg-transparent' : tagBg[t.color as TagColorKey] ?? 'bg-white/25'}`}
+                            style={isHexColor(t.color) ? `background-color: ${t.color}` : ''}
+                          ></div>
                           <div class="truncate">{t.name}</div>
                         </button>
                       {/each}

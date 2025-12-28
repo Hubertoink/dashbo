@@ -58,7 +58,8 @@ export type PersonColorKey = TagColorKey;
 export type TagDto = {
   id: number;
   name: string;
-  color: TagColorKey;
+  // Either one of the predefined palette keys or a custom hex color (#RRGGBB)
+  color: string;
   sortOrder: number;
   createdAt: string;
   updatedAt: string;
@@ -218,7 +219,7 @@ export async function listTags(): Promise<TagDto[]> {
   return api<TagDto[]>('/tags');
 }
 
-export async function createTag(input: { name: string; color: TagColorKey; sortOrder?: number }): Promise<TagDto> {
+export async function createTag(input: { name: string; color: string; sortOrder?: number }): Promise<TagDto> {
   return api<TagDto>('/tags', { method: 'POST', body: JSON.stringify(input) });
 }
 

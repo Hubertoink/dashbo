@@ -35,6 +35,15 @@
     lime: 'text-lime-300'
   };
 
+  const hexRe = /^#[0-9a-fA-F]{6}$/;
+  function isHexColor(value: unknown): value is string {
+    return typeof value === 'string' && hexRe.test(value);
+  }
+
+  function isTagColorKey(value: unknown): value is TagColorKey {
+    return typeof value === 'string' && value in dotBg;
+  }
+
   function dateKey(d: Date) {
     return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
   }
@@ -56,6 +65,7 @@
     startCol: number; // 1..7
     endCol: number; // 1..7
     colorClass: string;
+    colorStyle?: string;
   };
 
   function yyyymmddLocal(d: Date) {
@@ -154,10 +164,17 @@
 
         const startCol = startIdx + 1;
         const endCol = endIdx + 1;
-        const colorClass = e.tag ? dotBg[e.tag.color] : e.person ? dotBg[e.person.color] : 'bg-white/25';
+        const colorClass = e.tag
+          ? isHexColor(e.tag.color)
+            ? 'bg-transparent'
+            : dotBg[e.tag.color as TagColorKey] ?? 'bg-white/25'
+          : e.person
+            ? dotBg[e.person.color as TagColorKey] ?? 'bg-white/25'
+            : 'bg-white/25';
+        const colorStyle = e.tag && isHexColor(e.tag.color) ? `background-color: ${e.tag.color};` : undefined;
         const key = e.occurrenceId ?? `${e.id}:${e.startAt}`;
 
-        segments.push({ key, startCol, endCol, colorClass });
+        segments.push({ key, startCol, endCol, colorClass, colorStyle });
       }
 
       // Greedy lane assignment (max 2 lanes) to avoid overlaps in the same week
@@ -310,7 +327,15 @@
                   {#if singleDayEvents.length > 0}
                     {@const ev0 = singleDayEvents[0]}
                     <div
-                      class={`text-xs md:text-sm font-semibold leading-tight truncate ${ev0.tag ? (textFg[ev0.tag.color] ?? 'text-white/80') : ev0.person ? (textFg[ev0.person.color] ?? 'text-white/80') : 'text-white/80'}`}
+                      class={`text-xs md:text-sm font-semibold leading-tight truncate ${
+                        ev0.tag
+                          ? isTagColorKey(ev0.tag.color)
+                            ? textFg[ev0.tag.color]
+                            : 'text-white/80'
+                          : ev0.person
+                            ? textFg[ev0.person.color as TagColorKey] ?? 'text-white/80'
+                            : 'text-white/80'
+                      }`}
                     >
                       {ev0.title}
                     </div>
@@ -325,7 +350,16 @@
                     {/if}
                     {#each singleDayEvents.slice(0, maxEventDots) as ev (ev.occurrenceId ?? `${ev.id}:${ev.startAt}`)}
                       <div
-                        class={`h-2.5 w-2.5 rounded-full ${ev.tag ? dotBg[ev.tag.color] : ev.person ? dotBg[ev.person.color] : 'bg-white/25'}`}
+                        class={`h-2.5 w-2.5 rounded-full ${
+                          ev.tag
+                            ? isHexColor(ev.tag.color)
+                              ? 'bg-transparent'
+                              : dotBg[ev.tag.color as TagColorKey] ?? 'bg-white/25'
+                            : ev.person
+                              ? dotBg[ev.person.color as TagColorKey] ?? 'bg-white/25'
+                              : 'bg-white/25'
+                        }`}
+                        style={ev.tag && isHexColor(ev.tag.color) ? `background-color: ${ev.tag.color}` : ''}
                       ></div>
                     {/each}
                   </div>
@@ -341,7 +375,7 @@
                 {#each weekSegments[wi]?.[0] ?? [] as seg (seg.key)}
                   <div
                     class={`h-1.5 rounded-full ${seg.colorClass} opacity-70`}
-                    style={`grid-column: ${seg.startCol} / ${seg.endCol + 1};`}
+                    style={`grid-column: ${seg.startCol} / ${seg.endCol + 1}; ${seg.colorStyle ?? ''}`}
                   ></div>
                 {/each}
               </div>
@@ -354,7 +388,7 @@
                 {#each weekSegments[wi]?.[1] ?? [] as seg (seg.key)}
                   <div
                     class={`h-1.5 rounded-full ${seg.colorClass} opacity-60`}
-                    style={`grid-column: ${seg.startCol} / ${seg.endCol + 1};`}
+                    style={`grid-column: ${seg.startCol} / ${seg.endCol + 1}; ${seg.colorStyle ?? ''}`}
                   ></div>
                 {/each}
               </div>

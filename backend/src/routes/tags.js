@@ -7,17 +7,19 @@ const { listTags, createTag, updateTag, deleteTag } = require('../services/tagsS
 const tagsRouter = express.Router();
 
 const colorKey = z.enum(['fuchsia', 'cyan', 'emerald', 'amber', 'rose', 'violet', 'sky', 'lime']);
+const hexColor = z.string().regex(/^#[0-9a-fA-F]{6}$/);
+const tagColor = z.union([colorKey, hexColor]);
 
 const createSchema = z.object({
   name: z.string().trim().min(1).max(40),
-  color: colorKey,
+  color: tagColor,
   sortOrder: z.coerce.number().int().min(0).max(9999).optional(),
 });
 
 const updateSchema = z
   .object({
     name: z.string().trim().min(1).max(40).optional(),
-    color: colorKey.optional(),
+    color: tagColor.optional(),
     sortOrder: z.coerce.number().int().min(0).max(9999).optional(),
   })
   .strict();

@@ -62,6 +62,11 @@
   $: dayStart = startOfDay(selectedDate);
   $: dayEnd = endOfDay(selectedDate);
 
+  const hexRe = /^#[0-9a-fA-F]{6}$/;
+  function isHexColor(value: unknown): value is string {
+    return typeof value === 'string' && hexRe.test(value);
+  }
+
   function dateKeyLocal(d: Date) {
     return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
   }
@@ -78,7 +83,12 @@
     .filter((e) => {
       const s = new Date(e.startAt);
       const end = e.endAt ? new Date(e.endAt) : null;
-      return s <= dayEnd && (!end || end >= dayStart);
+
+      // If no end time is set, treat event as point-in-time on its start day only.
+      if (!end) return s >= dayStart && s <= dayEnd;
+
+      // Otherwise include if it overlaps the selected day.
+      return s <= dayEnd && end >= dayStart;
     })
     .sort((a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime());
 
@@ -208,7 +218,16 @@
                     in:fly={{ y: 4, duration: 120 }}
                   >
                     <div
-                      class={`h-3 w-3 rounded-full shrink-0 ${e.tag ? (dotBg[e.tag.color] ?? 'bg-white/25') : e.person ? (dotBg[e.person.color] ?? 'bg-white/25') : 'bg-white/25'}`}
+                      class={`h-3 w-3 rounded-full shrink-0 ${
+                        e.tag
+                          ? isHexColor(e.tag.color)
+                            ? 'bg-transparent'
+                            : dotBg[e.tag.color as TagColorKey] ?? 'bg-white/25'
+                          : e.person
+                            ? dotBg[e.person.color as TagColorKey] ?? 'bg-white/25'
+                            : 'bg-white/25'
+                      }`}
+                      style={e.tag && isHexColor(e.tag.color) ? `background-color: ${e.tag.color}` : ''}
                     ></div>
                     <div class="min-w-0 relative">
                       {#if isPrompt}
