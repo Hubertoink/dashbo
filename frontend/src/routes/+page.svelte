@@ -5,6 +5,7 @@
   import Clock from '$lib/components/Clock.svelte';
   import WeatherWidget from '$lib/components/WeatherWidget.svelte';
   import TodoWidget from '$lib/components/TodoWidget.svelte';
+  import ZeitNewsWidget from '$lib/components/ZeitNewsWidget.svelte';
   import ForecastWidget from '$lib/components/ForecastWidget.svelte';
   import CalendarMonth from '$lib/components/CalendarMonth.svelte';
   import WeekView from '$lib/components/WeekView.svelte';
@@ -35,6 +36,7 @@
 
   let holidaysEnabled = false;
   let todoEnabled = true;
+  let newsEnabled = false;
   let holidays: HolidayDto[] = [];
 
   let standbyTimer: ReturnType<typeof setTimeout> | null = null;
@@ -474,8 +476,12 @@
         const todoChanged = nextTodoEnabled !== todoEnabled;
         todoEnabled = nextTodoEnabled;
 
-        // If holidays or todo setting changed (or first load), reload to reflect immediately.
-        if (holidaysChanged || todoChanged) void loadEvents();
+        const nextNewsEnabled = Boolean(s.newsEnabled);
+        const newsChanged = nextNewsEnabled !== newsEnabled;
+        newsEnabled = nextNewsEnabled;
+
+        // If holidays/todo/news setting changed (or first load), reload to reflect immediately.
+        if (holidaysChanged || todoChanged || newsChanged) void loadEvents();
       } catch {
         // ignore
         if (staticImages.length > 0) await applyBackground(staticImages[Math.floor(Math.random() * staticImages.length)]);
@@ -533,6 +539,12 @@
         {#if todoEnabled}
           <div class={`mt-6 pb-8 ${tone === 'dark' ? 'text-black' : 'text-white'}`}>
             <TodoWidget />
+          </div>
+        {/if}
+
+        {#if newsEnabled}
+          <div class={`mt-2 pb-8 ${tone === 'dark' ? 'text-black' : 'text-white'}`}>
+            <ZeitNewsWidget />
           </div>
         {/if}
 

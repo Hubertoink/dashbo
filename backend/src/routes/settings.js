@@ -36,6 +36,7 @@ settingsRouter.get('/', requireAuth, async (_req, res) => {
   const weatherLocation = await getUserSetting({ userId, key: 'weather.location' });
   const holidaysEnabledRaw = await getUserSetting({ userId, key: 'holidays.enabled' });
   const todoEnabledRaw = await getUserSetting({ userId, key: 'todo.enabled' });
+  const newsEnabledRaw = await getUserSetting({ userId, key: 'news.enabled' });
   const images = listImages({ userId });
 
   const backgroundUrl = background ? `/media/${background}` : null;
@@ -44,10 +45,12 @@ settingsRouter.get('/', requireAuth, async (_req, res) => {
   const backgroundRotateEnabled = String(rotateEnabledRaw ?? '').toLowerCase() === 'true';
   // Default to true for backwards compatibility
   const todoEnabled = todoEnabledRaw === null ? true : String(todoEnabledRaw).toLowerCase() === 'true';
+  // Default to false
+  const newsEnabled = String(newsEnabledRaw ?? '').toLowerCase() === 'true';
   const todoListName = getTodoListName();
   const refreshEnv = process.env.DASHBO_DATA_REFRESH_MS || process.env.DATA_REFRESH_MS || '';
   const dataRefreshMs = refreshEnv && Number.isFinite(Number(refreshEnv)) ? Number(refreshEnv) : null;
-  res.json({ background, backgroundUrl, images, backgroundRotateEnabled, weatherLocation, holidaysEnabled, todoEnabled, todoListName, dataRefreshMs });
+  res.json({ background, backgroundUrl, images, backgroundRotateEnabled, weatherLocation, holidaysEnabled, todoEnabled, newsEnabled, todoListName, dataRefreshMs });
 });
 
 settingsRouter.post('/background/rotate', requireAuth, async (req, res) => {
@@ -137,6 +140,18 @@ settingsRouter.post('/todo', requireAuth, async (req, res) => {
 
   const userId = Number(req.auth?.sub);
   await setUserSetting({ userId, key: 'todo.enabled', value: parsed.data.enabled ? 'true' : 'false' });
+  return res.json({ ok: true });
+});
+
+settingsRouter.post('/news', requireAuth, async (req, res) => {
+  const schema = z.object({ enabled: z.boolean() });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: 'invalid_body', details: parsed.error.flatten() });
+  }
+
+  const userId = Number(req.auth?.sub);
+  await setUserSetting({ userId, key: 'news.enabled', value: parsed.data.enabled ? 'true' : 'false' });
   return res.json({ ok: true });
 });
 

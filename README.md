@@ -97,6 +97,10 @@ Compose legt Volumes an:
 - `db_data`: Postgres Daten
 - `backend_data`: Uploads/Medien unter `/data/uploads`
 
+## Backup & Restore
+
+Siehe `docs/backup-restore.md`.
+
 ## Development (ohne Docker)
 
 **Voraussetzungen:** Node.js 20+, lokale Postgres‑Instanz.

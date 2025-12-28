@@ -22,6 +22,7 @@
     setWeatherLocation,
     setHolidaysEnabled,
     setTodoEnabled,
+    setNewsEnabled,
     uploadBackgroundWithProgress,
     setBackgroundRotateEnabled,
     listTags,
@@ -68,6 +69,10 @@
   let todoEnabled = true;
   let todoSaving = false;
   let todoError: string | null = null;
+
+  let newsEnabled = false;
+  let newsSaving = false;
+  let newsError: string | null = null;
 
   let tags: TagDto[] = [];
   let newTagName = '';
@@ -148,11 +153,34 @@
 
   let outlookColorMenuFor: number | null = null;
 
+  let firstRunHidden = false;
+
+  function isFirstRunHidden(): boolean {
+    if (typeof localStorage === 'undefined') return false;
+    return localStorage.getItem('dashbo_first_run_hidden') === '1';
+  }
+
+  function hideFirstRun() {
+    firstRunHidden = true;
+    try {
+      localStorage.setItem('dashbo_first_run_hidden', '1');
+    } catch {
+      // ignore
+    }
+  }
+
+  function scrollToSection(id: string) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
   async function refreshSettings() {
     settings = await fetchSettings();
     weatherLocation = settings?.weatherLocation ?? '';
     holidaysEnabled = Boolean(settings?.holidaysEnabled);
     todoEnabled = settings?.todoEnabled !== false;
+    newsEnabled = Boolean(settings?.newsEnabled);
     backgroundRotateEnabled = Boolean(settings?.backgroundRotateEnabled);
   }
 
@@ -227,6 +255,18 @@
     outlookError = null;
     void goto('/login');
   }
+
+  $: wizardNeedsUsers = authed && isAdmin && users.length <= 1;
+  $: wizardNeedsWeather = authed && !weatherLocation.trim();
+  $: wizardNeedsBackground = authed && !settings?.background;
+  $: wizardNeedsTags = authed && tags.length === 0;
+  $: wizardNeedsPersons = authed && persons.length === 0;
+  $: wizardOutlookConnected = authed && (((outlookConnections?.length ?? 0) > 0) || Boolean(outlookStatus?.connected));
+
+  $: showFirstRunWizard =
+    authed &&
+    !firstRunHidden &&
+    (wizardNeedsUsers || wizardNeedsWeather || wizardNeedsTags || wizardNeedsPersons);
 
   async function doOutlookConnect() {
     if (!authed || outlookBusy) return;
@@ -562,6 +602,20 @@
     }
   }
 
+  async function saveNews() {
+    newsError = null;
+    newsSaving = true;
+    try {
+      await setNewsEnabled(newsEnabled);
+      await refreshSettings();
+      showToast(newsEnabled ? 'News aktiviert' : 'News deaktiviert');
+    } catch {
+      newsError = 'Fehler beim Speichern.';
+    } finally {
+      newsSaving = false;
+    }
+  }
+
   function showToast(msg: string) {
     weatherToast = msg;
     if (weatherToastTimer) clearTimeout(weatherToastTimer);
@@ -591,7 +645,7 @@
     </div>
 
     <!-- Account Section -->
-    <section class="mb-8">
+    <section class="mb-8" id="section-account">
       <div class="flex items-center justify-between mb-4">
         <h2 class="text-lg font-semibold text-white/90">Account</h2>
         {#if authed}
@@ -633,13 +687,131 @@
       {/if}
     </section>
 
+    {#if showFirstRunWizard}
+      <section class="mb-8" id="section-first-run">
+        <div class="bg-white/5 rounded-xl p-4">
+          <div class="flex items-start justify-between gap-3">
+            <div>
+              <div class="text-lg font-semibold text-white/90">Erste Schritte</div>
+              <div class="text-sm text-white/60">Einmal einrichten, danach läuft das Dashboard stabil durch.</div>
+            </div>
+            <button class="text-sm text-white/60 hover:text-white" type="button" on:click={hideFirstRun}>Später</button>
+          </div>
+
+          <div class="mt-4 space-y-2">
+            {#if isAdmin}
+              <div class="flex items-center justify-between gap-3 bg-white/5 rounded-lg px-3 py-2">
+                <div class="min-w-0">
+                  <div class="text-sm font-medium">
+                    {wizardNeedsUsers ? '○' : '✓'} Benutzer anlegen
+                  </div>
+                  <div class="text-xs text-white/60">Mindestens einen weiteren Account erstellen.</div>
+                </div>
+                <button
+                  class="h-8 px-3 rounded-lg bg-white/10 hover:bg-white/15 text-xs font-medium"
+                  type="button"
+                  on:click={() => scrollToSection('section-users')}
+                >
+                  Öffnen
+                </button>
+              </div>
+            {/if}
+
+            <div class="flex items-center justify-between gap-3 bg-white/5 rounded-lg px-3 py-2">
+              <div class="min-w-0">
+                <div class="text-sm font-medium">{wizardNeedsWeather ? '○' : '✓'} Wetter‑Ort setzen</div>
+                <div class="text-xs text-white/60">Damit Wetter/Forecast korrekt geladen werden.</div>
+              </div>
+              <button
+                class="h-8 px-3 rounded-lg bg-white/10 hover:bg-white/15 text-xs font-medium"
+                type="button"
+                on:click={() => scrollToSection('section-weather')}
+              >
+                Öffnen
+              </button>
+            </div>
+
+            <div class="flex items-center justify-between gap-3 bg-white/5 rounded-lg px-3 py-2">
+              <div class="min-w-0">
+                <div class="text-sm font-medium">• Hintergrund auswählen (optional)</div>
+                <div class="text-xs text-white/60">Optional: Bilder hochladen und als Background setzen.</div>
+              </div>
+              <button
+                class="h-8 px-3 rounded-lg bg-white/10 hover:bg-white/15 text-xs font-medium"
+                type="button"
+                on:click={() => scrollToSection('section-background')}
+              >
+                Öffnen
+              </button>
+            </div>
+
+            <div class="flex items-center justify-between gap-3 bg-white/5 rounded-lg px-3 py-2">
+              <div class="min-w-0">
+                <div class="text-sm font-medium">• News (ZEIT RSS) aktivieren (optional)</div>
+                <div class="text-xs text-white/60">Zeigt bis zu 4 Artikel-Links unter To‑Do.</div>
+              </div>
+              <button
+                class="h-8 px-3 rounded-lg bg-white/10 hover:bg-white/15 text-xs font-medium"
+                type="button"
+                on:click={() => scrollToSection('section-weather')}
+              >
+                Öffnen
+              </button>
+            </div>
+
+            <div class="flex items-center justify-between gap-3 bg-white/5 rounded-lg px-3 py-2">
+              <div class="min-w-0">
+                <div class="text-sm font-medium">{wizardNeedsTags ? '○' : '✓'} Erste Tags anlegen</div>
+                <div class="text-xs text-white/60">Farben/Kategorien für Termine.</div>
+              </div>
+              <button
+                class="h-8 px-3 rounded-lg bg-white/10 hover:bg-white/15 text-xs font-medium"
+                type="button"
+                on:click={() => scrollToSection('section-tags')}
+              >
+                Öffnen
+              </button>
+            </div>
+
+            <div class="flex items-center justify-between gap-3 bg-white/5 rounded-lg px-3 py-2">
+              <div class="min-w-0">
+                <div class="text-sm font-medium">{wizardNeedsPersons ? '○' : '✓'} Personen anlegen</div>
+                <div class="text-xs text-white/60">Damit Termine Personen zugeordnet werden können.</div>
+              </div>
+              <button
+                class="h-8 px-3 rounded-lg bg-white/10 hover:bg-white/15 text-xs font-medium"
+                type="button"
+                on:click={() => scrollToSection('section-persons')}
+              >
+                Öffnen
+              </button>
+            </div>
+
+            <div class="flex items-center justify-between gap-3 bg-white/5 rounded-lg px-3 py-2">
+              <div class="min-w-0">
+                <div class="text-sm font-medium">{wizardOutlookConnected ? '✓' : '○'} Outlook verbinden (optional)</div>
+                <div class="text-xs text-white/60">Zusätzliche Termine (nur anzeigen) pro User.</div>
+              </div>
+              <button
+                class="h-8 px-3 rounded-lg bg-white/10 hover:bg-white/15 text-xs font-medium"
+                type="button"
+                on:click={() => scrollToSection('section-outlook')}
+              >
+                Öffnen
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+    {/if}
+
     <!-- Kalender Section -->
-    <section class="mb-8">
+    <section class="mb-8" id="section-calendar">
       <h2 class="text-lg font-semibold text-white/90 mb-4">Kalender</h2>
 
       <div class="space-y-4">
         <!-- Tags -->
-        <div class="bg-white/5 rounded-xl p-4">
+        <div class="bg-white/5 rounded-xl p-4" id="section-tags">
           <div class="flex items-center justify-between mb-3">
             <div class="font-medium">Tags</div>
             <div class="text-white/50 text-xs">Farben für Termine</div>
@@ -725,7 +897,7 @@
         </div>
 
         <!-- Personen -->
-        <div class="bg-white/5 rounded-xl p-4">
+        <div class="bg-white/5 rounded-xl p-4" id="section-persons">
           <div class="flex items-center justify-between mb-3">
             <div class="font-medium">Personen</div>
             <div class="text-white/50 text-xs">Für Termine zuweisbar</div>
@@ -791,7 +963,7 @@
         </div>
 
         <!-- Outlook (privat, nur anzeigen) -->
-        <div class="bg-white/5 rounded-xl p-4">
+        <div class="bg-white/5 rounded-xl p-4" id="section-outlook">
           <div class="flex items-center justify-between mb-3">
             <div class="font-medium">Outlook Kalender</div>
             <div class="text-white/50 text-xs">Privat · nur anzeigen</div>
@@ -900,12 +1072,12 @@
     </section>
 
     <!-- Dashboard Section -->
-    <section class="mb-8">
+    <section class="mb-8" id="section-dashboard">
       <h2 class="text-lg font-semibold text-white/90 mb-4">Dashboard</h2>
 
       <div class="space-y-4">
         <!-- Wetter -->
-        <div class="bg-white/5 rounded-xl p-4">
+        <div class="bg-white/5 rounded-xl p-4" id="section-weather">
           <div class="font-medium mb-3">Wetter & Feiertage</div>
 
           <div class="flex gap-2 mb-3">
@@ -973,13 +1145,34 @@
             <div class="text-red-400 text-xs mt-1">{todoError}</div>
           {/if}
 
+          <label class="flex items-center gap-2 text-sm text-white/80 mt-3">
+            <input
+              type="checkbox"
+              class="rounded bg-white/10 border-0"
+              bind:checked={newsEnabled}
+              disabled={!authed}
+            />
+            News (ZEIT RSS) anzeigen
+            <button
+              class="ml-auto h-8 px-3 rounded-lg bg-white/20 hover:bg-white/25 text-xs font-medium disabled:opacity-50"
+              on:click={saveNews}
+              disabled={!authed || newsSaving}
+            >
+              Speichern
+            </button>
+          </label>
+
+          {#if newsError}
+            <div class="text-red-400 text-xs mt-1">{newsError}</div>
+          {/if}
+
           {#if !authed}
             <div class="text-white/40 text-xs mt-2">Bitte einloggen, um Einstellungen zu ändern.</div>
           {/if}
         </div>
 
         <!-- Hintergründe -->
-        <div class="bg-white/5 rounded-xl p-4">
+        <div class="bg-white/5 rounded-xl p-4" id="section-background">
           <div class="font-medium mb-3">Hintergrund</div>
 
           <div class="flex items-center gap-3 mb-3">
@@ -1108,7 +1301,7 @@
 
     <!-- Admin Section -->
     {#if authed && isAdmin}
-      <section class="mb-8">
+      <section class="mb-8" id="section-users">
         <h2 class="text-lg font-semibold text-white/90 mb-4">Benutzerverwaltung</h2>
 
         <div class="bg-white/5 rounded-xl p-4">

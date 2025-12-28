@@ -51,6 +51,19 @@ export type TodosResponseDto = {
   items: TodoItemDto[];
 };
 
+export type NewsItemDto = {
+  title: string;
+  url: string;
+  publishedAt: string | null;
+};
+
+export type NewsResponseDto = {
+  enabled: boolean;
+  source: 'zeit';
+  items: NewsItemDto[];
+  error?: string;
+};
+
 export type TagColorKey = 'fuchsia' | 'cyan' | 'emerald' | 'amber' | 'rose' | 'violet' | 'sky' | 'lime';
 
 export type PersonColorKey = TagColorKey;
@@ -308,12 +321,21 @@ export type SettingsDto = {
   weatherLocation?: string | null;
   holidaysEnabled?: boolean;
   todoEnabled?: boolean;
-   todoListName?: string | null;
+  newsEnabled?: boolean;
+  todoListName?: string | null;
   dataRefreshMs?: number | null;
 };
 
 export async function fetchSettings(): Promise<SettingsDto> {
   return api<SettingsDto>('/settings');
+}
+
+export async function fetchNews(): Promise<NewsResponseDto> {
+  return api<NewsResponseDto>('/news');
+}
+
+export async function setNewsEnabled(enabled: boolean): Promise<{ ok: true }> {
+  return api<{ ok: true }>('/settings/news', { method: 'POST', body: JSON.stringify({ enabled }) });
 }
 
 export async function setBackground(filename: string): Promise<{ ok: true }> {
