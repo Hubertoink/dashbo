@@ -7,6 +7,7 @@
   import TodoWidget from '$lib/components/TodoWidget.svelte';
   import ZeitNewsWidget from '$lib/components/ZeitNewsWidget.svelte';
   import ForecastWidget from '$lib/components/ForecastWidget.svelte';
+  import MusicWidget from '$lib/components/MusicWidget.svelte';
   import CalendarMonth from '$lib/components/CalendarMonth.svelte';
   import WeekView from '$lib/components/WeekView.svelte';
   import EventsPanel from '$lib/components/EventsPanel.svelte';
@@ -23,6 +24,7 @@
     getStoredToken
   } from '$lib/api';
   import { daysForMonthGrid } from '$lib/date';
+  import { getEdgePlayerWidgetEnabledFromStorage } from '$lib/edge';
 
   let selectedDate = new Date();
   let monthAnchor = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1);
@@ -37,6 +39,8 @@
 
   let upcomingMode = false;
   let standbyMode = false;
+
+  let musicWidgetEnabled = false;
 
   const STANDBY_TRANSITION_MS = 700;
   let standbyTransitioning = false;
@@ -92,6 +96,14 @@
       standbyNewsItems = [];
     } finally {
       standbyNewsLoading = false;
+    }
+  }
+
+  function loadLocalWidgetToggles() {
+    try {
+      musicWidgetEnabled = getEdgePlayerWidgetEnabledFromStorage();
+    } catch {
+      musicWidgetEnabled = false;
     }
   }
 
@@ -511,6 +523,8 @@
       return;
     }
 
+    loadLocalWidgetToggles();
+
     loadNewsFromCache();
 
     void loadEvents();
@@ -655,6 +669,12 @@
         {#if newsEnabled}
           <div class="mt-2 pb-8 text-white">
             <ZeitNewsWidget />
+          </div>
+        {/if}
+
+        {#if musicWidgetEnabled}
+          <div class="mt-2 pb-8 text-white">
+            <MusicWidget />
           </div>
         {/if}
 

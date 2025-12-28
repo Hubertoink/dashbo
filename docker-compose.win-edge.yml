@@ -1,0 +1,40 @@
+# Windows PC: dashbo-edge (local music + HEOS)
+#
+# Prereqs:
+# - Docker Desktop installed and running
+# - Your music is in your Windows library folder (e.g. C:\Users\huber\Musik)
+#
+# Usage:
+# 1) Create a token (PowerShell):
+#    $env:EDGE_TOKEN = ( -join ((48..57)+(97..102) | Get-Random -Count 64 | ForEach-Object {[char]$_}) )
+#    (or choose your own strong token)
+# 2) Run:
+#    docker compose -f docker-compose.win-edge.yml up -d --build
+#
+# Note:
+# - DashbO UI is served from https://dashbohub.de. Browsers will block HTTP calls to your Edge (Mixed Content).
+#   For real use, put an HTTPS reverse proxy (Caddy/Nginx) in front of the edge.
+
+services:
+  dashbo-edge:
+    build:
+      context: ./edge
+    container_name: dashbo-edge
+    restart: unless-stopped
+    environment:
+      PORT: 8787
+      EDGE_TOKEN: ${EDGE_TOKEN}
+      # Comma-separated allowed origins for CORS.
+      EDGE_ALLOWED_ORIGINS: ${EDGE_ALLOWED_ORIGINS:-https://dashbohub.de}
+      MUSIC_LIBRARY_PATH: /mnt/music
+    ports:
+      - "${EDGE_PORT:-8787}:8787"
+    volumes:
+      # Adjust to your Windows Music folder path.
+      # German Windows is usually: C:/Users/<you>/Musik
+      # English Windows is usually: C:/Users/<you>/Music
+      - ${MUSIC_DIR:-C:/Users/huber/Music}:/mnt/music:ro
+      - dashbo_edge_data:/var/lib/dashbo-edge
+
+volumes:
+  dashbo_edge_data:

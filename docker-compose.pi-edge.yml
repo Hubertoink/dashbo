@@ -1,0 +1,30 @@
+# Raspberry Pi: dashbo-edge (local music + HEOS)
+#
+# Usage (on Pi):
+# 1) Ensure music SSD is mounted at /mnt/music
+# 2) Create a strong token: openssl rand -hex 32
+# 3) Run: docker compose -f docker-compose.pi-edge.yml up -d --build
+#
+# Note: For browser access from https://dashbohub.de you will typically need HTTPS on this edge.
+# This compose starts plain HTTP for M0. Add a local HTTPS reverse proxy (Caddy/Nginx) in M0.5.
+
+services:
+  dashbo-edge:
+    build:
+      context: ./edge
+    container_name: dashbo-edge
+    restart: unless-stopped
+    environment:
+      PORT: 8787
+      EDGE_TOKEN: ${EDGE_TOKEN}
+      # Comma-separated allowed origins for CORS.
+      EDGE_ALLOWED_ORIGINS: ${EDGE_ALLOWED_ORIGINS:-https://dashbohub.de}
+      MUSIC_LIBRARY_PATH: /mnt/music
+    ports:
+      - "${EDGE_PORT:-8787}:8787"
+    volumes:
+      - ${MUSIC_DIR:-/mnt/music}:/mnt/music:ro
+      - dashbo_edge_data:/var/lib/dashbo-edge
+
+volumes:
+  dashbo_edge_data:

@@ -1,0 +1,57 @@
+export type EdgeHealthDto = {
+  ok: boolean;
+  service?: string;
+  time?: string;
+};
+
+export const EDGE_BASE_URL_KEY = 'dashbo_edge_base_url';
+export const EDGE_TOKEN_KEY = 'dashbo_edge_token';
+export const EDGE_PLAYER_WIDGET_ENABLED_KEY = 'dashbo_edge_player_widget_enabled';
+
+export function normalizeEdgeBaseUrl(input: string): string {
+  return input.trim().replace(/\/+$/, '');
+}
+
+export function getEdgeBaseUrlFromStorage(): string {
+  if (typeof localStorage === 'undefined') return '';
+  return localStorage.getItem(EDGE_BASE_URL_KEY) ?? '';
+}
+
+export function getEdgeTokenFromStorage(): string {
+  if (typeof localStorage === 'undefined') return '';
+  return localStorage.getItem(EDGE_TOKEN_KEY) ?? '';
+}
+
+export function getEdgePlayerWidgetEnabledFromStorage(): boolean {
+  if (typeof localStorage === 'undefined') return false;
+  return localStorage.getItem(EDGE_PLAYER_WIDGET_ENABLED_KEY) === '1';
+}
+
+export async function edgeFetchJson<T>(
+  baseUrl: string,
+  path: string,
+  token?: string,
+  init?: RequestInit
+): Promise<T> {
+  const base = normalizeEdgeBaseUrl(baseUrl);
+  if (!base) throw new Error('Edge Base URL fehlt');
+
+  const url = `${base}${path.startsWith('/') ? path : `/${path}`}`;
+  const headers = new Headers(init?.headers ?? undefined);
+
+  if (token) headers.set('Authorization', `Bearer ${token}`);
+  if (!headers.has('Accept')) headers.set('Accept', 'application/json');
+
+  const res = await fetch(url, { ...init, headers });
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(text ? `${res.status} ${res.statusText}: ${text}` : `${res.status} ${res.statusText}`);
+  }
+
+  return (await res.json()) as T;
+}
+
+export async function edgeHealth(baseUrl: string, token?: string): Promise<EdgeHealthDto> {
+  return edgeFetchJson<EdgeHealthDto>(baseUrl, '/health', token);
+}

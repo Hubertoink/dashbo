@@ -41,6 +41,12 @@
     , type OutlookConnectionDto
   } from '$lib/api';
 
+  import {
+    EDGE_PLAYER_WIDGET_ENABLED_KEY,
+    edgeHealth,
+    normalizeEdgeBaseUrl
+  } from '$lib/edge';
+
   let email = '';
   let password = '';
   let authError: string | null = null;
@@ -155,9 +161,68 @@
 
   let firstRunHidden = false;
 
+  const EDGE_BASE_URL_KEY = 'dashbo_edge_base_url';
+  const EDGE_TOKEN_KEY = 'dashbo_edge_token';
+  let edgeBaseUrl = '';
+  let edgeToken = '';
+  let edgeSaving = false;
+  let edgePlayerWidgetEnabled = false;
+  let edgeTestBusy = false;
+  let edgeTestMessage: string | null = null;
+  let edgeTestOk: boolean | null = null;
+  let edgeSetupOpen = false;
+
   function isFirstRunHidden(): boolean {
     if (typeof localStorage === 'undefined') return false;
     return localStorage.getItem('dashbo_first_run_hidden') === '1';
+  }
+
+  function loadEdgeConfig() {
+    if (typeof localStorage === 'undefined') return;
+    edgeBaseUrl = localStorage.getItem(EDGE_BASE_URL_KEY) ?? '';
+    edgeToken = localStorage.getItem(EDGE_TOKEN_KEY) ?? '';
+    edgePlayerWidgetEnabled = localStorage.getItem(EDGE_PLAYER_WIDGET_ENABLED_KEY) === '1';
+  }
+
+  function saveEdgeConfig() {
+    edgeSaving = true;
+    try {
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem(EDGE_BASE_URL_KEY, normalizeEdgeBaseUrl(edgeBaseUrl));
+        localStorage.setItem(EDGE_TOKEN_KEY, edgeToken);
+      }
+      showToast('Pi Edge gespeichert');
+    } finally {
+      edgeSaving = false;
+    }
+  }
+
+  function saveEdgePlayerWidgetEnabled() {
+    try {
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem(EDGE_PLAYER_WIDGET_ENABLED_KEY, edgePlayerWidgetEnabled ? '1' : '0');
+      }
+      showToast(edgePlayerWidgetEnabled ? 'Player Widget aktiviert' : 'Player Widget deaktiviert');
+    } catch {
+      // ignore
+    }
+  }
+
+  async function testEdgeConnection() {
+    edgeTestBusy = true;
+    edgeTestMessage = null;
+    edgeTestOk = null;
+    try {
+      const health = await edgeHealth(edgeBaseUrl, edgeToken || undefined);
+      edgeTestOk = Boolean(health?.ok);
+      edgeTestMessage = health?.ok ? `OK: ${health.service ?? 'edge'}` : 'Antwort ungültig.';
+      if (health?.ok) showToast('Pi Edge erreichbar');
+    } catch (err) {
+      edgeTestOk = false;
+      edgeTestMessage = err instanceof Error ? err.message : 'Verbindung fehlgeschlagen.';
+    } finally {
+      edgeTestBusy = false;
+    }
   }
 
   function hideFirstRun() {
@@ -529,6 +594,7 @@
   }
 
   onMount(async () => {
+    loadEdgeConfig();
     const existing = getStoredToken();
     if (existing) {
       authed = true;
@@ -856,7 +922,7 @@
                         type="color"
                         class="h-7 w-10 bg-transparent border-0 p-0"
                         value={isHexColor(newTagColor) ? newTagColor : '#22d3ee'}
-                        on:input={(e) => chooseCustomTagColor((e.currentTarget as HTMLInputElement).value)}
+                        on:input={(e) => chooseCustomTagColor((/** @type {HTMLInputElement} */ (e.currentTarget)).value)}
                       />
                     </label>
                   </div>
@@ -1169,6 +1235,75 @@
           {#if !authed}
             <div class="text-white/40 text-xs mt-2">Bitte einloggen, um Einstellungen zu ändern.</div>
           {/if}
+        </div>
+
+        <!-- Musik / HEOS (Pi Edge) -->
+        <div class="bg-white/5 rounded-xl p-4" id="section-edge">
+          <div class="flex items-center justify-between mb-3">
+            <div class="font-medium">Musik & HEOS (Pi Edge)</div>
+            <button
+              class="h-8 px-3 rounded-lg bg-white/10 hover:bg-white/15 text-xs font-medium"
+              type="button"
+              on:click={() => (edgeSetupOpen = true)}
+            >
+              Setup
+            </button>
+          </div>
+
+          <div class="text-xs text-white/60 mb-3">
+            DashbO läuft auf Mittwald; für SSD-Musik und HEOS im LAN wird ein lokaler Edge-Service am Pi genutzt.
+            Verwende hier eine HTTPS-URL (sonst blockt der Browser Mixed-Content).
+          </div>
+
+          <div class="grid md:grid-cols-3 gap-2">
+            <input
+              class="md:col-span-2 h-9 px-3 rounded-lg bg-white/10 border-0 text-sm placeholder:text-white/40"
+              placeholder="Edge Base URL (z.B. https://pi.local:8787)"
+              bind:value={edgeBaseUrl}
+            />
+            <button
+              class="h-9 px-4 rounded-lg bg-white/20 hover:bg-white/25 text-sm font-medium disabled:opacity-50"
+              on:click={saveEdgeConfig}
+              disabled={edgeSaving}
+            >
+              Speichern
+            </button>
+          </div>
+
+          <div class="mt-2 grid md:grid-cols-3 gap-2">
+            <input
+              class="md:col-span-2 h-9 px-3 rounded-lg bg-white/10 border-0 text-sm placeholder:text-white/40"
+              placeholder="Edge Token (Bearer)"
+              bind:value={edgeToken}
+            />
+          </div>
+
+          <label class="flex items-center gap-2 text-sm text-white/80 mt-3">
+            <input
+              type="checkbox"
+              class="rounded bg-white/10 border-0"
+              bind:checked={edgePlayerWidgetEnabled}
+              on:change={saveEdgePlayerWidgetEnabled}
+            />
+            Player Widget anzeigen
+          </label>
+
+          <div class="flex items-center gap-2 mt-3">
+            <button
+              class="h-8 px-3 rounded-lg bg-white/20 hover:bg-white/25 text-xs font-medium disabled:opacity-50"
+              on:click={testEdgeConnection}
+              disabled={edgeTestBusy || !edgeBaseUrl.trim()}
+            >
+              Verbindung testen
+            </button>
+            {#if edgeTestMessage}
+              <div class={edgeTestOk ? 'text-emerald-300 text-xs' : 'text-red-300 text-xs'}>{edgeTestMessage}</div>
+            {/if}
+          </div>
+
+          <div class="text-xs text-white/50 mt-2">
+            Diese Werte werden nur im Browser (localStorage) gespeichert.
+          </div>
         </div>
 
         <!-- Hintergründe -->
@@ -1493,6 +1628,58 @@
         <button class="flex-1 h-10 rounded-lg bg-white/10 hover:bg-white/15 text-sm" on:click={() => (deletingFor = null)}>
           Abbrechen
         </button>
+      </div>
+    </div>
+  </div>
+{/if}
+
+<!-- Edge Setup Modal -->
+{#if edgeSetupOpen}
+  <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+  <div class="fixed inset-0 z-50 flex items-center justify-center p-4" on:click={(e) => e.currentTarget === e.target && (edgeSetupOpen = false)}>
+    <div class="absolute inset-0 bg-black/70"></div>
+    <div class="relative bg-zinc-900 rounded-2xl p-6 w-full max-w-lg border border-white/10">
+      <div class="flex items-start justify-between gap-4 mb-3">
+        <div>
+          <div class="font-semibold text-lg">Pi/PC Edge Setup</div>
+          <div class="text-white/50 text-sm">Lokale Musikbibliothek + HEOS über einen lokalen Edge-Service</div>
+        </div>
+        <button class="h-9 px-3 rounded-lg bg-white/10 hover:bg-white/15 text-sm" on:click={() => (edgeSetupOpen = false)}>
+          Schließen
+        </button>
+      </div>
+
+      <div class="text-sm text-white/80 space-y-3">
+        <div>
+          <div class="font-medium mb-1">Wichtig: HTTPS (Mixed Content)</div>
+          <div class="text-white/70">
+            DashbO läuft über <span class="font-medium">https://dashbohub.de</span>. Browser blockieren Aufrufe zu einem lokalen
+            <span class="font-medium">http://</span>-Edge. Verwende daher eine <span class="font-medium">https://</span>-URL (z.B. via Caddy/Nginx Reverse Proxy).
+          </div>
+        </div>
+
+        <div>
+          <div class="font-medium mb-1">Windows PC</div>
+          <div class="text-white/70">
+            1) Docker Desktop starten
+            <br />2) Musik in deiner Bibliothek ablegen (z.B. <span class="font-medium">C:\\Users\\huber\\Musik</span>)
+            <br />3) Edge starten: <span class="font-medium">docker compose -f docker-compose.win-edge.yml up -d --build</span>
+            <br />4) Hier in den Einstellungen die Edge Base URL + Token eintragen
+          </div>
+        </div>
+
+        <div>
+          <div class="font-medium mb-1">Raspberry Pi</div>
+          <div class="text-white/70">
+            1) SSD nach <span class="font-medium">/mnt/music</span> mounten
+            <br />2) Edge starten: <span class="font-medium">docker compose -f docker-compose.pi-edge.yml up -d --build</span>
+            <br />3) Edge Base URL + Token im Browser-Gerät speichern
+          </div>
+        </div>
+
+        <div class="text-white/60 text-xs">
+          Hinweis: Die Edge-Zugangsdaten und der Player-Widget Toggle werden nur lokal im Browser gespeichert (localStorage).
+        </div>
       </div>
     </div>
   </div>
