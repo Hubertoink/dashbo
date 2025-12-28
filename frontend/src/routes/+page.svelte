@@ -25,6 +25,7 @@
   } from '$lib/api';
   import { daysForMonthGrid } from '$lib/date';
   import { getEdgePlayerWidgetEnabledFromStorage } from '$lib/edge';
+  import { musicPlayerState } from '$lib/stores/musicPlayer';
 
   let selectedDate = new Date();
   let monthAnchor = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1);
@@ -697,6 +698,24 @@
               {/if}
 
               <div class="text-white"><ForecastWidget /></div>
+
+              {#if musicWidgetEnabled && $musicPlayerState.playing && $musicPlayerState.now}
+                <div class="mt-6">
+                  <div class="rounded-2xl bg-white/5 backdrop-blur-md border border-white/10 px-4 py-3">
+                    <div class="flex items-center gap-3">
+                      <div class="h-12 w-12 overflow-hidden rounded-xl border border-white/10 bg-white/5 shrink-0">
+                        {#if $musicPlayerState.now.coverUrl}
+                          <img src={$musicPlayerState.now.coverUrl} alt="" class="h-full w-full object-cover" loading="lazy" />
+                        {/if}
+                      </div>
+                      <div class="min-w-0">
+                        <div class="text-lg font-semibold truncate">{$musicPlayerState.now.artist}</div>
+                        <div class="text-white/70 text-sm truncate">{$musicPlayerState.now.title}</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              {/if}
 
               <div class="pb-2">
                 <div class="text-white">

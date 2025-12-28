@@ -40,29 +40,41 @@
           <div class="flex items-center gap-2">
             <button
               type="button"
-              class="h-8 px-2 rounded-lg bg-white/10 hover:bg-white/15 text-xs font-medium disabled:opacity-50"
+              class="h-8 w-8 rounded-lg bg-white/10 hover:bg-white/15 inline-flex items-center justify-center disabled:opacity-50"
               on:click={playPrev}
               aria-label="Zurück"
             >
-              Zurück
+              <svg viewBox="0 0 24 24" class="h-4 w-4" fill="currentColor" aria-hidden="true">
+                <path d="M6 5h2v14H6V5zm14 0L10 12l10 7V5z" />
+              </svg>
             </button>
 
             <button
               type="button"
-              class="h-8 px-3 rounded-lg bg-white/10 hover:bg-white/15 text-xs font-medium"
+              class="h-8 w-10 rounded-lg bg-white/10 hover:bg-white/15 inline-flex items-center justify-center"
               on:click={togglePlayPause}
               aria-label={playing ? 'Pause' : 'Play'}
             >
-              {playing ? 'Pause' : 'Play'}
+              {#if playing}
+                <svg viewBox="0 0 24 24" class="h-4 w-4" fill="currentColor" aria-hidden="true">
+                  <path d="M6 5h4v14H6V5zm8 0h4v14h-4V5z" />
+                </svg>
+              {:else}
+                <svg viewBox="0 0 24 24" class="h-4 w-4" fill="currentColor" aria-hidden="true">
+                  <path d="M8 5v14l12-7L8 5z" />
+                </svg>
+              {/if}
             </button>
 
             <button
               type="button"
-              class="h-8 px-2 rounded-lg bg-white/10 hover:bg-white/15 text-xs font-medium disabled:opacity-50"
+              class="h-8 w-8 rounded-lg bg-white/10 hover:bg-white/15 inline-flex items-center justify-center disabled:opacity-50"
               on:click={playNext}
               aria-label="Weiter"
             >
-              Weiter
+              <svg viewBox="0 0 24 24" class="h-4 w-4" fill="currentColor" aria-hidden="true">
+                <path d="M16 5h2v14h-2V5zM4 5l10 7-10 7V5z" />
+              </svg>
             </button>
           </div>
         </div>
