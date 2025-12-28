@@ -107,7 +107,7 @@
   let standbyTimer: ReturnType<typeof setTimeout> | null = null;
   const STANDBY_IDLE_MS = 10 * 60 * 1000;
 
-  const STANDBY_PAGE_SIZE = 5;
+  const STANDBY_PAGE_SIZE = 4;
   const STANDBY_PAGE_MS = 10_000;
   const STANDBY_NEWS_MS = 10_000;
 
@@ -728,7 +728,7 @@
                                 {#if e.location} <span> · {e.location}</span>{/if}
                                 {#if ps.length > 0}
                                   <span>
-                                    · {#each ps as p, i (p.id)}{#if i > 0}, {/if}<span class={`${textFg[p.color] ?? 'text-white/80'} font-semibold`}>{p.name}</span>{/each}
+                                    · {#each ps as p, i (p.id)}{#if i > 0},{/if}<span class={`${textFg[p.color] ?? 'text-white/80'} font-semibold ${i > 0 ? 'pl-0.5' : ''}`}>{p.name}</span>{/each}
                                   </span>
                                 {/if}
                               </div>
@@ -894,7 +894,7 @@
                                 {#if e.location} <span> · {e.location}</span>{/if}
                                 {#if ps.length > 0}
                                   <span>
-                                    · {#each ps as p, i (p.id)}{#if i > 0}, {/if}<span class={`${textFg[p.color] ?? 'text-white/80'} font-semibold`}>{p.name}</span>{/each}
+                                    · {#each ps as p, i (p.id)}{#if i > 0},{/if}<span class={`${textFg[p.color] ?? 'text-white/80'} font-semibold ${i > 0 ? 'pl-0.5' : ''}`}>{p.name}</span>{/each}
                                   </span>
                                 {/if}
                               </div>

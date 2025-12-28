@@ -278,7 +278,7 @@
                         {#if e.location} | {e.location}{/if}
                         {#if ps.length > 0}
                           <span>
-                            | {#each ps as p, i (p.id)}{#if i > 0}, {/if}<span class={`${textFg[p.color] ?? 'text-white/80'} font-semibold`}>{p.name}</span>{/each}
+                            | {#each ps as p, i (p.id)}{#if i > 0},{/if}<span class={`${textFg[p.color] ?? 'text-white/80'} font-semibold ${i > 0 ? 'pl-0.5' : ''}`}>{p.name}</span>{/each}
                           </span>
                         {/if}
                         </div>

@@ -260,7 +260,7 @@
                           {/if}
                         </div>
 
-                        <div class="text-white/50 text-xs leading-tight">{#if isMultiDayEvent(e)}{fmtDateRange(e)} · {/if}{#if e.allDay}Ganztägig{:else}{fmtTimeRange(e.startAt, e.endAt)}{/if}{#if e.location} · {e.location}{/if}{#if e.tag} · {e.tag.name}{/if}{#if ps.length > 0} · {#each ps as p, i (p.id)}{#if i > 0}, {/if}<span class={`${textFg[p.color] ?? 'text-white/70'} font-medium`}>{p.name}</span>{/each}{/if}</div>
+                        <div class="text-white/50 text-xs leading-tight">{#if isMultiDayEvent(e)}{fmtDateRange(e)} · {/if}{#if e.allDay}Ganztägig{:else}{fmtTimeRange(e.startAt, e.endAt)}{/if}{#if e.location} · {e.location}{/if}{#if e.tag} · {e.tag.name}{/if}{#if ps.length > 0} · {#each ps as p, i (p.id)}{#if i > 0},{/if}<span class={`${textFg[p.color] ?? 'text-white/70'} font-medium ${i > 0 ? 'pl-0.5' : ''}`}>{p.name}</span>{/each}{/if}</div>
                       </div>
                     </div>
                   </button>
