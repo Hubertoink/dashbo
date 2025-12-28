@@ -11,7 +11,6 @@ function toTag(row) {
   };
 }
 
-async function listTags() {
 async function listTags({ userId }) {
   const pool = getPool();
   const result = await pool.query(
