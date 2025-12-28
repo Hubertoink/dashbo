@@ -55,6 +55,8 @@ export type NewsItemDto = {
   title: string;
   url: string;
   publishedAt: string | null;
+  teaser?: string | null;
+  imageUrl?: string | null;
 };
 
 export type NewsResponseDto = {

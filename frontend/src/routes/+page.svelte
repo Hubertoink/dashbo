@@ -11,7 +11,17 @@
   import WeekView from '$lib/components/WeekView.svelte';
   import EventsPanel from '$lib/components/EventsPanel.svelte';
   import AddEventModal from '$lib/components/AddEventModal.svelte';
-  import { fetchEvents, fetchHolidays, type HolidayDto, type EventDto, type TagColorKey, fetchSettings, getStoredToken } from '$lib/api';
+  import {
+    fetchEvents,
+    fetchHolidays,
+    fetchNews,
+    type HolidayDto,
+    type EventDto,
+    type NewsItemDto,
+    type TagColorKey,
+    fetchSettings,
+    getStoredToken
+  } from '$lib/api';
   import { daysForMonthGrid } from '$lib/date';
 
   let selectedDate = new Date();
@@ -38,6 +48,57 @@
   let todoEnabled = true;
   let newsEnabled = false;
   let holidays: HolidayDto[] = [];
+
+  let standbyNewsItems: NewsItemDto[] = [];
+  let standbyNewsIndex = 0;
+  let standbyNewsRotateInterval: ReturnType<typeof setInterval> | null = null;
+  let standbyNewsRotationKey = '';
+  let standbyNewsRefreshInterval: ReturnType<typeof setInterval> | null = null;
+
+  const NEWS_CACHE_KEY = 'dashbo_zeit_news_cache_v1';
+  const NEWS_CACHE_TTL_MS = 5 * 60 * 1000;
+
+  function loadNewsFromCache(): boolean {
+    if (typeof localStorage === 'undefined') return false;
+    try {
+      const raw = localStorage.getItem(NEWS_CACHE_KEY);
+      if (!raw) return false;
+      const parsed = JSON.parse(raw) as { at?: number; items?: NewsItemDto[] };
+      const at = typeof parsed?.at === 'number' ? parsed.at : 0;
+      const isFresh = at > 0 && Date.now() - at <= NEWS_CACHE_TTL_MS;
+      if (!isFresh || !Array.isArray(parsed?.items)) return false;
+      standbyNewsItems = parsed.items.slice(0, 4);
+      return standbyNewsItems.length > 0;
+    } catch {
+      return false;
+    }
+  }
+
+  async function loadNews() {
+    try {
+      const r = await fetchNews();
+      standbyNewsItems = (r.items ?? []).slice(0, 4);
+
+      if (typeof localStorage !== 'undefined') {
+        try {
+          localStorage.setItem(NEWS_CACHE_KEY, JSON.stringify({ at: Date.now(), items: standbyNewsItems }));
+        } catch {
+          // ignore
+        }
+      }
+    } catch {
+      standbyNewsItems = [];
+    }
+  }
+
+  function startNewsRefresh(enabled: boolean) {
+    if (standbyNewsRefreshInterval) {
+      clearInterval(standbyNewsRefreshInterval);
+      standbyNewsRefreshInterval = null;
+    }
+    if (!enabled) return;
+    standbyNewsRefreshInterval = setInterval(() => void loadNews(), 10 * 60 * 1000);
+  }
 
   let standbyTimer: ReturnType<typeof setTimeout> | null = null;
   const STANDBY_IDLE_MS = 10 * 60 * 1000;
@@ -265,9 +326,30 @@
     }
   }
 
+  $: {
+    const key = `${standbyMode}:${newsEnabled}:${standbyNewsItems.length}`;
+    if (key !== standbyNewsRotationKey) {
+      standbyNewsRotationKey = key;
+      standbyNewsIndex = 0;
+
+      if (standbyNewsRotateInterval) {
+        clearInterval(standbyNewsRotateInterval);
+        standbyNewsRotateInterval = null;
+      }
+
+      if (standbyMode && newsEnabled && standbyNewsItems.length > 1) {
+        standbyNewsRotateInterval = setInterval(() => {
+          standbyNewsIndex = (standbyNewsIndex + 1) % standbyNewsItems.length;
+        }, STANDBY_PAGE_MS);
+      }
+    }
+  }
+
   onDestroy(() => {
     clearStandbyTransitionTimers();
     if (standbyRotateInterval) clearInterval(standbyRotateInterval);
+    if (standbyNewsRotateInterval) clearInterval(standbyNewsRotateInterval);
+    if (standbyNewsRefreshInterval) clearInterval(standbyNewsRefreshInterval);
     if (bgRotateInterval) clearInterval(bgRotateInterval);
     if (dataRefreshInterval) clearInterval(dataRefreshInterval);
   });
@@ -408,6 +490,8 @@
       return;
     }
 
+    loadNewsFromCache();
+
     void loadEvents();
 
     // Auto-refresh events; holidays only on explicit refresh/manual reload.
@@ -479,6 +563,13 @@
         const nextNewsEnabled = Boolean(s.newsEnabled);
         const newsChanged = nextNewsEnabled !== newsEnabled;
         newsEnabled = nextNewsEnabled;
+
+        if (nextNewsEnabled) {
+          void loadNews();
+        } else {
+          standbyNewsItems = [];
+        }
+        startNewsRefresh(nextNewsEnabled);
 
         // If holidays/todo/news setting changed (or first load), reload to reflect immediately.
         if (holidaysChanged || todoChanged || newsChanged) void loadEvents();
@@ -637,6 +728,24 @@
                   {/key}
                 {/if}
               </div>
+
+              {#if newsEnabled && standbyNewsItems.length > 0}
+                {@const n = standbyNewsItems[standbyNewsIndex]}
+                <div class="mt-6 self-end w-full max-w-[440px] overflow-hidden rounded-2xl border border-white/10 bg-white/5">
+                  <div
+                    class="p-5"
+                    style={n.imageUrl
+                      ? `background-image: linear-gradient(to right, rgba(0,0,0,0.78), rgba(0,0,0,0.52)), url('${n.imageUrl}'); background-size: cover; background-position: center;`
+                      : ''}
+                  >
+                    <div class="text-xs tracking-wide text-white/60">ZEIT · RSS</div>
+                    <div class="mt-2 text-xl md:text-2xl font-semibold leading-snug break-words">{n.title}</div>
+                    {#if n.teaser}
+                      <div class="mt-3 text-white/70 text-base leading-snug break-words">{n.teaser}</div>
+                    {/if}
+                  </div>
+                </div>
+              {/if}
             </div>
           </div>
         </div>

@@ -69,7 +69,7 @@
       <div class="space-y-2">
         {#each items.slice(0, 4) as it (it.url)}
           <a
-            class="block text-sm text-white/85 hover:text-white underline-offset-2 hover:underline truncate"
+            class="block text-sm text-white/85 hover:text-white underline-offset-2 hover:underline whitespace-normal break-words"
             href={it.url}
             rel="noopener"
           >
