@@ -30,7 +30,7 @@ heosRouter.get('/players', (req, res) => {
 });
 
 heosRouter.get('/status', (req, res) => {
-  res.json(getStatus());
+  res.json({ ...getStatus() });
 });
 
 heosRouter.post('/scan', (req, res) => {
@@ -53,7 +53,7 @@ heosRouter.post('/play_stream', (req, res) => {
     const url = String(req?.body?.url || '').trim();
     const name = req?.body?.name ? String(req.body.name) : undefined;
 
-    if (!Number.isFinite(pid) || pid <= 0) return res.status(400).json({ ok: false, error: 'pid_required' });
+    if (!Number.isFinite(pid) || pid === 0) return res.status(400).json({ ok: false, error: 'pid_required' });
     if (!url) return res.status(400).json({ ok: false, error: 'url_required' });
 
     const r = await playStream(pid, url, name);
@@ -68,7 +68,7 @@ heosRouter.post('/play_state', (req, res) => {
   (async () => {
     const pid = Number(req?.body?.pid);
     const state = String(req?.body?.state || '').trim().toLowerCase();
-    if (!Number.isFinite(pid) || pid <= 0) return res.status(400).json({ ok: false, error: 'pid_required' });
+    if (!Number.isFinite(pid) || pid === 0) return res.status(400).json({ ok: false, error: 'pid_required' });
     if (!state) return res.status(400).json({ ok: false, error: 'state_required' });
 
     const r = await setPlayState(pid, state);

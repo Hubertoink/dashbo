@@ -93,7 +93,7 @@
     try {
       if (typeof localStorage === 'undefined') return;
       const n = Number(pid);
-      if (!pid || !Number.isFinite(n) || n <= 0) {
+      if (!pid || !Number.isFinite(n) || n === 0) {
         localStorage.removeItem(EDGE_HEOS_SELECTED_PLAYER_ID_KEY);
       } else {
         localStorage.setItem(EDGE_HEOS_SELECTED_PLAYER_ID_KEY, String(n));
@@ -198,25 +198,37 @@
         </button>
 
         {#if heosEnabled}
-          <button
-            type="button"
-            class="h-7 w-7 rounded-lg bg-white/10 hover:bg-white/20 inline-flex items-center justify-center ml-1"
-            on:click={toggleSpeakerPicker}
-            aria-label="HEOS Speaker wählen"
-            title="HEOS Speaker wählen"
-          >
-            <svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="currentColor">
-              <path d="M4 10v4c0 1.1.9 2 2 2h2l5 4V4L8 8H6c-1.1 0-2 .9-2 2zm13.5 2c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z" />
-            </svg>
-          </button>
-        {/if}
+          <div class="flex flex-col items-center gap-1 ml-1">
+            <button
+              type="button"
+              class="h-7 w-7 rounded-lg bg-white/10 hover:bg-white/20 inline-flex items-center justify-center"
+              on:click={toggleSpeakerPicker}
+              aria-label="HEOS Speaker wählen"
+              title="HEOS Speaker wählen"
+            >
+              <svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="currentColor">
+                <path d="M4 10v4c0 1.1.9 2 2 2h2l5 4V4L8 8H6c-1.1 0-2 .9-2 2zm13.5 2c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z" />
+              </svg>
+            </button>
 
-        {#if !heosEnabled}
+            <a
+              class="h-7 w-7 rounded-lg bg-white/10 hover:bg-white/20 inline-flex items-center justify-center"
+              href="/music"
+              aria-label="Bibliothek"
+              title="Bibliothek"
+            >
+              <svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="currentColor">
+                <path d="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-1 9h-4v4h-2v-4H9V9h4V5h2v4h4v2z"/>
+              </svg>
+            </a>
+          </div>
+        {:else}
           <!-- Bibliothek Icon-Button -->
           <a
             class="h-7 w-7 rounded-lg bg-white/10 hover:bg-white/20 inline-flex items-center justify-center ml-1"
             href="/music"
             aria-label="Bibliothek"
+            title="Bibliothek"
           >
             <svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="currentColor">
               <path d="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-1 9h-4v4h-2v-4H9V9h4V5h2v4h4v2z"/>
@@ -297,14 +309,6 @@
           >
             Aktualisieren
           </button>
-
-          <a
-            class="ml-auto h-9 px-3 rounded-lg bg-white/10 hover:bg-white/15 text-xs font-medium inline-flex items-center"
-            href="/music"
-            aria-label="Bibliothek"
-          >
-            Bibliothek
-          </a>
         </div>
       </div>
     </div>

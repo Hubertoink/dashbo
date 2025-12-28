@@ -39,7 +39,7 @@ export function getEdgeHeosSelectedPlayerIdFromStorage(): number | null {
   const raw = localStorage.getItem(EDGE_HEOS_SELECTED_PLAYER_ID_KEY);
   if (!raw) return null;
   const pid = Number(raw);
-  return Number.isFinite(pid) && pid > 0 ? pid : null;
+  return Number.isFinite(pid) && pid !== 0 ? pid : null;
 }
 
 export async function edgeFetchJson<T>(

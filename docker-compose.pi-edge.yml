@@ -20,6 +20,14 @@ services:
       # Comma-separated allowed origins for CORS.
       EDGE_ALLOWED_ORIGINS: ${EDGE_ALLOWED_ORIGINS:-https://dashbohub.de}
       MUSIC_LIBRARY_PATH: /mnt/music
+      # HEOS discovery/config (optional):
+      HEOS_HOST: ${HEOS_HOST:-}
+      HEOS_HOSTS: ${HEOS_HOSTS:-}
+      HEOS_SCAN_CIDR: ${HEOS_SCAN_CIDR:-}
+      HEOS_DISCOVERY_TIMEOUT_MS: ${HEOS_DISCOVERY_TIMEOUT_MS:-5000}
+      HEOS_COMMAND_TIMEOUT_MS: ${HEOS_COMMAND_TIMEOUT_MS:-5000}
+      HEOS_SCAN_TIMEOUT_MS: ${HEOS_SCAN_TIMEOUT_MS:-200}
+      HEOS_SCAN_CONCURRENCY: ${HEOS_SCAN_CONCURRENCY:-64}
     ports:
       - "${EDGE_PORT:-8787}:8787"
     volumes:
