@@ -62,6 +62,7 @@
   let modalError: string | null = null;
 
   let qTimer: any;
+  let mounted = false;
 
   function base(): string {
     return normalizeEdgeBaseUrl(edgeBaseUrl);
@@ -136,11 +137,12 @@
     selected = null;
 
     try {
-      selected = await edgeFetchJson<AlbumDetails>(
+      const r = await edgeFetchJson<{ ok: boolean; album: AlbumDetails }>(
         edgeBaseUrl,
         `/api/music/albums/${encodeURIComponent(albumId)}`,
         edgeToken || undefined
       );
+      selected = r?.album ?? null;
     } catch (err) {
       modalError = err instanceof Error ? err.message : 'Album konnte nicht geladen werden.';
     } finally {
@@ -168,6 +170,8 @@
 
     if (queue.length === 0) return;
     playAlbum(queue, 0);
+    closeModal();
+    void goto('/');
   }
 
   function playSelectedTrack(trackId: string) {
@@ -182,6 +186,8 @@
       album: t.album,
       coverUrl: coverUrl(selected.id)
     });
+    closeModal();
+    void goto('/');
   }
 
   onMount(() => {
@@ -190,6 +196,7 @@
       return;
     }
 
+    mounted = true;
     void loadStatusAndAlbums();
   });
 
@@ -197,7 +204,9 @@
     clearTimeout(qTimer);
   });
 
-  $: {
+  $: if (mounted) {
+    // Only re-query when search/filter changes (debounced)
+    const _key = `${q}\n${letter}`;
     clearTimeout(qTimer);
     qTimer = setTimeout(() => {
       void loadStatusAndAlbums();
