@@ -681,21 +681,23 @@
 
         {#if standbyMode && musicWidgetEnabled}
           <div class="standby-music mt-2 pb-4 text-white">
-            <div class="rounded-2xl border border-white/10 bg-white/5 backdrop-blur-md px-4 py-3">
-              <div class="flex items-center gap-3">
-                <div class="h-12 w-12 overflow-hidden rounded-xl border border-white/10 bg-white/5 shrink-0">
-                  {#if $musicPlayerState.now?.coverUrl}
-                    <img src={$musicPlayerState.now.coverUrl} alt="" class="h-full w-full object-cover" loading="lazy" />
-                  {/if}
-                </div>
-                <div class="min-w-0">
-                  {#if $musicPlayerState.now}
-                    <div class="text-base font-semibold text-white/90 truncate">{$musicPlayerState.now.artist}</div>
-                    <div class="text-white/60 text-sm truncate">{$musicPlayerState.now.title}</div>
-                  {:else}
-                    <div class="text-white/70 text-sm">Keine Wiedergabe</div>
-                  {/if}
-                </div>
+            <div class="flex items-center gap-4">
+              <div class="h-16 w-16 overflow-hidden rounded-2xl shadow-lg shadow-black/30 shrink-0">
+                {#if $musicPlayerState.now?.coverUrl}
+                  <img src={$musicPlayerState.now.coverUrl} alt="" class="h-full w-full object-cover" loading="lazy" />
+                {:else}
+                  <div class="h-full w-full bg-white/10 flex items-center justify-center">
+                    <svg viewBox="0 0 24 24" class="h-6 w-6 text-white/30" fill="currentColor"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>
+                  </div>
+                {/if}
+              </div>
+              <div class="min-w-0">
+                {#if $musicPlayerState.now}
+                  <div class="text-lg font-semibold text-white truncate">{$musicPlayerState.now.artist}</div>
+                  <div class="text-white/50 text-sm truncate">{$musicPlayerState.now.title}</div>
+                {:else}
+                  <div class="text-white/40 text-sm">Keine Wiedergabe</div>
+                {/if}
               </div>
             </div>
           </div>
@@ -723,24 +725,23 @@
 
               <div class="mt-auto">
                 {#if musicWidgetEnabled}
-                  <div class="standby-music mb-5 rounded-2xl border border-white/10 bg-white/5 backdrop-blur-md px-4 py-3">
-                    <div class="flex items-center gap-3">
-                      <div class="h-12 w-12 overflow-hidden rounded-xl border border-white/10 bg-white/5 shrink-0">
+                  <div class="standby-music mb-5">
+                    <div class="flex items-center gap-4">
+                      <div class="h-16 w-16 overflow-hidden rounded-2xl shadow-lg shadow-black/30 shrink-0">
                         {#if $musicPlayerState.now?.coverUrl}
-                          <img
-                            src={$musicPlayerState.now.coverUrl}
-                            alt=""
-                            class="h-full w-full object-cover"
-                            loading="lazy"
-                          />
+                          <img src={$musicPlayerState.now.coverUrl} alt="" class="h-full w-full object-cover" loading="lazy" />
+                        {:else}
+                          <div class="h-full w-full bg-white/10 flex items-center justify-center">
+                            <svg viewBox="0 0 24 24" class="h-6 w-6 text-white/30" fill="currentColor"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>
+                          </div>
                         {/if}
                       </div>
                       <div class="min-w-0">
                         {#if $musicPlayerState.now}
-                          <div class="text-base font-semibold text-white/90 truncate">{$musicPlayerState.now.artist}</div>
-                          <div class="text-white/60 text-sm truncate">{$musicPlayerState.now.title}</div>
+                          <div class="text-lg font-semibold text-white truncate">{$musicPlayerState.now.artist}</div>
+                          <div class="text-white/50 text-sm truncate">{$musicPlayerState.now.title}</div>
                         {:else}
-                          <div class="text-white/70 text-sm">Keine Wiedergabe</div>
+                          <div class="text-white/40 text-sm">Keine Wiedergabe</div>
                         {/if}
                       </div>
                     </div>
@@ -815,24 +816,23 @@
               </div>
 
               {#if musicWidgetEnabled}
-                <div class="standby-music mt-6 md:hidden rounded-2xl border border-white/10 bg-white/5 backdrop-blur-md px-4 py-3">
-                  <div class="flex items-center gap-3">
-                    <div class="h-12 w-12 overflow-hidden rounded-xl border border-white/10 bg-white/5 shrink-0">
+                <div class="standby-music mt-6 md:hidden">
+                  <div class="flex items-center gap-4">
+                    <div class="h-14 w-14 overflow-hidden rounded-xl shadow-lg shadow-black/30 shrink-0">
                       {#if $musicPlayerState.now?.coverUrl}
-                        <img
-                          src={$musicPlayerState.now.coverUrl}
-                          alt=""
-                          class="h-full w-full object-cover"
-                          loading="lazy"
-                        />
+                        <img src={$musicPlayerState.now.coverUrl} alt="" class="h-full w-full object-cover" loading="lazy" />
+                      {:else}
+                        <div class="h-full w-full bg-white/10 flex items-center justify-center">
+                          <svg viewBox="0 0 24 24" class="h-5 w-5 text-white/30" fill="currentColor"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>
+                        </div>
                       {/if}
                     </div>
                     <div class="min-w-0">
                       {#if $musicPlayerState.now}
-                        <div class="text-base font-semibold text-white/90 truncate">{$musicPlayerState.now.artist}</div>
-                        <div class="text-white/60 text-sm truncate">{$musicPlayerState.now.title}</div>
+                        <div class="text-base font-semibold text-white truncate">{$musicPlayerState.now.artist}</div>
+                        <div class="text-white/50 text-sm truncate">{$musicPlayerState.now.title}</div>
                       {:else}
-                        <div class="text-white/70 text-sm">Keine Wiedergabe</div>
+                        <div class="text-white/40 text-sm">Keine Wiedergabe</div>
                       {/if}
                     </div>
                   </div>
@@ -938,24 +938,23 @@
               {/if}
 
               {#if musicWidgetEnabled}
-                <div class="standby-music mb-8 rounded-2xl border border-white/10 bg-white/5 backdrop-blur-md px-4 py-3">
-                  <div class="flex items-center gap-3">
-                    <div class="h-12 w-12 overflow-hidden rounded-xl border border-white/10 bg-white/5 shrink-0">
+                <div class="standby-music mb-8">
+                  <div class="flex items-center gap-4">
+                    <div class="h-16 w-16 overflow-hidden rounded-2xl shadow-lg shadow-black/30 shrink-0">
                       {#if $musicPlayerState.now?.coverUrl}
-                        <img
-                          src={$musicPlayerState.now.coverUrl}
-                          alt=""
-                          class="h-full w-full object-cover"
-                          loading="lazy"
-                        />
+                        <img src={$musicPlayerState.now.coverUrl} alt="" class="h-full w-full object-cover" loading="lazy" />
+                      {:else}
+                        <div class="h-full w-full bg-white/10 flex items-center justify-center">
+                          <svg viewBox="0 0 24 24" class="h-6 w-6 text-white/30" fill="currentColor"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>
+                        </div>
                       {/if}
                     </div>
                     <div class="min-w-0">
                       {#if $musicPlayerState.now}
-                        <div class="text-base font-semibold text-white/90 truncate">{$musicPlayerState.now.artist}</div>
-                        <div class="text-white/60 text-sm truncate">{$musicPlayerState.now.title}</div>
+                        <div class="text-lg font-semibold text-white truncate">{$musicPlayerState.now.artist}</div>
+                        <div class="text-white/50 text-sm truncate">{$musicPlayerState.now.title}</div>
                       {:else}
-                        <div class="text-white/70 text-sm">Keine Wiedergabe</div>
+                        <div class="text-white/40 text-sm">Keine Wiedergabe</div>
                       {/if}
                     </div>
                   </div>
@@ -1031,24 +1030,23 @@
               </div>
 
               {#if musicWidgetEnabled}
-                <div class="standby-music mt-6 md:hidden rounded-2xl border border-white/10 bg-white/5 backdrop-blur-md px-4 py-3">
-                  <div class="flex items-center gap-3">
-                    <div class="h-12 w-12 overflow-hidden rounded-xl border border-white/10 bg-white/5 shrink-0">
+                <div class="standby-music mt-6 md:hidden">
+                  <div class="flex items-center gap-4">
+                    <div class="h-14 w-14 overflow-hidden rounded-xl shadow-lg shadow-black/30 shrink-0">
                       {#if $musicPlayerState.now?.coverUrl}
-                        <img
-                          src={$musicPlayerState.now.coverUrl}
-                          alt=""
-                          class="h-full w-full object-cover"
-                          loading="lazy"
-                        />
+                        <img src={$musicPlayerState.now.coverUrl} alt="" class="h-full w-full object-cover" loading="lazy" />
+                      {:else}
+                        <div class="h-full w-full bg-white/10 flex items-center justify-center">
+                          <svg viewBox="0 0 24 24" class="h-5 w-5 text-white/30" fill="currentColor"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>
+                        </div>
                       {/if}
                     </div>
                     <div class="min-w-0">
                       {#if $musicPlayerState.now}
-                        <div class="text-base font-semibold text-white/90 truncate">{$musicPlayerState.now.artist}</div>
-                        <div class="text-white/60 text-sm truncate">{$musicPlayerState.now.title}</div>
+                        <div class="text-base font-semibold text-white truncate">{$musicPlayerState.now.artist}</div>
+                        <div class="text-white/50 text-sm truncate">{$musicPlayerState.now.title}</div>
                       {:else}
-                        <div class="text-white/70 text-sm">Keine Wiedergabe</div>
+                        <div class="text-white/40 text-sm">Keine Wiedergabe</div>
                       {/if}
                     </div>
                   </div>
