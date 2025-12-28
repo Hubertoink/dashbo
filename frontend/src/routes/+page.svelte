@@ -728,7 +728,7 @@
                                 {#if e.location} <span> · {e.location}</span>{/if}
                                 {#if ps.length > 0}
                                   <span>
-                                    · <span class={`${p0 ? textFg[p0.color] ?? 'text-white/80' : 'text-white/80'} font-semibold`}>{ps.map((p) => p.name).join(', ')}</span>
+                                    · {#each ps as p, i (p.id)}{#if i > 0}, {/if}<span class={`${textFg[p.color] ?? 'text-white/80'} font-semibold`}>{p.name}</span>{/each}
                                   </span>
                                 {/if}
                               </div>
@@ -894,7 +894,7 @@
                                 {#if e.location} <span> · {e.location}</span>{/if}
                                 {#if ps.length > 0}
                                   <span>
-                                    · <span class={`${p0 ? textFg[p0.color] ?? 'text-white/80' : 'text-white/80'} font-semibold`}>{ps.map((p) => p.name).join(', ')}</span>
+                                    · {#each ps as p, i (p.id)}{#if i > 0}, {/if}<span class={`${textFg[p.color] ?? 'text-white/80'} font-semibold`}>{p.name}</span>{/each}
                                   </span>
                                 {/if}
                               </div>
