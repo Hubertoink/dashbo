@@ -188,8 +188,17 @@ class MusicLibrary {
     };
   }
 
-  async startScan() {
-    if (this._state.scanning && this._scanPromise) return { ok: true, started: false };
+  async startScan(opts = { force: false }) {
+    const force = Boolean(opts && opts.force);
+
+    if (this._state.scanning && this._scanPromise) {
+      if (force) {
+        // schedule another scan to run after the current one finishes
+        this._rescanRequested = true;
+        return { ok: true, started: true, queued: true };
+      }
+      return { ok: true, started: false };
+    }
 
     this._state.scanning = true;
     this._state.lastError = null;
@@ -202,11 +211,17 @@ class MusicLibrary {
       .catch((err) => {
         this._state.lastError = err instanceof Error ? err.message : String(err);
       })
-      .finally(() => {
+      .finally(async () => {
         this._state.scanning = false;
         this._recount();
         this._persistAll();
         this._scanPromise = null;
+
+        if (this._rescanRequested) {
+          // clear flag and start a fresh scan right away
+          this._rescanRequested = false;
+          await this.startScan();
+        }
       });
 
     return { ok: true, started: true };
@@ -419,7 +434,10 @@ class MusicLibrary {
         const year = typeof meta?.year === 'number' ? meta.year : null;
         const durationSec = typeof meta?.durationSec === 'number' ? meta.durationSec : null;
 
-        const albumId = makeAlbumId(derivedArtist, derivedAlbum);
+        // Determine grouping for album clustering: prefer tag album/artist when available
+        const groupingArtist = firstNonEmpty(meta?.artist, derivedArtist);
+        const groupingAlbum = firstNonEmpty(meta?.album, derivedAlbum);
+        const albumId = makeAlbumId(groupingArtist, groupingAlbum);
 
         nextTracks.set(t.id, {
           id: t.id,
@@ -437,23 +455,56 @@ class MusicLibrary {
           mtimeMs: t.mtimeMs
         });
 
+        // maintain album member directories for better cover discovery
+        const trackDir = normalizePathForId(path.dirname(t.normalizedRel));
         if (!nextAlbums.has(albumId)) {
           nextAlbums.set(albumId, {
             id: albumId,
-            artist: derivedArtist,
-            album: derivedAlbum,
+            artist: groupingArtist,
+            album: groupingAlbum,
             year,
-            coverRelPath: null
+            coverRelPath: null,
+            memberDirs: new Set([trackDir])
           });
+        } else {
+          const entry = nextAlbums.get(albumId);
+          if (entry && entry.memberDirs) entry.memberDirs.add(trackDir);
         }
       }
     });
     await Promise.all(workers);
 
-    // cover discovery (cheap and path-based)
+    // cover discovery: search album member directories first (if available), then fallback to path-based artist/album folder
     for (const a of nextAlbums.values()) {
-      const albumDirRel = normalizePathForId(path.join(String(a.artist), String(a.album)));
       const candidates = COVER_CANDIDATES;
+
+      // memberDirs may be a Set (during building)
+      const dirs = Array.isArray(a.memberDirs) ? a.memberDirs : a.memberDirs ? Array.from(a.memberDirs) : [];
+
+      // search each member dir for cover files
+      let found = false;
+      for (const dirRel of dirs) {
+        for (const file of candidates) {
+          const coverRel = normalizePathForId(path.join(dirRel, file));
+          const abs = path.join(root, coverRel.split('/').join(path.sep));
+          try {
+            const st = await fs.promises.stat(abs);
+            if (st.isFile()) {
+              a.coverRelPath = coverRel;
+              found = true;
+              break;
+            }
+          } catch {
+            // ignore
+          }
+        }
+        if (found) break;
+      }
+
+      if (found) continue;
+
+      // fallback: try derived artist/album path
+      const albumDirRel = normalizePathForId(path.join(String(a.artist), String(a.album)));
       for (const file of candidates) {
         const coverRel = normalizePathForId(path.join(albumDirRel, file));
         const abs = path.join(root, coverRel.split('/').join(path.sep));
@@ -467,6 +518,13 @@ class MusicLibrary {
           // ignore
         }
       }
+
+      // finally, if still not found, leave coverRelPath null
+    }
+
+    // convert memberDirs Sets to arrays for JSON-serializable state
+    for (const a of nextAlbums.values()) {
+      if (a.memberDirs && a.memberDirs instanceof Set) a.memberDirs = Array.from(a.memberDirs);
     }
 
     this._tracks = nextTracks;

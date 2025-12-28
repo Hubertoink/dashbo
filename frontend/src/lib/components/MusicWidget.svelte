@@ -15,7 +15,7 @@
   }
 </script>
 
-<div class="rounded-2xl bg-white/5 backdrop-blur-md border border-white/10 p-5">
+<div class="rounded-2xl bg-white/5 backdrop-blur-md border border-white/10 p-4">
   <div class="flex items-center justify-between mb-3">
     <div class="text-lg font-semibold">Musik</div>
     <a class="h-8 px-3 rounded-lg bg-white/10 hover:bg-white/15 text-xs font-medium inline-flex items-center" href="/music">
@@ -23,18 +23,21 @@
     </a>
   </div>
 
-  <div class="flex items-center gap-3">
-    <div class="h-12 w-12 overflow-hidden rounded-xl border border-white/10 bg-white/5">
+  <div class="flex flex-col md:flex-row items-stretch gap-4">
+    <div class="w-1/3 min-w-[96px] overflow-hidden rounded-xl border border-white/10 bg-white/5 flex-shrink-0">
       {#if now?.coverUrl}
         <img src={now.coverUrl} alt="" class="h-full w-full object-cover" loading="lazy" />
       {/if}
     </div>
 
-    <div class="min-w-0 flex-1">
+    <div class="min-w-0 flex-1 flex flex-col justify-between">
       {#if now}
-        <div class="text-sm font-medium truncate">{now.title}</div>
-        <div class="text-white/50 text-xs truncate">{now.artist} — {now.album}</div>
-        <div class="mt-2 flex items-center justify-between gap-2">
+        <div>
+          <div class="text-base md:text-lg font-semibold truncate">{now.title}</div>
+          <div class="text-white/50 text-sm truncate">{now.artist} — {now.album}</div>
+        </div>
+
+        <div class="mt-3 flex items-center justify-between gap-2">
           <div class="text-white/40 text-xs">{playing ? 'Wiedergabe läuft' : 'Pausiert'}</div>
 
           <div class="flex items-center gap-2">
@@ -79,7 +82,7 @@
           </div>
         </div>
 
-        <div class="mt-2">
+        <div class="mt-3">
           <div class="h-2 rounded-full bg-white/10 overflow-hidden">
             <div class="h-full bg-white/25" style={`width: ${pct}%`}></div>
           </div>

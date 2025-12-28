@@ -44,7 +44,8 @@
   import {
     EDGE_PLAYER_WIDGET_ENABLED_KEY,
     edgeHealth,
-    normalizeEdgeBaseUrl
+    normalizeEdgeBaseUrl,
+    edgeFetchJson
   } from '$lib/edge';
 
   let email = '';
@@ -171,6 +172,8 @@
   let edgeTestMessage: string | null = null;
   let edgeTestOk: boolean | null = null;
   let edgeSetupOpen = false;
+  let edgeScanBusy = false;
+  let edgeScanMessage: string | null = null;
 
   function isFirstRunHidden(): boolean {
     if (typeof localStorage === 'undefined') return false;
@@ -222,6 +225,31 @@
       edgeTestMessage = err instanceof Error ? err.message : 'Verbindung fehlgeschlagen.';
     } finally {
       edgeTestBusy = false;
+    }
+  }
+
+  async function scanEdgeNow() {
+    if (!edgeBaseUrl) return;
+    edgeScanBusy = true;
+    edgeScanMessage = null;
+    try {
+      const r = await edgeFetchJson<{ ok: boolean; started?: boolean; queued?: boolean }>(edgeBaseUrl, '/api/music/scan?force=1', edgeToken || undefined, { method: 'POST' });
+      if (r && typeof r === 'object') {
+        if (r.queued) {
+          edgeScanMessage = 'Scan angefordert; wird nach aktuellem Scan gestartet.';
+        } else if (r.started) {
+          edgeScanMessage = 'Scan gestartet.';
+        } else {
+          edgeScanMessage = 'Scan nicht gestartet (bereits aktiv).';
+        }
+      } else {
+        edgeScanMessage = 'Scan gestartet.';
+      }
+      showToast('Rescan auf Edge angefordert');
+    } catch (err) {
+      edgeScanMessage = err instanceof Error ? err.message : 'Scan fehlgeschlagen.';
+    } finally {
+      edgeScanBusy = false;
     }
   }
 
@@ -1296,8 +1324,22 @@
             >
               Verbindung testen
             </button>
+
+            <button
+              class="h-8 px-3 rounded-lg bg-white/20 hover:bg-white/25 text-xs font-medium disabled:opacity-50"
+              on:click={scanEdgeNow}
+              disabled={edgeScanBusy || !edgeBaseUrl.trim()}
+              title="Scanne die Musikbibliothek auf dem Edge (force)"
+            >
+              Rescan starten
+            </button>
+
             {#if edgeTestMessage}
               <div class={edgeTestOk ? 'text-emerald-300 text-xs' : 'text-red-300 text-xs'}>{edgeTestMessage}</div>
+            {/if}
+
+            {#if edgeScanMessage}
+              <div class="text-white/70 text-xs">{edgeScanMessage}</div>
             {/if}
           </div>
 

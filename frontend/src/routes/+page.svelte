@@ -674,7 +674,7 @@
         {/if}
 
         {#if musicWidgetEnabled}
-          <div class="mt-2 pb-8 text-white">
+          <div class="mt-2 pb-4 text-white">
             <MusicWidget />
           </div>
         {/if}

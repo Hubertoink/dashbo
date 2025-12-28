@@ -11,8 +11,9 @@ musicRouter.get('/status', (req, res) => {
 });
 
 musicRouter.post('/scan', (req, res) => {
+  const force = String(req.query.force || '') === '1' || String(req.query.force || '').toLowerCase() === 'true';
   getMusicLibrary()
-    .startScan()
+    .startScan({ force })
     .then((result) => res.json(result))
     .catch((err) => res.status(500).json({ error: 'scan_failed', message: err instanceof Error ? err.message : String(err) }));
 });
