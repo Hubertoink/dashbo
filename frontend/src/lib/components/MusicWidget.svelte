@@ -26,6 +26,11 @@
   let speakersError: string | null = null;
   let speakers: HeosPlayerDto[] = [];
   let selectedPid = '';
+  let heosStatusLine: string | null = null;
+
+  function closeSpeakerModal() {
+    speakerOpen = false;
+  }
 
   function loadHeosConfig() {
     if (typeof localStorage === 'undefined') return;
@@ -36,21 +41,48 @@
     selectedPid = pidRaw ? String(pidRaw) : '';
   }
 
-  async function fetchSpeakers() {
+  function fmtIsoShort(iso: string | null | undefined): string {
+    if (!iso) return '';
+    try {
+      const d = new Date(iso);
+      if (Number.isNaN(d.getTime())) return '';
+      return d.toLocaleString();
+    } catch {
+      return '';
+    }
+  }
+
+  async function fetchSpeakers(opts?: { force?: boolean }) {
     speakersError = null;
+    heosStatusLine = null;
     speakersBusy = true;
     try {
       const base = normalizeEdgeBaseUrl(edgeBaseUrl);
       if (!base) throw new Error('Edge Base URL fehlt');
 
-      const r = await edgeFetchJson<{ ok: boolean; players: HeosPlayerDto[] }>(
-        base,
-        '/api/heos/players',
-        edgeToken || undefined
-      );
-      speakers = Array.isArray(r?.players) ? r.players : [];
+      const force = Boolean(opts?.force);
+      const path = force ? '/api/heos/scan?force=1' : '/api/heos/players';
+
+      const r = await edgeFetchJson<any>(base, path, edgeToken || undefined, force ? { method: 'POST' } : undefined);
+      const players = Array.isArray(r?.players) ? r.players : [];
+      speakers = players;
+
+      const count = Array.isArray(players) ? players.length : 0;
+      const scannedAt = fmtIsoShort(r?.lastScanAt);
+      const err = typeof r?.lastError === 'string' && r.lastError ? r.lastError : '';
+      heosStatusLine = err
+        ? `Fehler: ${err}`
+        : scannedAt
+          ? `${count} Speaker · Scan: ${scannedAt}`
+          : `${count} Speaker`;
     } catch (err) {
-      speakersError = err instanceof Error ? err.message : 'Speaker konnten nicht geladen werden.';
+      const msg = err instanceof Error ? err.message : 'Speaker konnten nicht geladen werden.';
+      // 501 almost certainly means an outdated Edge instance is still running.
+      if (String(msg).includes('501')) {
+        speakersError = 'HEOS API ist auf dem Edge noch nicht aktiv (501). Bitte Edge neu starten/neu deployen.';
+      } else {
+        speakersError = msg;
+      }
       speakers = [];
     } finally {
       speakersBusy = false;
@@ -75,7 +107,7 @@
     loadHeosConfig();
     speakerOpen = !speakerOpen;
     if (speakerOpen && speakers.length === 0 && !speakersBusy) {
-      await fetchSpeakers();
+      await fetchSpeakers({ force: true });
     }
   }
 
@@ -179,16 +211,18 @@
           </button>
         {/if}
 
-        <!-- Bibliothek Icon-Button -->
-        <a
-          class="h-7 w-7 rounded-lg bg-white/10 hover:bg-white/20 inline-flex items-center justify-center ml-1"
-          href="/music"
-          aria-label="Bibliothek"
-        >
-          <svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="currentColor">
-            <path d="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-1 9h-4v4h-2v-4H9V9h4V5h2v4h4v2z"/>
-          </svg>
-        </a>
+        {#if !heosEnabled}
+          <!-- Bibliothek Icon-Button -->
+          <a
+            class="h-7 w-7 rounded-lg bg-white/10 hover:bg-white/20 inline-flex items-center justify-center ml-1"
+            href="/music"
+            aria-label="Bibliothek"
+          >
+            <svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="currentColor">
+              <path d="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-1 9h-4v4h-2v-4H9V9h4V5h2v4h4v2z"/>
+            </svg>
+          </a>
+        {/if}
       </div>
     {:else}
       <div class="flex-1">
@@ -207,45 +241,72 @@
     {/if}
   </div>
 
-  {#if heosEnabled && speakerOpen}
-    <div class="absolute right-3 top-full mt-2 z-10 w-[260px] rounded-xl bg-black/80 border border-white/10 backdrop-blur-md p-2">
-      <div class="text-xs text-white/70 mb-1">HEOS Speaker</div>
+</div>
 
-      {#if speakersBusy}
-        <div class="text-xs text-white/60">Lade…</div>
-      {:else if speakersError}
-        <div class="text-xs text-red-300">{speakersError}</div>
-      {:else}
-        <select
-          class="w-full h-9 px-3 rounded-lg bg-white/10 border-0 text-sm"
-          bind:value={selectedPid}
-          on:change={() => persistSelectedPid(selectedPid)}
-        >
-          <option value="">Kein Speaker</option>
-          {#each speakers as s}
-            <option value={String(s.pid)}>{s.name}</option>
-          {/each}
-        </select>
-      {/if}
+{#if heosEnabled && speakerOpen}
+  <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+  <div class="fixed inset-0 z-50" on:click={closeSpeakerModal}>
+    <div class="absolute inset-0 bg-black/55"></div>
+    <div class="absolute inset-0 flex items-center justify-center p-4">
+      <div
+        class="w-full max-w-sm rounded-2xl bg-black/85 border border-white/10 backdrop-blur-md p-4"
+        on:click|stopPropagation
+      >
+        <div class="flex items-center">
+          <div class="font-medium">HEOS Speaker</div>
+          <button
+            class="ml-auto h-8 px-3 rounded-lg bg-white/10 hover:bg-white/15 text-xs font-medium"
+            type="button"
+            on:click={closeSpeakerModal}
+          >
+            Schließen
+          </button>
+        </div>
 
-      <div class="flex items-center gap-2 mt-2">
-        <button
-          class="h-8 px-3 rounded-lg bg-white/10 hover:bg-white/15 text-xs font-medium disabled:opacity-50"
-          type="button"
-          on:click={fetchSpeakers}
-          disabled={speakersBusy}
-        >
-          Aktualisieren
-        </button>
+        <div class="text-xs text-white/60 mt-1">Wähle, auf welchem Speaker abgespielt wird.</div>
 
-        <button
-          class="ml-auto h-8 px-3 rounded-lg bg-white/10 hover:bg-white/15 text-xs font-medium"
-          type="button"
-          on:click={() => (speakerOpen = false)}
-        >
-          Schließen
-        </button>
+        {#if heosStatusLine}
+          <div class="text-[11px] text-white/50 mt-2">{heosStatusLine}</div>
+        {/if}
+
+        <div class="mt-3">
+          {#if speakersBusy}
+            <div class="text-xs text-white/60">Lade…</div>
+          {:else if speakersError}
+            <div class="text-xs text-red-300">{speakersError}</div>
+          {:else}
+            <select
+              class="w-full h-10 px-3 rounded-lg bg-white/10 border-0 text-sm"
+              bind:value={selectedPid}
+              on:change={() => persistSelectedPid(selectedPid)}
+            >
+              <option value="">Kein Speaker</option>
+              {#each speakers as s}
+                <option value={String(s.pid)}>{s.name}</option>
+              {/each}
+            </select>
+          {/if}
+        </div>
+
+        <div class="flex items-center gap-2 mt-3">
+          <button
+            class="h-9 px-3 rounded-lg bg-white/10 hover:bg-white/15 text-xs font-medium disabled:opacity-50"
+            type="button"
+            on:click={() => fetchSpeakers({ force: true })}
+            disabled={speakersBusy}
+          >
+            Aktualisieren
+          </button>
+
+          <a
+            class="ml-auto h-9 px-3 rounded-lg bg-white/10 hover:bg-white/15 text-xs font-medium inline-flex items-center"
+            href="/music"
+            aria-label="Bibliothek"
+          >
+            Bibliothek
+          </a>
+        </div>
       </div>
     </div>
-  {/if}
-</div>
+  </div>
+{/if}

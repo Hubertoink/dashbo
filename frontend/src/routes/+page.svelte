@@ -682,7 +682,7 @@
         {#if standbyMode && musicWidgetEnabled}
           <div class="standby-music mt-2 pb-4 text-white">
             <div class="flex items-center gap-4">
-              <div class="h-16 w-16 overflow-hidden rounded-2xl shadow-lg shadow-black/30 shrink-0">
+              <div class="h-16 w-16 overflow-hidden rounded-none shadow-lg shadow-black/30 shrink-0">
                 {#if $musicPlayerState.now?.coverUrl}
                   <img src={$musicPlayerState.now.coverUrl} alt="" class="h-full w-full object-cover" loading="lazy" />
                 {:else}
@@ -727,7 +727,7 @@
                 {#if musicWidgetEnabled}
                   <div class="standby-music mb-5">
                     <div class="flex items-center gap-4">
-                      <div class="h-16 w-16 overflow-hidden rounded-2xl shadow-lg shadow-black/30 shrink-0">
+                      <div class="h-16 w-16 overflow-hidden rounded-none shadow-lg shadow-black/30 shrink-0">
                         {#if $musicPlayerState.now?.coverUrl}
                           <img src={$musicPlayerState.now.coverUrl} alt="" class="h-full w-full object-cover" loading="lazy" />
                         {:else}
@@ -818,7 +818,7 @@
               {#if musicWidgetEnabled}
                 <div class="standby-music mt-6 md:hidden">
                   <div class="flex items-center gap-4">
-                    <div class="h-14 w-14 overflow-hidden rounded-xl shadow-lg shadow-black/30 shrink-0">
+                    <div class="h-14 w-14 overflow-hidden rounded-none shadow-lg shadow-black/30 shrink-0">
                       {#if $musicPlayerState.now?.coverUrl}
                         <img src={$musicPlayerState.now.coverUrl} alt="" class="h-full w-full object-cover" loading="lazy" />
                       {:else}
@@ -940,7 +940,7 @@
               {#if musicWidgetEnabled}
                 <div class="standby-music mb-8">
                   <div class="flex items-center gap-4">
-                    <div class="h-16 w-16 overflow-hidden rounded-2xl shadow-lg shadow-black/30 shrink-0">
+                    <div class="h-16 w-16 overflow-hidden rounded-none shadow-lg shadow-black/30 shrink-0">
                       {#if $musicPlayerState.now?.coverUrl}
                         <img src={$musicPlayerState.now.coverUrl} alt="" class="h-full w-full object-cover" loading="lazy" />
                       {:else}
@@ -1032,7 +1032,7 @@
               {#if musicWidgetEnabled}
                 <div class="standby-music mt-6 md:hidden">
                   <div class="flex items-center gap-4">
-                    <div class="h-14 w-14 overflow-hidden rounded-xl shadow-lg shadow-black/30 shrink-0">
+                    <div class="h-14 w-14 overflow-hidden rounded-none shadow-lg shadow-black/30 shrink-0">
                       {#if $musicPlayerState.now?.coverUrl}
                         <img src={$musicPlayerState.now.coverUrl} alt="" class="h-full w-full object-cover" loading="lazy" />
                       {:else}

@@ -3,7 +3,13 @@ const heos = require('heos-api');
 const DEFAULT_DISCOVERY_TIMEOUT_MS = 5000;
 const DEFAULT_COMMAND_TIMEOUT_MS = 5000;
 
+const DEFAULT_SCAN_TTL_MS = 10_000;
+
 let connectionPromise = null;
+
+let cachedPlayers = null;
+let lastScanAt = null;
+let lastError = null;
 
 function getDiscoveryTimeoutMs() {
   const raw = Number(process.env.HEOS_DISCOVERY_TIMEOUT_MS || DEFAULT_DISCOVERY_TIMEOUT_MS);
@@ -72,18 +78,58 @@ async function send(commandGroup, command, attributes, opts) {
   return responsePromise;
 }
 
-async function listPlayers() {
-  const resp = await send('player', 'get_players');
-  const payload = Array.isArray(resp?.payload) ? resp.payload : [];
+async function scanPlayers(opts) {
+  const force = Boolean(opts?.force);
+  const ttlMs = Math.max(0, Number(opts?.ttlMs ?? DEFAULT_SCAN_TTL_MS));
 
-  return payload
-    .map((p) => ({
-      pid: typeof p?.pid === 'number' ? p.pid : Number(p?.pid),
-      name: String(p?.name || ''),
-      model: p?.model ? String(p.model) : undefined,
-      version: p?.version ? String(p.version) : undefined
-    }))
-    .filter((p) => Number.isFinite(p.pid) && p.pid > 0 && p.name);
+  if (!force && cachedPlayers && lastScanAt && Date.now() - lastScanAt.getTime() < ttlMs) {
+    return cachedPlayers;
+  }
+
+  try {
+    const resp = await send('player', 'get_players');
+    const payload = Array.isArray(resp?.payload) ? resp.payload : [];
+
+    const players = payload
+      .map((p) => ({
+        pid: typeof p?.pid === 'number' ? p.pid : Number(p?.pid),
+        name: String(p?.name || ''),
+        model: p?.model ? String(p.model) : undefined,
+        version: p?.version ? String(p.version) : undefined
+      }))
+      .filter((p) => Number.isFinite(p.pid) && p.pid > 0 && p.name);
+
+    cachedPlayers = players;
+    lastScanAt = new Date();
+    lastError = null;
+    return players;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : typeof err === 'string' ? err : 'heos_error';
+    lastScanAt = new Date();
+
+    // Discovery might fail if there are simply no devices; treat as empty result.
+    if (String(msg).toLowerCase().includes('no devices found')) {
+      cachedPlayers = [];
+      lastError = 'No devices found';
+      return cachedPlayers;
+    }
+
+    lastError = msg;
+    throw err;
+  }
+}
+
+async function listPlayers() {
+  return scanPlayers({ force: false });
+}
+
+function getStatus() {
+  return {
+    ok: true,
+    lastScanAt: lastScanAt ? lastScanAt.toISOString() : null,
+    lastError: lastError || null,
+    playersCount: Array.isArray(cachedPlayers) ? cachedPlayers.length : 0
+  };
 }
 
 async function playStream(pid, url, name) {
@@ -106,6 +152,8 @@ async function setPlayState(pid, state) {
 
 module.exports = {
   listPlayers,
+  scanPlayers,
+  getStatus,
   playStream,
   setPlayState
 };
