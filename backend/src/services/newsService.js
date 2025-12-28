@@ -48,7 +48,7 @@ function firstTextSnippet(item) {
   ];
   for (const c of candidates) {
     const t = stripHtml(c);
-    if (t) return t;
+    if (t && !/^none$/i.test(t)) return t;
   }
   return null;
 }
@@ -90,7 +90,7 @@ async function fetchZeitRss({ limit = 4 } = {}) {
   const feed = await parser.parseURL(url);
   const items = Array.isArray(feed?.items) ? feed.items : [];
 
-  const normalized = items
+  const all = items
     .map((it) => {
       const title = typeof it?.title === 'string' ? it.title.trim() : '';
       const link = typeof it?.link === 'string' ? it.link.trim() : '';
@@ -100,7 +100,11 @@ async function fetchZeitRss({ limit = 4 } = {}) {
       return title && link ? { title, url: link, publishedAt, teaser, imageUrl } : null;
     })
     .filter(Boolean)
-    .slice(0, Math.max(1, Math.min(20, Number(limit) || 4)));
+
+  const max = Math.max(1, Math.min(20, Number(limit) || 4));
+  const withTeaser = all.filter((it) => it.teaser);
+  const withoutTeaser = all.filter((it) => !it.teaser);
+  const normalized = [...withTeaser, ...withoutTeaser].slice(0, max);
 
   const out = { source: 'zeit', items: normalized };
   setCached(cacheKey, out);
