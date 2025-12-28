@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const mm = require('music-metadata');
 
 const DEFAULT_LIBRARY_PATH = '/mnt/music';
 const DEFAULT_DATA_DIR = '/var/lib/dashbo-edge';
@@ -63,6 +64,39 @@ function parseTrackNoAndTitle(baseName) {
   if (!m) return { trackNo: null, title: s };
   const n = Number(m[1]);
   return { trackNo: Number.isFinite(n) ? n : null, title: String(m[2] || s).trim() };
+}
+
+function firstNonEmpty(...values) {
+  for (const v of values) {
+    const s = typeof v === 'string' ? v.trim() : '';
+    if (s) return s;
+  }
+  return '';
+}
+
+async function readAudioMetadata(absPath) {
+  try {
+    const meta = await mm.parseFile(absPath, { duration: true });
+    const common = meta.common || {};
+    const format = meta.format || {};
+
+    const title = typeof common.title === 'string' ? common.title.trim() : '';
+    const artist = typeof common.artist === 'string' ? common.artist.trim() : '';
+    const album = typeof common.album === 'string' ? common.album.trim() : '';
+
+    const trackNoRaw = common.track && typeof common.track.no === 'number' ? common.track.no : null;
+    const trackNo = Number.isFinite(trackNoRaw) ? trackNoRaw : null;
+
+    const yearRaw = typeof common.year === 'number' ? common.year : null;
+    const year = Number.isFinite(yearRaw) ? yearRaw : null;
+
+    const durationRaw = typeof format.duration === 'number' ? format.duration : null;
+    const durationSec = Number.isFinite(durationRaw) ? Math.round(durationRaw) : null;
+
+    return { title, artist, album, trackNo, year, durationSec };
+  } catch {
+    return null;
+  }
 }
 
 function firstLetterKey(value) {
@@ -311,6 +345,8 @@ class MusicLibrary {
     const nextTracks = new Map();
     const nextAlbums = new Map();
 
+    const trackCandidates = [];
+
     const walk = async (dir) => {
       const entries = await fs.promises.readdir(dir, { withFileTypes: true });
       for (const ent of entries) {
@@ -341,36 +377,78 @@ class MusicLibrary {
         const id = makeTrackId(normalizedRel);
 
         const baseName = path.basename(ent.name, ext);
-        const { artist, album } = deriveArtistAlbum(normalizedRel);
-        const albumId = makeAlbumId(artist, album);
-        const { trackNo, title } = parseTrackNoAndTitle(baseName);
+        const derived = deriveArtistAlbum(normalizedRel);
+        const parsed = parseTrackNoAndTitle(baseName);
 
-        nextTracks.set(id, {
+        trackCandidates.push({
           id,
-          relPath: normalizedRel,
-          name: baseName,
+          full,
+          normalizedRel,
+          ext,
+          size: st.size,
+          mtimeMs: st.mtimeMs,
+          baseName,
+          derived,
+          parsed
+        });
+      }
+    };
+
+    await walk(root);
+
+    // Read metadata with limited concurrency (avoid hammering disks)
+    const CONCURRENCY = 6;
+    let cursor = 0;
+    const workers = Array.from({ length: CONCURRENCY }, async () => {
+      while (cursor < trackCandidates.length) {
+        const i = cursor++;
+        const t = trackCandidates[i];
+        if (!t) continue;
+        const meta = await readAudioMetadata(t.full);
+
+        // Keep album grouping based on folder structure so cover discovery stays reliable.
+        // Use tags for display where available.
+        const derivedArtist = t.derived.artist;
+        const derivedAlbum = t.derived.album;
+
+        const artist = firstNonEmpty(meta?.artist, derivedArtist);
+        const album = firstNonEmpty(meta?.album, derivedAlbum);
+        const title = firstNonEmpty(meta?.title, t.parsed.title, t.baseName);
+
+        const trackNo = typeof meta?.trackNo === 'number' ? meta.trackNo : t.parsed.trackNo;
+        const year = typeof meta?.year === 'number' ? meta.year : null;
+        const durationSec = typeof meta?.durationSec === 'number' ? meta.durationSec : null;
+
+        const albumId = makeAlbumId(derivedArtist, derivedAlbum);
+
+        nextTracks.set(t.id, {
+          id: t.id,
+          relPath: t.normalizedRel,
+          name: t.baseName,
           title,
           trackNo,
           artist,
           album,
           albumId,
-          ext,
-          size: st.size,
-          mtimeMs: st.mtimeMs
+          year,
+          durationSec,
+          ext: t.ext,
+          size: t.size,
+          mtimeMs: t.mtimeMs
         });
 
         if (!nextAlbums.has(albumId)) {
           nextAlbums.set(albumId, {
             id: albumId,
-            artist,
-            album,
+            artist: derivedArtist,
+            album: derivedAlbum,
+            year,
             coverRelPath: null
           });
         }
       }
-    };
-
-    await walk(root);
+    });
+    await Promise.all(workers);
 
     // cover discovery (cheap and path-based)
     for (const a of nextAlbums.values()) {

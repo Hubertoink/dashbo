@@ -699,7 +699,7 @@
 
               <div class="text-white"><ForecastWidget /></div>
 
-              {#if musicWidgetEnabled && $musicPlayerState.playing && $musicPlayerState.now}
+              {#if musicWidgetEnabled && $musicPlayerState.now}
                 <div class="mt-6">
                   <div class="rounded-2xl bg-white/5 backdrop-blur-md border border-white/10 px-4 py-3">
                     <div class="flex items-center gap-3">
