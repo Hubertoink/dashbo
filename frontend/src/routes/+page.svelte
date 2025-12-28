@@ -937,6 +937,31 @@
                 <div class="mt-6 pb-8 text-white"><TodoWidget variant="plain" /></div>
               {/if}
 
+              {#if musicWidgetEnabled}
+                <div class="standby-music mb-8 rounded-2xl border border-white/10 bg-white/5 backdrop-blur-md px-4 py-3">
+                  <div class="flex items-center gap-3">
+                    <div class="h-12 w-12 overflow-hidden rounded-xl border border-white/10 bg-white/5 shrink-0">
+                      {#if $musicPlayerState.now?.coverUrl}
+                        <img
+                          src={$musicPlayerState.now.coverUrl}
+                          alt=""
+                          class="h-full w-full object-cover"
+                          loading="lazy"
+                        />
+                      {/if}
+                    </div>
+                    <div class="min-w-0">
+                      {#if $musicPlayerState.now}
+                        <div class="text-base font-semibold text-white/90 truncate">{$musicPlayerState.now.artist}</div>
+                        <div class="text-white/60 text-sm truncate">{$musicPlayerState.now.title}</div>
+                      {:else}
+                        <div class="text-white/70 text-sm">Keine Wiedergabe</div>
+                      {/if}
+                    </div>
+                  </div>
+                </div>
+              {/if}
+
               <div class="mt-auto pb-2">
                 <div class="text-white">
                   <div class="text-xl md:text-2xl font-semibold tracking-wide mb-3">{todayFullDate}</div>
@@ -1004,6 +1029,31 @@
                   {/key}
                 {/if}
               </div>
+
+              {#if musicWidgetEnabled}
+                <div class="standby-music mt-6 md:hidden rounded-2xl border border-white/10 bg-white/5 backdrop-blur-md px-4 py-3">
+                  <div class="flex items-center gap-3">
+                    <div class="h-12 w-12 overflow-hidden rounded-xl border border-white/10 bg-white/5 shrink-0">
+                      {#if $musicPlayerState.now?.coverUrl}
+                        <img
+                          src={$musicPlayerState.now.coverUrl}
+                          alt=""
+                          class="h-full w-full object-cover"
+                          loading="lazy"
+                        />
+                      {/if}
+                    </div>
+                    <div class="min-w-0">
+                      {#if $musicPlayerState.now}
+                        <div class="text-base font-semibold text-white/90 truncate">{$musicPlayerState.now.artist}</div>
+                        <div class="text-white/60 text-sm truncate">{$musicPlayerState.now.title}</div>
+                      {:else}
+                        <div class="text-white/70 text-sm">Keine Wiedergabe</div>
+                      {/if}
+                    </div>
+                  </div>
+                </div>
+              {/if}
 
               {#if newsEnabled}
                 <div class="mt-auto pt-6">
