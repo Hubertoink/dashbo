@@ -6,6 +6,22 @@ const DEFAULT_LIBRARY_PATH = '/mnt/music';
 const DEFAULT_DATA_DIR = '/var/lib/dashbo-edge';
 
 const AUDIO_EXTENSIONS = new Set(['.mp3', '.m4a', '.aac', '.flac', '.wav', '.ogg', '.opus', '.wma']);
+const COVER_CANDIDATES = [
+  'cover.jpg',
+  'cover.jpeg',
+  'cover.png',
+  'folder.jpg',
+  'folder.jpeg',
+  'folder.png',
+  'front.jpg',
+  'front.jpeg',
+  'front.png',
+  'album.jpg',
+  'album.jpeg',
+  'album.png',
+  'AlbumArtSmall.jpg',
+  'AlbumArt.jpg'
+];
 
 function getLibraryPath() {
   return String(process.env.MUSIC_LIBRARY_PATH || DEFAULT_LIBRARY_PATH);
@@ -21,6 +37,39 @@ function normalizePathForId(relativePath) {
 
 function makeTrackId(relativePath) {
   return crypto.createHash('sha1').update(normalizePathForId(relativePath)).digest('hex');
+}
+
+function makeAlbumId(artist, album) {
+  return crypto
+    .createHash('sha1')
+    .update(`${String(artist || '').toLowerCase()}\n${String(album || '').toLowerCase()}`)
+    .digest('hex');
+}
+
+function splitRelPath(relPath) {
+  return normalizePathForId(relPath).split('/').filter(Boolean);
+}
+
+function deriveArtistAlbum(relPath) {
+  const parts = splitRelPath(relPath);
+  const artist = parts.length >= 2 ? parts[0] : 'Unbekannt';
+  const album = parts.length >= 2 ? parts[1] : 'Unbekannt';
+  return { artist, album };
+}
+
+function parseTrackNoAndTitle(baseName) {
+  const s = String(baseName || '').trim();
+  const m = s.match(/^\s*(\d{1,3})\s*[-._ )]+\s*(.+?)\s*$/);
+  if (!m) return { trackNo: null, title: s };
+  const n = Number(m[1]);
+  return { trackNo: Number.isFinite(n) ? n : null, title: String(m[2] || s).trim() };
+}
+
+function firstLetterKey(value) {
+  const s = String(value || '').trim();
+  if (!s) return '#';
+  const ch = s[0].toUpperCase();
+  return ch >= 'A' && ch <= 'Z' ? ch : '#';
 }
 
 function ensureDirSync(dirPath) {
@@ -56,17 +105,26 @@ class MusicLibrary {
     };
 
     this._tracks = new Map();
+    this._albums = new Map();
     this._scanPromise = null;
 
     ensureDirSync(getDataDir());
 
     this._tracksPath = path.join(getDataDir(), 'library.tracks.json');
+    this._albumsPath = path.join(getDataDir(), 'library.albums.json');
     this._statePath = path.join(getDataDir(), 'library.state.json');
 
     const loadedTracks = safeJsonReadSync(this._tracksPath, []);
     if (Array.isArray(loadedTracks)) {
       for (const t of loadedTracks) {
         if (t && typeof t.id === 'string') this._tracks.set(t.id, t);
+      }
+    }
+
+    const loadedAlbums = safeJsonReadSync(this._albumsPath, []);
+    if (Array.isArray(loadedAlbums)) {
+      for (const a of loadedAlbums) {
+        if (a && typeof a.id === 'string') this._albums.set(a.id, a);
       }
     }
 
@@ -141,6 +199,72 @@ class MusicLibrary {
     return { ok: true, total, offset, limit, items: slice };
   }
 
+  listAlbums({ offset = 0, limit = 200, q = '', letter = '' } = {}) {
+    const query = String(q || '').trim().toLowerCase();
+    const lk = String(letter || '').trim().toUpperCase();
+
+    const items = Array.from(this._albums.values())
+      .filter((a) => {
+        if (lk && lk !== 'ALL') {
+          const key = firstLetterKey(a.album);
+          if (lk === '#') {
+            if (key !== '#') return false;
+          } else if (key !== lk) {
+            return false;
+          }
+        }
+
+        if (!query) return true;
+        const name = String(a.album || '').toLowerCase();
+        const artist = String(a.artist || '').toLowerCase();
+        return name.includes(query) || artist.includes(query);
+      })
+      .sort((a, b) => {
+        const aa = `${String(a.artist)}\n${String(a.album)}`;
+        const bb = `${String(b.artist)}\n${String(b.album)}`;
+        return aa.localeCompare(bb);
+      });
+
+    const total = items.length;
+    const slice = items.slice(offset, offset + limit);
+    return { ok: true, total, offset, limit, items: slice };
+  }
+
+  getAlbum(albumId) {
+    const a = this._albums.get(String(albumId || ''));
+    if (!a) return null;
+
+    const tracks = Array.from(this._tracks.values())
+      .filter((t) => t.albumId === a.id)
+      .sort((x, y) => {
+        const ax = typeof x.trackNo === 'number' ? x.trackNo : 9999;
+        const ay = typeof y.trackNo === 'number' ? y.trackNo : 9999;
+        if (ax !== ay) return ax - ay;
+        return String(x.relPath).localeCompare(String(y.relPath));
+      });
+
+    return { ...a, tracks };
+  }
+
+  resolveTrackAbsPath(trackId) {
+    const t = this._tracks.get(String(trackId || ''));
+    if (!t) return null;
+    const root = getLibraryPath();
+    const rel = String(t.relPath || '');
+    // relPath already normalized to forward slashes; make it OS-safe
+    const safeRel = rel.split('/').join(path.sep);
+    return path.join(root, safeRel);
+  }
+
+  resolveAlbumCoverAbsPath(albumId) {
+    const a = this._albums.get(String(albumId || ''));
+    if (!a || !a.coverRelPath) return null;
+    const root = getLibraryPath();
+    const rel = String(a.coverRelPath || '');
+    const safeRel = rel.split('/').join(path.sep);
+    return path.join(root, safeRel);
+  }
+
   _persistState() {
     try {
       safeJsonWriteSync(this._statePath, this._state);
@@ -157,15 +281,24 @@ class MusicLibrary {
     }
   }
 
+  _persistAlbums() {
+    try {
+      safeJsonWriteSync(this._albumsPath, Array.from(this._albums.values()));
+    } catch {
+      // ignore
+    }
+  }
+
   _persistAll() {
     this._persistState();
     this._persistTracks();
+    this._persistAlbums();
   }
 
   _recount() {
     this._state.counts = {
       tracks: this._tracks.size,
-      albums: 0
+      albums: this._albums.size
     };
   }
 
@@ -175,7 +308,8 @@ class MusicLibrary {
     const stat = await fs.promises.stat(root);
     if (!stat.isDirectory()) throw new Error('MUSIC_LIBRARY_PATH is not a directory');
 
-    const next = new Map();
+    const nextTracks = new Map();
+    const nextAlbums = new Map();
 
     const walk = async (dir) => {
       const entries = await fs.promises.readdir(dir, { withFileTypes: true });
@@ -203,22 +337,62 @@ class MusicLibrary {
         }
 
         const relPath = path.relative(root, full);
-        const id = makeTrackId(relPath);
+        const normalizedRel = normalizePathForId(relPath);
+        const id = makeTrackId(normalizedRel);
 
-        next.set(id, {
+        const baseName = path.basename(ent.name, ext);
+        const { artist, album } = deriveArtistAlbum(normalizedRel);
+        const albumId = makeAlbumId(artist, album);
+        const { trackNo, title } = parseTrackNoAndTitle(baseName);
+
+        nextTracks.set(id, {
           id,
-          relPath: normalizePathForId(relPath),
-          name: path.basename(ent.name, ext),
+          relPath: normalizedRel,
+          name: baseName,
+          title,
+          trackNo,
+          artist,
+          album,
+          albumId,
           ext,
           size: st.size,
           mtimeMs: st.mtimeMs
         });
+
+        if (!nextAlbums.has(albumId)) {
+          nextAlbums.set(albumId, {
+            id: albumId,
+            artist,
+            album,
+            coverRelPath: null
+          });
+        }
       }
     };
 
     await walk(root);
 
-    this._tracks = next;
+    // cover discovery (cheap and path-based)
+    for (const a of nextAlbums.values()) {
+      const albumDirRel = normalizePathForId(path.join(String(a.artist), String(a.album)));
+      const candidates = COVER_CANDIDATES;
+      for (const file of candidates) {
+        const coverRel = normalizePathForId(path.join(albumDirRel, file));
+        const abs = path.join(root, coverRel.split('/').join(path.sep));
+        try {
+          const st = await fs.promises.stat(abs);
+          if (st.isFile()) {
+            a.coverRelPath = coverRel;
+            break;
+          }
+        } catch {
+          // ignore
+        }
+      }
+    }
+
+    this._tracks = nextTracks;
+    this._albums = nextAlbums;
   }
 }
 

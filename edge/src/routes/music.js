@@ -1,4 +1,6 @@
 const express = require('express');
+const fs = require('fs');
+const path = require('path');
 
 const { getMusicLibrary } = require('../services/musicLibrary');
 
@@ -20,6 +22,94 @@ musicRouter.get('/tracks', (req, res) => {
   const offset = Math.max(0, Number(req.query.offset || 0));
   const q = typeof req.query.q === 'string' ? req.query.q : '';
   res.json(getMusicLibrary().listTracks({ limit, offset, q }));
+});
+
+musicRouter.get('/albums', (req, res) => {
+  const limit = Math.min(400, Math.max(1, Number(req.query.limit || 200)));
+  const offset = Math.max(0, Number(req.query.offset || 0));
+  const q = typeof req.query.q === 'string' ? req.query.q : '';
+  const letter = typeof req.query.letter === 'string' ? req.query.letter : '';
+  res.json(getMusicLibrary().listAlbums({ limit, offset, q, letter }));
+});
+
+musicRouter.get('/albums/:albumId', (req, res) => {
+  const albumId = String(req.params.albumId || '');
+  const a = getMusicLibrary().getAlbum(albumId);
+  if (!a) return res.status(404).json({ error: 'not_found' });
+  res.json({ ok: true, album: a });
+});
+
+musicRouter.get('/albums/:albumId/cover', (req, res) => {
+  const albumId = String(req.params.albumId || '');
+  const abs = getMusicLibrary().resolveAlbumCoverAbsPath(albumId);
+  if (!abs) return res.status(404).json({ error: 'no_cover' });
+
+  const ext = path.extname(abs).toLowerCase();
+  const mime = ext === '.png' ? 'image/png' : ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg' : 'application/octet-stream';
+  res.setHeader('Content-Type', mime);
+  res.setHeader('Cache-Control', 'private, max-age=300');
+  fs.createReadStream(abs)
+    .on('error', () => res.status(404).end())
+    .pipe(res);
+});
+
+musicRouter.get('/tracks/:trackId/stream', async (req, res) => {
+  const trackId = String(req.params.trackId || '');
+  const abs = getMusicLibrary().resolveTrackAbsPath(trackId);
+  if (!abs) return res.status(404).json({ error: 'not_found' });
+
+  let stat;
+  try {
+    stat = await fs.promises.stat(abs);
+  } catch {
+    return res.status(404).json({ error: 'not_found' });
+  }
+
+  const size = stat.size;
+  const ext = path.extname(abs).toLowerCase();
+  const mime =
+    ext === '.mp3'
+      ? 'audio/mpeg'
+      : ext === '.m4a'
+        ? 'audio/mp4'
+        : ext === '.aac'
+          ? 'audio/aac'
+          : ext === '.flac'
+            ? 'audio/flac'
+            : ext === '.ogg'
+              ? 'audio/ogg'
+              : ext === '.opus'
+                ? 'audio/opus'
+                : ext === '.wav'
+                  ? 'audio/wav'
+                  : 'application/octet-stream';
+
+  res.setHeader('Accept-Ranges', 'bytes');
+  res.setHeader('Content-Type', mime);
+
+  const range = String(req.headers.range || '');
+  const m = range.match(/bytes=(\d+)-(\d+)?/);
+  if (m) {
+    const start = Number(m[1]);
+    const end = m[2] ? Number(m[2]) : size - 1;
+    if (!Number.isFinite(start) || !Number.isFinite(end) || start < 0 || end < start || start >= size) {
+      res.status(416).setHeader('Content-Range', `bytes */${size}`).end();
+      return;
+    }
+    const cappedEnd = Math.min(end, size - 1);
+    res.status(206);
+    res.setHeader('Content-Range', `bytes ${start}-${cappedEnd}/${size}`);
+    res.setHeader('Content-Length', String(cappedEnd - start + 1));
+    fs.createReadStream(abs, { start, end: cappedEnd })
+      .on('error', () => res.status(500).end())
+      .pipe(res);
+    return;
+  }
+
+  res.setHeader('Content-Length', String(size));
+  fs.createReadStream(abs)
+    .on('error', () => res.status(500).end())
+    .pipe(res);
 });
 
 module.exports = { musicRouter };
