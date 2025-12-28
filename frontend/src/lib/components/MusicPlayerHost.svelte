@@ -22,6 +22,7 @@
   let queue: NowPlayingTrack[] = [];
   let index = 0;
 
+  let heosActive = false;
   let heosPlaying = false;
 
   function buildHeosHeaders(): Record<string, string> {
@@ -31,6 +32,30 @@
 
   function current(): NowPlayingTrack | null {
     return queue[index] ?? null;
+  }
+
+  async function startLocalPlayback(track: NowPlayingTrack) {
+    if (!audioEl) {
+      setNowPlaying(track, false);
+      return;
+    }
+
+    audioEl.src = buildEdgeStreamUrl(track.trackId);
+    try {
+      if ('mediaSession' in navigator) {
+        navigator.mediaSession.metadata = new MediaMetadata({
+          title: track.title,
+          artist: track.artist,
+          album: track.album,
+          artwork: track.coverUrl ? [{ src: track.coverUrl, sizes: '512x512', type: 'image/jpeg' }] : []
+        });
+      }
+    } catch {
+      // ignore
+    }
+
+    await audioEl.play();
+    setNowPlaying(track, true);
   }
 
   async function startAt(i: number) {
@@ -50,6 +75,9 @@
     setNowPlaying(track, false);
     setProgress(0, 0);
 
+    heosActive = false;
+    heosPlaying = false;
+
     try {
       if (heosEnabled && heosPid && edgeBaseUrl) {
         const url = buildEdgeStreamUrl(track.trackId);
@@ -58,39 +86,29 @@
           headers: buildHeosHeaders(),
           body: JSON.stringify({ pid: heosPid, url, name: `${track.artist} - ${track.title}` })
         });
+        heosActive = true;
         heosPlaying = true;
         setNowPlaying(track, true);
         return;
       }
 
-      if (!audioEl) {
-        setNowPlaying(track, false);
-        return;
-      }
-
-      audioEl.src = buildEdgeStreamUrl(track.trackId);
-      // Make the cover available to the Media Session API (nice-to-have but harmless)
-      try {
-        if ('mediaSession' in navigator) {
-          navigator.mediaSession.metadata = new MediaMetadata({
-            title: track.title,
-            artist: track.artist,
-            album: track.album,
-            artwork: track.coverUrl ? [{ src: track.coverUrl, sizes: '512x512', type: 'image/jpeg' }] : []
-          });
-        }
-      } catch {
-        // ignore
-      }
-
-      await audioEl.play();
-      setNowPlaying(track, true);
+      await startLocalPlayback(track);
     } catch (err) {
-      // Autoplay may be blocked; keep state as not playing.
+      // If HEOS fails, fall back to local playback so the player doesn't get stuck.
       if (heosEnabled && heosPid) {
         const msg = err instanceof Error ? err.message : String(err || 'HEOS play failed');
         console.error('[HEOS] play_stream failed:', msg);
+        try {
+          heosActive = false;
+          heosPlaying = false;
+          await startLocalPlayback(track);
+          return;
+        } catch {
+          // fall through
+        }
       }
+
+      heosActive = false;
       heosPlaying = false;
       setNowPlaying(track, false);
     }
@@ -102,25 +120,60 @@
     const edgeBaseUrl = getEdgeBaseUrlFromStorage();
     const edgeToken = getEdgeTokenFromStorage();
 
-    if (heosEnabled && heosPid && edgeBaseUrl) {
-      try {
-        const state = heosPlaying ? 'pause' : 'play';
-        await edgeFetchJson(edgeBaseUrl, '/api/heos/play_state', edgeToken || undefined, {
-          method: 'POST',
-          headers: buildHeosHeaders(),
-          body: JSON.stringify({ pid: heosPid, state })
-        });
-        heosPlaying = !heosPlaying;
-        setNowPlaying(current(), heosPlaying);
-      } catch {
-        // ignore
+    const track = current();
+
+    if (!heosPid) {
+      heosActive = false;
+      heosPlaying = false;
+    }
+
+    if (heosEnabled && heosPid && edgeBaseUrl && track) {
+      // If HEOS is selected but not active yet, start stream for the current track.
+      if (!heosActive) {
+        try {
+          const url = buildEdgeStreamUrl(track.trackId);
+          await edgeFetchJson(edgeBaseUrl, '/api/heos/play_stream', edgeToken || undefined, {
+            method: 'POST',
+            headers: buildHeosHeaders(),
+            body: JSON.stringify({ pid: heosPid, url, name: `${track.artist} - ${track.title}` })
+          });
+          heosActive = true;
+          heosPlaying = true;
+          setNowPlaying(track, true);
+          return;
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err || 'HEOS play failed');
+          console.error('[HEOS] play_stream failed (toggle):', msg);
+          heosActive = false;
+          heosPlaying = false;
+          // fall through to local
+        }
+      } else {
+        try {
+          const state = heosPlaying ? 'pause' : 'play';
+          await edgeFetchJson(edgeBaseUrl, '/api/heos/play_state', edgeToken || undefined, {
+            method: 'POST',
+            headers: buildHeosHeaders(),
+            body: JSON.stringify({ pid: heosPid, state })
+          });
+          heosPlaying = !heosPlaying;
+          setNowPlaying(track, heosPlaying);
+          return;
+        } catch {
+          heosActive = false;
+          heosPlaying = false;
+          // fall through to local
+        }
       }
-      return;
     }
 
     if (!audioEl) return;
     if (audioEl.paused) {
       try {
+        if (!audioEl.src && track) {
+          // Recover from mode-switching: ensure local <audio> has a src.
+          audioEl.src = buildEdgeStreamUrl(track.trackId);
+        }
         await audioEl.play();
       } catch {
         // ignore

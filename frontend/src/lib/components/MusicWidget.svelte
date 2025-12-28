@@ -194,9 +194,9 @@
       <!-- Controls -->
       <div class="flex flex-col items-end gap-1 ml-2">
         {#if heosEnabled}
-          <div class="text-[10px] text-white/50 leading-none">
-            HEOS: {selectedName ? selectedName : selectedPid ? selectedPid : 'Kein Speaker'}
-          </div>
+          {#if selectedPid}
+            <div class="text-[10px] text-white/50 leading-none">HEOS: {selectedName ? selectedName : selectedPid}</div>
+          {/if}
         {/if}
 
         <div class="flex items-center gap-1">
@@ -330,16 +330,35 @@
           {:else if speakersError}
             <div class="text-xs text-red-300">{speakersError}</div>
           {:else}
-            <select
-              class="w-full h-10 px-3 rounded-lg bg-white/10 border-0 text-sm"
-              bind:value={selectedPid}
-              on:change={() => persistSelectedPid(selectedPid)}
-            >
-              <option value="">Kein Speaker</option>
-              {#each speakers as s}
-                <option value={String(s.pid)}>{s.name}</option>
-              {/each}
-            </select>
+            <div class="rounded-xl bg-white/5 border border-white/10 overflow-hidden">
+              <button
+                type="button"
+                class={`w-full px-3 py-2 text-left text-sm hover:bg-white/10 transition ${!selectedPid ? 'bg-white/10' : ''}`}
+                on:click={() => {
+                  selectedPid = '';
+                  persistSelectedPid('');
+                  closeSpeakerModal();
+                }}
+              >
+                Kein Speaker
+              </button>
+
+              <div class="max-h-56 overflow-auto">
+                {#each speakers as s}
+                  <button
+                    type="button"
+                    class={`w-full px-3 py-2 text-left text-sm hover:bg-white/10 transition ${selectedPid === String(s.pid) ? 'bg-white/10' : ''}`}
+                    on:click={() => {
+                      selectedPid = String(s.pid);
+                      persistSelectedPid(selectedPid);
+                      closeSpeakerModal();
+                    }}
+                  >
+                    {s.name}
+                  </button>
+                {/each}
+              </div>
+            </div>
           {/if}
         </div>
 
