@@ -64,17 +64,6 @@ function splitRelPath(relPath) {
   return normalizePathForId(relPath).split('/').filter(Boolean);
 }
 
-function deriveArtistAlbum(relPath) {
-  // Prefer the folder directly containing the file as the album and the parent folder as artist.
-  const parts = splitRelPath(relPath);
-  if (parts.length >= 2) {
-    const album = parts[parts.length - 2] || 'Unbekannt';
-    const artist = parts.length >= 3 ? parts[parts.length - 3] : 'Unbekannt';
-    return { artist, album };
-  }
-  return { artist: 'Unbekannt', album: 'Unbekannt' };
-}
-
 function parseTrackNoAndTitle(baseName) {
   const s = String(baseName || '').trim();
   const m = s.match(/^\s*(\d{1,3})\s*[-._ )]+\s*(.+?)\s*$/);
@@ -524,7 +513,6 @@ class MusicLibrary {
         const id = makeTrackId(normalizedRel);
 
         const baseName = path.basename(ent.name, ext);
-        const derived = deriveArtistAlbum(normalizedRel);
         const parsed = parseTrackNoAndTitle(baseName);
 
         trackCandidates.push({
@@ -535,7 +523,6 @@ class MusicLibrary {
           size: st.size,
           mtimeMs: st.mtimeMs,
           baseName,
-          derived,
           parsed
         });
       }
@@ -553,31 +540,21 @@ class MusicLibrary {
         if (!t) continue;
         const meta = await readAudioMetadata(t.full, t.ext);
 
-        // Keep album grouping based on folder structure so cover discovery stays reliable.
-        // Use tags for display where available.
-        const derivedArtist = t.derived.artist;
-        const derivedAlbum = t.derived.album;
+        // Build the library purely based on tags (foobar-like). Folder names must not influence grouping.
+        const tagArtist = firstNonEmpty(meta?.artist) || 'Unbekannt';
+        const tagAlbum = firstNonEmpty(meta?.album);
+        const tagAlbumArtist = firstNonEmpty(meta?.albumartist, meta?.artist);
 
-        const artist = firstNonEmpty(meta?.artist, derivedArtist);
-        const album = firstNonEmpty(meta?.album, derivedAlbum);
+        const groupingAlbum = tagAlbum || 'Singles';
+        const groupingArtist = tagAlbum ? (tagAlbumArtist || tagArtist || 'Unbekannt') : (tagArtist || 'Unbekannt');
+
+        const artist = tagArtist;
+        const album = groupingAlbum;
         const title = firstNonEmpty(meta?.title, t.parsed.title, t.baseName);
 
         const trackNo = typeof meta?.trackNo === 'number' ? meta.trackNo : t.parsed.trackNo;
         const year = typeof meta?.year === 'number' ? meta.year : null;
         const durationSec = typeof meta?.durationSec === 'number' ? meta.durationSec : null;
-
-        // Decide album/artist grouping: prefer album tags (album + albumartist) when available
-        const trackDirRaw = normalizePathForId(path.dirname(t.normalizedRel));
-        const trackDirParts = trackDirRaw.split('/').filter(Boolean);
-        const folderAlbum = trackDirParts.length >= 1 ? trackDirParts[trackDirParts.length - 1] : '';
-        const folderArtistRaw = trackDirParts.length >= 2 ? trackDirParts[trackDirParts.length - 2] : '';
-        const folderArtist = plausibleArtist(folderArtistRaw) ? folderArtistRaw : '';
-
-        const tagAlbum = firstNonEmpty(meta?.album);
-        const tagAlbumArtist = firstNonEmpty(meta?.albumartist, meta?.artist);
-
-        const groupingAlbum = firstNonEmpty(tagAlbum, folderAlbum, derivedAlbum) || 'Unbekannt';
-        const groupingArtist = firstNonEmpty(tagAlbumArtist, folderArtist, plausibleArtist(derivedArtist) ? derivedArtist : '') || 'Unbekannt';
 
         // Normalize keys for stable clustering (strip punctuation and collapse whitespace)
         const albumId = makeAlbumId(normalizeForId(groupingArtist), normalizeForId(groupingAlbum));
@@ -604,8 +581,9 @@ class MusicLibrary {
           mtimeMs: t.mtimeMs
         });
 
-        // maintain album member directories for better cover discovery (only include real dirs)
-        const trackDir = trackDirParts.length > 0 ? trackDirRaw : '';
+        // Track directory for cover discovery. normalizedRel uses forward slashes.
+        const trackDirPosix = path.posix.dirname(t.normalizedRel);
+        const trackDir = trackDirPosix && trackDirPosix !== '.' ? trackDirPosix : '';
         if (!nextAlbums.has(albumId)) {
           const albumEntry = { id: albumId, artist: groupingArtist, album: groupingAlbum, year, coverRelPath: null };
           if (trackDir) albumEntry.memberDirs = new Set([trackDir]);
@@ -618,68 +596,6 @@ class MusicLibrary {
     });
     await Promise.all(workers);
 
-    // Split overly-generic albums (e.g., 'Music'/'36') into sub-albums when folder structure indicates distinct albums
-    for (const [aid, a] of Array.from(nextAlbums.entries())) {
-      // collect tracks belonging to this album
-      const tracksForA = Array.from(nextTracks.values()).filter((t) => t.albumId === aid);
-      const subMap = new Map();
-      for (const t of tracksForA) {
-        const parts = splitRelPath(t.relPath);
-        // find index of album folder in parts
-        const idx = parts.findIndex((p) => String(p) === String(a.album));
-        const subName = idx >= 0 && parts.length > idx + 1 ? parts[idx + 1] : '';
-        const key = (subName || '').trim();
-        if (!subMap.has(key)) subMap.set(key, []);
-        subMap.get(key).push(t);
-      }
-
-      // if there are multiple non-empty sub-albums, and the parent album looks generic (numeric or 'Music'), split
-      const nonEmptyKeys = Array.from(subMap.keys()).filter((k) => k);
-      const shouldSplit = (nonEmptyKeys.length > 1) && (!plausibleArtist(a.artist) || /^\d+$/.test(String(a.album)));
-      if (!shouldSplit) continue;
-
-      // remove parent album and create child albums
-      nextAlbums.delete(aid);
-      for (const key of nonEmptyKeys) {
-        const childTracks = subMap.get(key) || [];
-        // determine artist for child by checking track-level artist tags
-        let childArtist = '';
-        for (const ct of childTracks) {
-          if (ct.artist && plausibleArtist(ct.artist)) {
-            childArtist = ct.artist;
-            break;
-          }
-        }
-        if (!childArtist) childArtist = a.artist;
-
-        const childAlbum = key;
-        const childAlbumId = makeAlbumId(childArtist || a.artist || '', childAlbum || a.album || '');
-        // ensure unique album id
-        if (!nextAlbums.has(childAlbumId)) {
-          nextAlbums.set(childAlbumId, {
-            id: childAlbumId,
-            artist: childArtist || a.artist,
-            album: childAlbum,
-            year: a.year,
-            coverRelPath: null,
-            memberDirs: new Set()
-          });
-        }
-
-        // reassign tracks to new child album and collect member dirs
-        const childEntry = nextAlbums.get(childAlbumId);
-        for (const ct of childTracks) {
-          ct.albumId = childAlbumId;
-          if (ct.relPath) {
-            const dir = normalizePathForId(path.dirname(ct.relPath));
-            if (!childEntry.memberDirs) childEntry.memberDirs = new Set();
-            childEntry.memberDirs.add(dir);
-          }
-          nextTracks.set(ct.id, ct);
-        }
-      }
-    }
-
     // cover discovery: search album member directories first (if available), then fallback to path-based artist/album folder
     for (const a of nextAlbums.values()) {
       const candidates = COVER_CANDIDATES;
@@ -691,7 +607,7 @@ class MusicLibrary {
       let found = false;
       for (const dirRel of dirs) {
         for (const file of candidates) {
-          const coverRel = normalizePathForId(path.join(dirRel, file));
+          const coverRel = normalizePathForId(path.posix.join(String(dirRel || ''), file));
           const abs = path.join(root, coverRel.split('/').join(path.sep));
           try {
             const st = await fs.promises.stat(abs);
@@ -707,25 +623,7 @@ class MusicLibrary {
         if (found) break;
       }
 
-      if (found) continue;
-
-      // fallback: try derived artist/album path
-      const albumDirRel = normalizePathForId(path.join(String(a.artist), String(a.album)));
-      for (const file of candidates) {
-        const coverRel = normalizePathForId(path.join(albumDirRel, file));
-        const abs = path.join(root, coverRel.split('/').join(path.sep));
-        try {
-          const st = await fs.promises.stat(abs);
-          if (st.isFile()) {
-            a.coverRelPath = coverRel;
-            break;
-          }
-        } catch {
-          // ignore
-        }
-      }
-
-      // finally, if still not found, leave coverRelPath null
+      // If still not found, leave coverRelPath null.
     }
 
     // Embedded cover fallback: if no cover file was found on disk, try extracting embedded artwork

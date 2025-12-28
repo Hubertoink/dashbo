@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onDestroy, onMount } from 'svelte';
   import { goto } from '$app/navigation';
   import { fade, fly } from 'svelte/transition';
   import {
@@ -174,6 +174,68 @@
   let edgeSetupOpen = false;
   let edgeScanBusy = false;
   let edgeScanMessage: string | null = null;
+  let edgeScanPollId = 0;
+  let edgeScanPollTimer: ReturnType<typeof setTimeout> | null = null;
+
+  type EdgeMusicStatusDto = {
+    ok: boolean;
+    scanning: boolean;
+    lastScanAt: string | null;
+    lastError: string | null;
+    libraryPath: string;
+    counts: { tracks: number; albums: number };
+  };
+
+  function stopEdgeScanPolling() {
+    if (edgeScanPollTimer) {
+      clearTimeout(edgeScanPollTimer);
+      edgeScanPollTimer = null;
+    }
+    edgeScanPollId += 1;
+  }
+
+  async function fetchEdgeMusicStatus(): Promise<EdgeMusicStatusDto> {
+    return await edgeFetchJson<EdgeMusicStatusDto>(edgeBaseUrl, '/api/music/status', edgeToken || undefined);
+  }
+
+  async function pollEdgeScanUntilDone(opts?: { timeoutMs?: number }) {
+    const timeoutMs = Math.max(10_000, Number(opts?.timeoutMs ?? 180_000));
+    const id = ++edgeScanPollId;
+    const startedAt = Date.now();
+
+    const tick = async () => {
+      if (id !== edgeScanPollId) return;
+      try {
+        const st = await fetchEdgeMusicStatus();
+        if (id !== edgeScanPollId) return;
+
+        if (st.scanning) {
+          edgeScanMessage = `Scan läuft… (${st.counts?.albums ?? 0} Alben · ${st.counts?.tracks ?? 0} Tracks)`;
+        } else {
+          if (st.lastError) {
+            edgeScanMessage = `Scan beendet mit Fehler: ${st.lastError}`;
+          } else {
+            edgeScanMessage = `Scan abgeschlossen. (${st.counts?.albums ?? 0} Alben · ${st.counts?.tracks ?? 0} Tracks)`;
+          }
+          return;
+        }
+
+        if (Date.now() - startedAt > timeoutMs) {
+          edgeScanMessage = 'Scan läuft im Hintergrund… (Status später erneut prüfen)';
+          return;
+        }
+
+        edgeScanPollTimer = setTimeout(() => {
+          void tick();
+        }, 1500);
+      } catch (err) {
+        if (id !== edgeScanPollId) return;
+        edgeScanMessage = err instanceof Error ? err.message : 'Status konnte nicht geladen werden.';
+      }
+    };
+
+    await tick();
+  }
 
   function isFirstRunHidden(): boolean {
     if (typeof localStorage === 'undefined') return false;
@@ -230,6 +292,7 @@
 
   async function scanEdgeNow() {
     if (!edgeBaseUrl) return;
+    stopEdgeScanPolling();
     edgeScanBusy = true;
     edgeScanMessage = null;
     try {
@@ -238,20 +301,26 @@
         if (r.queued) {
           edgeScanMessage = 'Scan angefordert; wird nach aktuellem Scan gestartet.';
         } else if (r.started) {
-          edgeScanMessage = 'Scan gestartet.';
+          edgeScanMessage = 'Scan gestartet…';
         } else {
           edgeScanMessage = 'Scan nicht gestartet (bereits aktiv).';
         }
       } else {
-        edgeScanMessage = 'Scan gestartet.';
+        edgeScanMessage = 'Scan gestartet…';
       }
       showToast('Rescan auf Edge angefordert');
+      // If scan is running (or queued), poll status until it completes.
+      void pollEdgeScanUntilDone();
     } catch (err) {
       edgeScanMessage = err instanceof Error ? err.message : 'Scan fehlgeschlagen.';
     } finally {
       edgeScanBusy = false;
     }
   }
+
+  onDestroy(() => {
+    stopEdgeScanPolling();
+  });
 
   function hideFirstRun() {
     firstRunHidden = true;
