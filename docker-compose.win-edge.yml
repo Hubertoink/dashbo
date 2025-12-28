@@ -23,9 +23,10 @@ services:
     restart: unless-stopped
     environment:
       PORT: 8787
-      EDGE_TOKEN: ${EDGE_TOKEN}
-      # Comma-separated allowed origins for CORS.
-      EDGE_ALLOWED_ORIGINS: ${EDGE_ALLOWED_ORIGINS:-https://dashbohub.de}
+      # Use a strong token; default "1000" is for quick local testing only.
+      EDGE_TOKEN: ${EDGE_TOKEN:-1000}
+      # Comma-separated allowed origins for CORS. Include dashbohub.de + local dev URLs.
+      EDGE_ALLOWED_ORIGINS: ${EDGE_ALLOWED_ORIGINS:-https://dashbohub.de,http://localhost:8080,http://127.0.0.1:8080,http://localhost:5173}
       MUSIC_LIBRARY_PATH: /mnt/music
     ports:
       - "${EDGE_PORT:-8787}:8787"

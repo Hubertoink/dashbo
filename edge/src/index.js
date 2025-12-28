@@ -9,24 +9,44 @@ const app = express();
 
 const PORT = Number(process.env.PORT || 8787);
 const allowedOriginsRaw = String(process.env.EDGE_ALLOWED_ORIGINS || 'https://dashbohub.de');
+function normalizeOrigin(value) {
+  return String(value || '')
+    .trim()
+    .replace(/\/$/, '')
+    .toLowerCase();
+}
+
 const allowedOrigins = allowedOriginsRaw
   .split(',')
-  .map((s) => s.trim())
+  .map((s) => normalizeOrigin(s))
   .filter(Boolean);
 
 app.set('trust proxy', true);
+
+// Chrome Private Network Access (PNA): secure contexts calling local network endpoints
+// send a preflight with Access-Control-Request-Private-Network: true.
+// Responding with Access-Control-Allow-Private-Network: true allows the request to proceed.
+app.use((req, res, next) => {
+  if (String(req.headers['access-control-request-private-network'] || '').toLowerCase() === 'true') {
+    res.setHeader('Access-Control-Allow-Private-Network', 'true');
+  }
+  next();
+});
 
 app.use(
   cors({
     origin: (origin, cb) => {
       if (!origin) return cb(null, false);
-      if (allowedOrigins.includes(origin)) return cb(null, true);
+      const o = normalizeOrigin(origin);
+      if (allowedOrigins.includes('*')) return cb(null, true);
+      if (allowedOrigins.includes(o)) return cb(null, true);
       return cb(null, false);
     },
     credentials: true,
-    allowedHeaders: ['Content-Type', 'Authorization', 'Range'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'Range', 'Access-Control-Request-Private-Network'],
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    exposedHeaders: ['Content-Range', 'Accept-Ranges']
+    exposedHeaders: ['Content-Range', 'Accept-Ranges'],
+    optionsSuccessStatus: 204
   })
 );
 
