@@ -52,6 +52,11 @@
   let loading = false;
   let error: string | null = null;
 
+  let scanBusy = false;
+  let scanMessage: string | null = null;
+  let scanPollId = 0;
+  let scanPollTimer: ReturnType<typeof setTimeout> | null = null;
+
   let q = '';
   let letter = 'All';
   const letters = ['All', ...'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split(''), '#'];
@@ -113,18 +118,81 @@
     }
   }
 
+  function stopScanPolling() {
+    if (scanPollTimer) {
+      clearTimeout(scanPollTimer);
+      scanPollTimer = null;
+    }
+    scanPollId += 1;
+  }
+
+  async function fetchEdgeMusicStatus(): Promise<EdgeMusicStatusDto> {
+    return await edgeFetchJson<EdgeMusicStatusDto>(edgeBaseUrl, '/api/music/status', edgeToken || undefined);
+  }
+
+  async function pollScanUntilDone(opts?: { timeoutMs?: number }) {
+    const timeoutMs = Math.max(10_000, Number(opts?.timeoutMs ?? 180_000));
+    const id = ++scanPollId;
+    const startedAt = Date.now();
+
+    const tick = async () => {
+      if (id !== scanPollId) return;
+      try {
+        const st = await fetchEdgeMusicStatus();
+        if (id !== scanPollId) return;
+        status = st;
+
+        if (st.scanning) {
+          scanMessage = `Scan läuft… (${st.counts?.albums ?? 0} Alben · ${st.counts?.tracks ?? 0} Tracks)`;
+        } else {
+          if (st.lastError) {
+            scanMessage = `Scan beendet mit Fehler: ${st.lastError}`;
+          } else {
+            scanMessage = `Scan abgeschlossen. (${st.counts?.albums ?? 0} Alben · ${st.counts?.tracks ?? 0} Tracks)`;
+          }
+          scanBusy = false;
+          await loadStatusAndAlbums();
+          return;
+        }
+
+        if (Date.now() - startedAt > timeoutMs) {
+          scanMessage = 'Scan läuft noch… (Timeout beim Warten auf Abschluss)';
+          scanBusy = false;
+          return;
+        }
+
+        scanPollTimer = setTimeout(tick, 1000);
+      } catch (err) {
+        if (id !== scanPollId) return;
+        scanMessage = err instanceof Error ? err.message : 'Fehler beim Prüfen des Scan-Status.';
+        scanBusy = false;
+      }
+    };
+
+    await tick();
+  }
+
   async function scan() {
-    if (!edgeBaseUrl) return;
-    loading = true;
+    edgeBaseUrl = getEdgeBaseUrlFromStorage();
+    edgeToken = getEdgeTokenFromStorage();
+    if (!edgeBaseUrl) {
+      error = 'Pi/PC Edge ist nicht konfiguriert.';
+      return;
+    }
+
+    stopScanPolling();
+    scanBusy = true;
+    scanMessage = 'Scan startet…';
     error = null;
 
     try {
       await edgeFetchJson(edgeBaseUrl, '/api/music/scan', edgeToken || undefined, { method: 'POST' });
-      await loadStatusAndAlbums();
+      await pollScanUntilDone();
     } catch (err) {
       error = err instanceof Error ? err.message : 'Scan fehlgeschlagen.';
+      scanBusy = false;
     } finally {
-      loading = false;
+      // scanBusy is managed by polling
     }
   }
 
@@ -202,6 +270,7 @@
 
   onDestroy(() => {
     clearTimeout(qTimer);
+    stopScanPolling();
   });
 
   $: if (mounted) {
@@ -234,18 +303,23 @@
         placeholder="Suchen (Artist/Album)"
         bind:value={q}
       />
-      <button class="h-10 rounded-lg border border-white/10 bg-white/5 px-3 text-sm hover:bg-white/10" on:click={scan} disabled={loading}>
-        Scan starten
-      </button>
       <button
-        class="h-10 rounded-lg border border-white/10 bg-white/5 px-3 text-sm hover:bg-white/10"
-        on:click={loadStatusAndAlbums}
-        disabled={loading}
+        class="h-10 rounded-lg border border-white/10 bg-white/5 px-3 text-sm hover:bg-white/10 disabled:opacity-50"
+        on:click={scan}
+        disabled={loading || scanBusy || status?.scanning}
       >
-        Neu laden
+        {#if scanBusy || status?.scanning}
+          Scan läuft…
+        {:else}
+          Scan starten
+        {/if}
       </button>
     </div>
   </div>
+
+  {#if scanMessage}
+    <div class="mt-2 text-xs text-white/60">{scanMessage}</div>
+  {/if}
 
   <div class="mt-3 flex flex-wrap gap-1">
     {#each letters as l}

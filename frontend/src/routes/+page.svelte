@@ -699,7 +699,7 @@
 
               <div class="text-white"><ForecastWidget /></div>
 
-              {#if musicWidgetEnabled}
+              {#if musicWidgetEnabled && $musicPlayerState.now}
                 <div class="mt-4">
                   <MusicWidget />
                 </div>
@@ -770,6 +770,12 @@
                   {/key}
                 {/if}
               </div>
+
+              {#if musicWidgetEnabled && $musicPlayerState.now}
+                <div class="mt-6 md:hidden">
+                  <MusicWidget />
+                </div>
+              {/if}
 
               {#if newsEnabled}
                 <div class="mt-auto pt-6">
