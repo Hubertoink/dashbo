@@ -8,10 +8,20 @@
     type NowPlayingTrack
   } from '$lib/stores/musicPlayer';
 
+  import {
+    edgeFetchJson,
+    getEdgeBaseUrlFromStorage,
+    getEdgeHeosEnabledFromStorage,
+    getEdgeHeosSelectedPlayerIdFromStorage,
+    getEdgeTokenFromStorage
+  } from '$lib/edge';
+
   let audioEl: HTMLAudioElement | null = null;
 
   let queue: NowPlayingTrack[] = [];
   let index = 0;
+
+  let heosPlaying = false;
 
   function current(): NowPlayingTrack | null {
     return queue[index] ?? null;
@@ -20,16 +30,38 @@
   async function startAt(i: number) {
     index = i;
     const track = current();
-    if (!track || !audioEl) {
+    if (!track) {
       setNowPlaying(null, false);
       setProgress(0, 0);
       return;
     }
 
+    const heosEnabled = getEdgeHeosEnabledFromStorage();
+    const heosPid = getEdgeHeosSelectedPlayerIdFromStorage();
+    const edgeBaseUrl = getEdgeBaseUrlFromStorage();
+    const edgeToken = getEdgeTokenFromStorage();
+
     setNowPlaying(track, false);
     setProgress(0, 0);
 
     try {
+      if (heosEnabled && heosPid && edgeBaseUrl) {
+        const url = buildEdgeStreamUrl(track.trackId);
+        await edgeFetchJson(edgeBaseUrl, '/api/heos/play_stream', edgeToken || undefined, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pid: heosPid, url, name: `${track.artist} - ${track.title}` })
+        });
+        heosPlaying = true;
+        setNowPlaying(track, true);
+        return;
+      }
+
+      if (!audioEl) {
+        setNowPlaying(track, false);
+        return;
+      }
+
       audioEl.src = buildEdgeStreamUrl(track.trackId);
       // Make the cover available to the Media Session API (nice-to-have but harmless)
       try {
@@ -49,11 +81,33 @@
       setNowPlaying(track, true);
     } catch {
       // Autoplay may be blocked; keep state as not playing.
+      heosPlaying = false;
       setNowPlaying(track, false);
     }
   }
 
   async function toggle() {
+    const heosEnabled = getEdgeHeosEnabledFromStorage();
+    const heosPid = getEdgeHeosSelectedPlayerIdFromStorage();
+    const edgeBaseUrl = getEdgeBaseUrlFromStorage();
+    const edgeToken = getEdgeTokenFromStorage();
+
+    if (heosEnabled && heosPid && edgeBaseUrl) {
+      try {
+        const state = heosPlaying ? 'pause' : 'play';
+        await edgeFetchJson(edgeBaseUrl, '/api/heos/play_state', edgeToken || undefined, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pid: heosPid, state })
+        });
+        heosPlaying = !heosPlaying;
+        setNowPlaying(current(), heosPlaying);
+      } catch {
+        // ignore
+      }
+      return;
+    }
+
     if (!audioEl) return;
     if (audioEl.paused) {
       try {
@@ -74,15 +128,20 @@
   }
 
   function prev() {
-    if (!audioEl) return;
-    if (audioEl.currentTime > 3) {
-      audioEl.currentTime = 0;
-      return;
+    const heosEnabled = getEdgeHeosEnabledFromStorage();
+    const heosPid = getEdgeHeosSelectedPlayerIdFromStorage();
+    const edgeBaseUrl = getEdgeBaseUrlFromStorage();
+    if (!heosEnabled || !heosPid || !edgeBaseUrl) {
+      if (!audioEl) return;
+      if (audioEl.currentTime > 3) {
+        audioEl.currentTime = 0;
+        return;
+      }
     }
     if (queue.length === 0) return;
     const p = index - 1;
     if (p < 0) {
-      audioEl.currentTime = 0;
+      if (audioEl) audioEl.currentTime = 0;
       return;
     }
     void startAt(p);
@@ -93,6 +152,7 @@
     const next = index + 1;
     if (next >= queue.length) {
       setNowPlaying(current(), false);
+      heosPlaying = false;
       return;
     }
     void startAt(next);

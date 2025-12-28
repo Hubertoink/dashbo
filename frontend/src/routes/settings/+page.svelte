@@ -43,6 +43,7 @@
 
   import {
     EDGE_PLAYER_WIDGET_ENABLED_KEY,
+    EDGE_HEOS_ENABLED_KEY,
     edgeHealth,
     normalizeEdgeBaseUrl,
     edgeFetchJson
@@ -168,6 +169,7 @@
   let edgeToken = '';
   let edgeSaving = false;
   let edgePlayerWidgetEnabled = false;
+  let edgeHeosEnabled = false;
   let edgeTestBusy = false;
   let edgeTestMessage: string | null = null;
   let edgeTestOk: boolean | null = null;
@@ -247,6 +249,7 @@
     edgeBaseUrl = localStorage.getItem(EDGE_BASE_URL_KEY) ?? '';
     edgeToken = localStorage.getItem(EDGE_TOKEN_KEY) ?? '';
     edgePlayerWidgetEnabled = localStorage.getItem(EDGE_PLAYER_WIDGET_ENABLED_KEY) === '1';
+    edgeHeosEnabled = localStorage.getItem(EDGE_HEOS_ENABLED_KEY) === '1';
   }
 
   function saveEdgeConfig() {
@@ -268,6 +271,17 @@
         localStorage.setItem(EDGE_PLAYER_WIDGET_ENABLED_KEY, edgePlayerWidgetEnabled ? '1' : '0');
       }
       showToast(edgePlayerWidgetEnabled ? 'Player Widget aktiviert' : 'Player Widget deaktiviert');
+    } catch {
+      // ignore
+    }
+  }
+
+  function saveEdgeHeosEnabled() {
+    try {
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem(EDGE_HEOS_ENABLED_KEY, edgeHeosEnabled ? '1' : '0');
+      }
+      showToast(edgeHeosEnabled ? 'HEOS aktiviert' : 'HEOS deaktiviert');
     } catch {
       // ignore
     }
@@ -1383,6 +1397,16 @@
               on:change={saveEdgePlayerWidgetEnabled}
             />
             Player Widget anzeigen
+          </label>
+
+          <label class="flex items-center gap-2 text-sm text-white/80 mt-2">
+            <input
+              type="checkbox"
+              class="rounded bg-white/10 border-0"
+              bind:checked={edgeHeosEnabled}
+              on:change={saveEdgeHeosEnabled}
+            />
+            HEOS aktivieren
           </label>
 
           <div class="flex items-center gap-2 mt-3">
