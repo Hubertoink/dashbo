@@ -187,6 +187,11 @@
     lime: 'bg-lime-400'
   };
 
+  const hexRe = /^#[0-9a-fA-F]{6}$/;
+  function isHexColor(value: unknown): value is string {
+    return typeof value === 'string' && hexRe.test(value);
+  }
+
   const textFg: Record<TagColorKey, string> = {
     fuchsia: 'text-fuchsia-300',
     cyan: 'text-cyan-300',
@@ -494,7 +499,8 @@
   });
 </script>
 
-<svelte:window on:click={() => (standbyMode ? exitStandby() : undefined)} />
+<!-- Capture ensures clicks still exit even if inner components stopPropagation -->
+<svelte:window on:click|capture={() => ((standbyMode || upcomingMode) ? exitStandby() : undefined)} />
 
 <div class="h-screen text-white overflow-hidden relative bg-black">
   <div class="absolute inset-0 overflow-hidden">
@@ -580,7 +586,18 @@
                           on:click={() => openEditEventModal(e)}
                         >
                           <div class="flex items-start gap-4">
-                            <div class={`mt-1.5 h-3 w-3 rounded-full shrink-0 ${e.tag ? dotBg[e.tag.color] : e.person ? dotBg[e.person.color] : 'bg-white/25'}`}></div>
+                            <div
+                              class={`mt-1.5 h-3 w-3 rounded-full shrink-0 ${
+                                e.tag
+                                  ? isHexColor(e.tag.color)
+                                    ? 'bg-transparent'
+                                    : dotBg[e.tag.color as TagColorKey] ?? 'bg-white/25'
+                                  : e.person
+                                    ? dotBg[e.person.color as TagColorKey] ?? 'bg-white/25'
+                                    : 'bg-white/25'
+                              }`}
+                              style={e.tag && isHexColor(e.tag.color) ? `background-color: ${e.tag.color}` : ''}
+                            ></div>
                             <div class="min-w-0 flex-1">
                               <div class="text-2xl font-semibold truncate">{e.title}</div>
                               <div class="text-white/60 mt-1 text-lg">
@@ -679,7 +696,18 @@
                           on:click={() => openEditEventModal(e)}
                         >
                           <div class="flex items-start gap-4">
-                            <div class={`mt-1.5 h-3 w-3 rounded-full shrink-0 ${e.tag ? dotBg[e.tag.color] : e.person ? dotBg[e.person.color] : 'bg-white/25'}`}></div>
+                            <div
+                              class={`mt-1.5 h-3 w-3 rounded-full shrink-0 ${
+                                e.tag
+                                  ? isHexColor(e.tag.color)
+                                    ? 'bg-transparent'
+                                    : dotBg[e.tag.color as TagColorKey] ?? 'bg-white/25'
+                                  : e.person
+                                    ? dotBg[e.person.color as TagColorKey] ?? 'bg-white/25'
+                                    : 'bg-white/25'
+                              }`}
+                              style={e.tag && isHexColor(e.tag.color) ? `background-color: ${e.tag.color}` : ''}
+                            ></div>
                             <div class="min-w-0 flex-1">
                               <div class="text-2xl font-semibold truncate">{e.title}</div>
                               <div class="text-white/60 mt-1 text-lg">
