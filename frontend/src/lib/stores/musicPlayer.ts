@@ -12,6 +12,8 @@ export type NowPlayingTrack = {
 type PlayerState = {
   now: NowPlayingTrack | null;
   playing: boolean;
+  positionSec: number;
+  durationSec: number;
 };
 
 type PlayCommand = {
@@ -20,8 +22,17 @@ type PlayCommand = {
   index: number;
 };
 
-const _state = writable<PlayerState>({ now: null, playing: false });
-const _command = writable<PlayCommand | null>(null);
+type ControlCommand =
+  | { type: 'toggle' }
+  | { type: 'pause' }
+  | { type: 'resume' }
+  | { type: 'next' }
+  | { type: 'prev' };
+
+type PlayerCommand = PlayCommand | ControlCommand;
+
+const _state = writable<PlayerState>({ now: null, playing: false, positionSec: 0, durationSec: 0 });
+const _command = writable<PlayerCommand | null>(null);
 
 export const musicPlayerState = {
   subscribe: _state.subscribe
@@ -33,7 +44,19 @@ export const musicPlayerCommand = {
 };
 
 export function setNowPlaying(now: NowPlayingTrack | null, playing: boolean) {
-  _state.set({ now, playing });
+  _state.update((prev) => ({
+    ...prev,
+    now,
+    playing,
+    positionSec: now ? prev.positionSec : 0,
+    durationSec: now ? prev.durationSec : 0
+  }));
+}
+
+export function setProgress(positionSec: number, durationSec: number) {
+  const p = Number.isFinite(positionSec) ? Math.max(0, positionSec) : 0;
+  const d = Number.isFinite(durationSec) ? Math.max(0, durationSec) : 0;
+  _state.update((prev) => ({ ...prev, positionSec: p, durationSec: d }));
 }
 
 export function playTrack(track: NowPlayingTrack) {
@@ -43,6 +66,18 @@ export function playTrack(track: NowPlayingTrack) {
 export function playAlbum(tracks: NowPlayingTrack[], startIndex = 0) {
   const idx = Math.max(0, Math.min(tracks.length - 1, startIndex));
   _command.set({ type: 'play', queue: tracks, index: idx });
+}
+
+export function togglePlayPause() {
+  _command.set({ type: 'toggle' });
+}
+
+export function playNext() {
+  _command.set({ type: 'next' });
+}
+
+export function playPrev() {
+  _command.set({ type: 'prev' });
 }
 
 export function buildEdgeStreamUrl(trackId: string): string {
