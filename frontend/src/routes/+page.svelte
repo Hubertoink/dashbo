@@ -673,13 +673,23 @@
           </div>
         {/if}
 
-        {#if musicWidgetEnabled}
-          <div class="mt-2 pb-4 text-white">
-            <MusicWidget />
+        {#if musicWidgetEnabled && $musicPlayerState.now}
+          <div class="mt-auto mb-4">
+            <div class="flex items-center gap-3">
+              <div class="h-12 w-12 rounded-lg overflow-hidden bg-white/10 shrink-0">
+                {#if $musicPlayerState.now.coverUrl}
+                  <img src={$musicPlayerState.now.coverUrl} alt="" class="h-full w-full object-cover" />
+                {/if}
+              </div>
+              <div class="min-w-0">
+                <div class="text-sm font-medium text-white/90 truncate">{$musicPlayerState.now.title}</div>
+                <div class="text-xs text-white/50 truncate">{$musicPlayerState.now.artist}</div>
+              </div>
+            </div>
           </div>
         {/if}
 
-        <div class="mt-auto pb-2">
+        <div class="pb-2">
           <div class="text-white"><Clock tone="light" /></div>
         </div>
       </div>
@@ -699,16 +709,26 @@
 
               <div class="text-white"><ForecastWidget /></div>
 
-              {#if musicWidgetEnabled && $musicPlayerState.now}
-                <div class="mt-4">
-                  <MusicWidget />
-                </div>
-              {/if}
+              <div class="mt-auto">
+                {#if musicWidgetEnabled && $musicPlayerState.now}
+                  <div class="mb-5 flex items-center gap-3">
+                    <div class="h-12 w-12 rounded-lg overflow-hidden bg-white/10 shrink-0">
+                      {#if $musicPlayerState.now.coverUrl}
+                        <img src={$musicPlayerState.now.coverUrl} alt="" class="h-full w-full object-cover" />
+                      {/if}
+                    </div>
+                    <div class="min-w-0">
+                      <div class="text-sm font-medium text-white/90 truncate">{$musicPlayerState.now.title}</div>
+                      <div class="text-xs text-white/50 truncate">{$musicPlayerState.now.artist}</div>
+                    </div>
+                  </div>
+                {/if}
 
-              <div class="pb-2">
-                <div class="text-white">
-                  <div class="text-xl md:text-2xl font-semibold tracking-wide mb-3">{todayFullDate}</div>
-                  <Clock tone="light" />
+                <div class="pb-2">
+                  <div class="text-white">
+                    <div class="text-xl md:text-2xl font-semibold tracking-wide mb-3">{todayFullDate}</div>
+                    <Clock tone="light" />
+                  </div>
                 </div>
               </div>
             </div>
@@ -875,10 +895,26 @@
                 <div class="mt-6 pb-8 text-white"><TodoWidget variant="plain" /></div>
               {/if}
 
-              <div class="mt-auto pb-2">
-                <div class="text-white">
-                  <div class="text-xl md:text-2xl font-semibold tracking-wide mb-3">{todayFullDate}</div>
-                  <Clock tone="light" />
+              <div class="mt-auto">
+                {#if musicWidgetEnabled && $musicPlayerState.now}
+                  <div class="mb-5 flex items-center gap-3">
+                    <div class="h-12 w-12 rounded-lg overflow-hidden bg-white/10 shrink-0">
+                      {#if $musicPlayerState.now.coverUrl}
+                        <img src={$musicPlayerState.now.coverUrl} alt="" class="h-full w-full object-cover" />
+                      {/if}
+                    </div>
+                    <div class="min-w-0">
+                      <div class="text-sm font-medium text-white/90 truncate">{$musicPlayerState.now.title}</div>
+                      <div class="text-xs text-white/50 truncate">{$musicPlayerState.now.artist}</div>
+                    </div>
+                  </div>
+                {/if}
+
+                <div class="pb-2">
+                  <div class="text-white">
+                    <div class="text-xl md:text-2xl font-semibold tracking-wide mb-3">{todayFullDate}</div>
+                    <Clock tone="light" />
+                  </div>
                 </div>
               </div>
             </div>
