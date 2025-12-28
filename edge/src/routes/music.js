@@ -1,6 +1,8 @@
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
+const mm = require('music-metadata');
+const nodeID3 = require('node-id3');
 
 const { getMusicLibrary } = require('../services/musicLibrary');
 
@@ -19,10 +21,18 @@ musicRouter.post('/scan', (req, res) => {
 });
 
 musicRouter.get('/tracks', (req, res) => {
-  const limit = Math.min(500, Math.max(1, Number(req.query.limit || 100)));
+  const limit = Math.min(2000, Math.max(1, Number(req.query.limit || 100)));
   const offset = Math.max(0, Number(req.query.offset || 0));
   const q = typeof req.query.q === 'string' ? req.query.q : '';
   res.json(getMusicLibrary().listTracks({ limit, offset, q }));
+});
+
+// Debug endpoint: list tracks that appear to be missing tags (title/album/artist)
+musicRouter.get('/debug/missing-tags', (req, res) => {
+  const limit = Math.min(5000, Math.max(1, Number(req.query.limit || 1000)));
+  const all = getMusicLibrary().listTracks({ limit, offset: 0, q: '' });
+  const bad = all.items.filter((t) => !t.title || !t.album || !t.artist);
+  res.json({ ok: true, total: bad.length, items: bad.slice(0, limit) });
 });
 
 musicRouter.get('/albums', (req, res) => {
@@ -111,6 +121,20 @@ musicRouter.get('/tracks/:trackId/stream', async (req, res) => {
   fs.createReadStream(abs)
     .on('error', () => res.status(500).end())
     .pipe(res);
+});
+
+// debug endpoint: return parsed metadata via both parsers for a track
+musicRouter.get('/tracks/:trackId/meta', async (req, res) => {
+  const trackId = String(req.params.trackId || '');
+  const abs = getMusicLibrary().resolveTrackAbsPath(trackId);
+  if (!abs) return res.status(404).json({ error: 'not_found' });
+  try {
+    const mmMeta = await mm.parseFile(abs, { duration: true }).catch((e) => ({ error: String(e) }));
+    const id3Meta = nodeID3.read(abs) || {};
+    res.json({ ok: true, mm: mmMeta, id3: id3Meta });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err instanceof Error ? err.message : String(err) });
+  }
 });
 
 module.exports = { musicRouter };

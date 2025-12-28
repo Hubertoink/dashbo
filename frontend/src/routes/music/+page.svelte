@@ -216,13 +216,16 @@
 
 <div class="mx-auto max-w-6xl p-6">
   <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-    <div>
-      <h1 class="text-xl font-semibold">Musik</h1>
-      {#if status}
-        <div class="mt-1 text-xs text-white/60">
-          {status.counts?.albums ?? 0} Alben · {status.counts?.tracks ?? 0} Tracks
-        </div>
-      {/if}
+    <div class="flex items-center gap-3">
+      <button class="h-9 px-3 rounded-lg bg-white/10 hover:bg-white/15 text-sm" on:click={() => goto('/')}>Zurück</button>
+      <div>
+        <h1 class="text-xl font-semibold">Musik</h1>
+        {#if status}
+          <div class="mt-1 text-xs text-white/60">
+            {status.counts?.albums ?? 0} Alben · {status.counts?.tracks ?? 0} Tracks
+          </div>
+        {/if}
+      </div>
     </div>
 
     <div class="flex flex-wrap items-center gap-2">

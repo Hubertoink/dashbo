@@ -2,6 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const mm = require('music-metadata');
+const nodeID3 = require('node-id3');
 
 const DEFAULT_LIBRARY_PATH = '/mnt/music';
 const DEFAULT_DATA_DIR = '/var/lib/dashbo-edge';
@@ -24,6 +25,9 @@ const COVER_CANDIDATES = [
   'AlbumArt.jpg'
 ];
 
+const COVER_CACHE_DIR_NAME = 'music-covers';
+const COVER_CACHE_PREFIX = 'cache:';
+
 function getLibraryPath() {
   return String(process.env.MUSIC_LIBRARY_PATH || DEFAULT_LIBRARY_PATH);
 }
@@ -40,6 +44,15 @@ function makeTrackId(relativePath) {
   return crypto.createHash('sha1').update(normalizePathForId(relativePath)).digest('hex');
 }
 
+function normalizeForId(s) {
+  return String(s || '')
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/[^\w\s\-]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 function makeAlbumId(artist, album) {
   return crypto
     .createHash('sha1')
@@ -52,10 +65,14 @@ function splitRelPath(relPath) {
 }
 
 function deriveArtistAlbum(relPath) {
+  // Prefer the folder directly containing the file as the album and the parent folder as artist.
   const parts = splitRelPath(relPath);
-  const artist = parts.length >= 2 ? parts[0] : 'Unbekannt';
-  const album = parts.length >= 2 ? parts[1] : 'Unbekannt';
-  return { artist, album };
+  if (parts.length >= 2) {
+    const album = parts[parts.length - 2] || 'Unbekannt';
+    const artist = parts.length >= 3 ? parts[parts.length - 3] : 'Unbekannt';
+    return { artist, album };
+  }
+  return { artist: 'Unbekannt', album: 'Unbekannt' };
 }
 
 function parseTrackNoAndTitle(baseName) {
@@ -74,18 +91,60 @@ function firstNonEmpty(...values) {
   return '';
 }
 
-async function readAudioMetadata(absPath) {
+function plausibleArtist(name) {
+  const s = typeof name === 'string' ? name.trim() : '';
+  if (!s) return false;
+  // Ignore generic folder names or numeric-only names like '36' or 'music'
+  if (/^\d+$/.test(s)) return false;
+  if (/^music$/i.test(s)) return false;
+  if (/^various|compilation|misc/i.test(s)) return false;
+  // require at least one letter
+  return /[A-Za-zÄÖÜäöüß]/.test(s);
+}
+
+async function readAudioMetadata(absPath, ext) {
   try {
+    // For MP3 files prefer node-id3 (fast and reliable for ID3v2/ID3v1 tags)
+    const fileExt = (ext || path.extname(absPath) || '').toLowerCase();
+    if (fileExt === '.mp3') {
+      try {
+        const tags = nodeID3.read(absPath) || {};
+        const title = typeof tags.title === 'string' ? tags.title.trim() : '';
+        const artist = typeof tags.artist === 'string' ? tags.artist.trim() : '';
+        const album = typeof tags.album === 'string' ? tags.album.trim() : '';
+        const albumartist = typeof tags.albumArtist === 'string' ? tags.albumArtist.trim() : typeof tags.albumartist === 'string' ? tags.albumartist.trim() : '';
+        let trackNo = null;
+        if (typeof tags.trackNumber === 'string') {
+          const m = tags.trackNumber.match(/^(\d+)/);
+          if (m) trackNo = Number(m[1]);
+        } else if (typeof tags.trackNumber === 'number') trackNo = tags.trackNumber;
+        const year = typeof tags.year === 'string' ? Number(tags.year) || null : null;
+        return { title, artist, album, albumartist, trackNo, year, durationSec: null };
+      } catch {
+        // fallback to music-metadata below
+      }
+    }
+
     const meta = await mm.parseFile(absPath, { duration: true });
     const common = meta.common || {};
     const format = meta.format || {};
 
     const title = typeof common.title === 'string' ? common.title.trim() : '';
-    const artist = typeof common.artist === 'string' ? common.artist.trim() : '';
-    const album = typeof common.album === 'string' ? common.album.trim() : '';
+    let artist = '';
+    if (typeof common.artist === 'string') artist = common.artist.trim();
+    else if (Array.isArray(common.artists) && common.artists.length) artist = common.artists.join(', ');
+    else if (typeof common.performer === 'string') artist = common.performer.trim();
+    artist = artist || '';
 
-    const trackNoRaw = common.track && typeof common.track.no === 'number' ? common.track.no : null;
-    const trackNo = Number.isFinite(trackNoRaw) ? trackNoRaw : null;
+    let album = '';
+    if (typeof common.album === 'string') album = common.album.trim();
+    else if (typeof common.grouping === 'string') album = common.grouping.trim();
+    album = album || '';
+
+    const albumartist = typeof common.albumartist === 'string' ? common.albumartist.trim() : '';
+
+    let trackNoRaw = common.track && typeof common.track.no === 'number' ? common.track.no : null;
+    let trackNo = Number.isFinite(trackNoRaw) ? trackNoRaw : null;
 
     const yearRaw = typeof common.year === 'number' ? common.year : null;
     const year = Number.isFinite(yearRaw) ? yearRaw : null;
@@ -93,10 +152,70 @@ async function readAudioMetadata(absPath) {
     const durationRaw = typeof format.duration === 'number' ? format.duration : null;
     const durationSec = Number.isFinite(durationRaw) ? Math.round(durationRaw) : null;
 
-    return { title, artist, album, trackNo, year, durationSec };
+    return { title, artist, album, albumartist, trackNo, year, durationSec };
   } catch {
+    // final fallback: try node-id3 directly for MP3s
+    try {
+      const tags = nodeID3.read(absPath) || {};
+      const title = typeof tags.title === 'string' ? tags.title.trim() : '';
+      const artist = typeof tags.artist === 'string' ? tags.artist.trim() : '';
+      const album = typeof tags.album === 'string' ? tags.album.trim() : '';
+      const albumartist = typeof tags.albumArtist === 'string' ? tags.albumArtist.trim() : typeof tags.albumartist === 'string' ? tags.albumartist.trim() : '';
+      const trackNo = typeof tags.trackNumber === 'string' ? Number((tags.trackNumber.match(/^(\d+)/) || [null, null])[1]) : null;
+      return { title, artist, album, albumartist, trackNo, year: null, durationSec: null };
+    } catch {
+      // ignore
+    }
     return null;
   }
+}
+
+function coverCacheRelPath(albumId, mime) {
+  const m = String(mime || '').toLowerCase();
+  const ext = m === 'image/png' ? '.png' : m === 'image/jpeg' || m === 'image/jpg' ? '.jpg' : '';
+  if (!ext) return null;
+  return `${COVER_CACHE_PREFIX}${COVER_CACHE_DIR_NAME}/${albumId}${ext}`;
+}
+
+function coverCacheAbsPath(albumId, mime) {
+  const rel = coverCacheRelPath(albumId, mime);
+  if (!rel) return null;
+  // strip prefix and build into EDGE_DATA_DIR
+  const withoutPrefix = rel.slice(COVER_CACHE_PREFIX.length);
+  return path.join(getDataDir(), withoutPrefix.split('/').join(path.sep));
+}
+
+async function extractEmbeddedCover(absPath) {
+  const ext = (path.extname(absPath) || '').toLowerCase();
+
+  if (ext === '.mp3') {
+    try {
+      const tags = nodeID3.read(absPath) || {};
+      const img = tags.image;
+      if (img && typeof img === 'object') {
+        const mime = typeof img.mime === 'string' ? img.mime : '';
+        const data = img.imageBuffer;
+        if (mime && Buffer.isBuffer(data) && data.length > 0) return { mime, data };
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  try {
+    const meta = await mm.parseFile(absPath, { duration: false });
+    const pics = meta?.common?.picture;
+    if (Array.isArray(pics) && pics.length > 0) {
+      const p = pics[0];
+      const mime = typeof p.format === 'string' ? p.format : '';
+      const data = p.data;
+      if (mime && Buffer.isBuffer(data) && data.length > 0) return { mime, data };
+    }
+  } catch {
+    // ignore
+  }
+
+  return null;
 }
 
 function firstLetterKey(value) {
@@ -235,7 +354,10 @@ class MusicLibrary {
         if (!query) return true;
         const name = String(t.name || '').toLowerCase();
         const rel = String(t.relPath || '').toLowerCase();
-        return name.includes(query) || rel.includes(query);
+        const title = String(t.title || '').toLowerCase();
+        const artist = String(t.artist || '').toLowerCase();
+        const album = String(t.album || '').toLowerCase();
+        return name.includes(query) || rel.includes(query) || title.includes(query) || artist.includes(query) || album.includes(query);
       })
       .sort((a, b) => {
         // stable ordering by path
@@ -308,8 +430,15 @@ class MusicLibrary {
   resolveAlbumCoverAbsPath(albumId) {
     const a = this._albums.get(String(albumId || ''));
     if (!a || !a.coverRelPath) return null;
-    const root = getLibraryPath();
     const rel = String(a.coverRelPath || '');
+
+    if (rel.startsWith(COVER_CACHE_PREFIX)) {
+      const withoutPrefix = rel.slice(COVER_CACHE_PREFIX.length);
+      const safeRel = withoutPrefix.split('/').join(path.sep);
+      return path.join(getDataDir(), safeRel);
+    }
+
+    const root = getLibraryPath();
     const safeRel = rel.split('/').join(path.sep);
     return path.join(root, safeRel);
   }
@@ -359,6 +488,9 @@ class MusicLibrary {
 
     const nextTracks = new Map();
     const nextAlbums = new Map();
+
+    // albumId -> absolute track path to attempt embedded-cover extraction (first hit wins)
+    const albumCoverTrackAbs = new Map();
 
     const trackCandidates = [];
 
@@ -419,7 +551,7 @@ class MusicLibrary {
         const i = cursor++;
         const t = trackCandidates[i];
         if (!t) continue;
-        const meta = await readAudioMetadata(t.full);
+        const meta = await readAudioMetadata(t.full, t.ext);
 
         // Keep album grouping based on folder structure so cover discovery stays reliable.
         // Use tags for display where available.
@@ -434,10 +566,27 @@ class MusicLibrary {
         const year = typeof meta?.year === 'number' ? meta.year : null;
         const durationSec = typeof meta?.durationSec === 'number' ? meta.durationSec : null;
 
-        // Determine grouping for album clustering: prefer tag album/artist when available
-        const groupingArtist = firstNonEmpty(meta?.artist, derivedArtist);
-        const groupingAlbum = firstNonEmpty(meta?.album, derivedAlbum);
-        const albumId = makeAlbumId(groupingArtist, groupingAlbum);
+        // Decide album/artist grouping: prefer album tags (album + albumartist) when available
+        const trackDirRaw = normalizePathForId(path.dirname(t.normalizedRel));
+        const trackDirParts = trackDirRaw.split('/').filter(Boolean);
+        const folderAlbum = trackDirParts.length >= 1 ? trackDirParts[trackDirParts.length - 1] : '';
+        const folderArtistRaw = trackDirParts.length >= 2 ? trackDirParts[trackDirParts.length - 2] : '';
+        const folderArtist = plausibleArtist(folderArtistRaw) ? folderArtistRaw : '';
+
+        const tagAlbum = firstNonEmpty(meta?.album);
+        const tagAlbumArtist = firstNonEmpty(meta?.albumartist, meta?.artist);
+
+        const groupingAlbum = firstNonEmpty(tagAlbum, folderAlbum, derivedAlbum) || 'Unbekannt';
+        const groupingArtist = firstNonEmpty(tagAlbumArtist, folderArtist, plausibleArtist(derivedArtist) ? derivedArtist : '') || 'Unbekannt';
+
+        // Normalize keys for stable clustering (strip punctuation and collapse whitespace)
+        const albumId = makeAlbumId(normalizeForId(groupingArtist), normalizeForId(groupingAlbum));
+
+        // Remember one representative track per album for possible embedded cover extraction later.
+        // We defer actual extraction to avoid buffering many images during the main scan.
+        if (!albumCoverTrackAbs.has(albumId)) {
+          albumCoverTrackAbs.set(albumId, t.full);
+        }
 
         nextTracks.set(t.id, {
           id: t.id,
@@ -455,24 +604,81 @@ class MusicLibrary {
           mtimeMs: t.mtimeMs
         });
 
-        // maintain album member directories for better cover discovery
-        const trackDir = normalizePathForId(path.dirname(t.normalizedRel));
+        // maintain album member directories for better cover discovery (only include real dirs)
+        const trackDir = trackDirParts.length > 0 ? trackDirRaw : '';
         if (!nextAlbums.has(albumId)) {
-          nextAlbums.set(albumId, {
-            id: albumId,
-            artist: groupingArtist,
-            album: groupingAlbum,
-            year,
-            coverRelPath: null,
-            memberDirs: new Set([trackDir])
-          });
+          const albumEntry = { id: albumId, artist: groupingArtist, album: groupingAlbum, year, coverRelPath: null };
+          if (trackDir) albumEntry.memberDirs = new Set([trackDir]);
+          nextAlbums.set(albumId, albumEntry);
         } else {
           const entry = nextAlbums.get(albumId);
-          if (entry && entry.memberDirs) entry.memberDirs.add(trackDir);
+          if (entry && entry.memberDirs && trackDir) entry.memberDirs.add(trackDir);
         }
       }
     });
     await Promise.all(workers);
+
+    // Split overly-generic albums (e.g., 'Music'/'36') into sub-albums when folder structure indicates distinct albums
+    for (const [aid, a] of Array.from(nextAlbums.entries())) {
+      // collect tracks belonging to this album
+      const tracksForA = Array.from(nextTracks.values()).filter((t) => t.albumId === aid);
+      const subMap = new Map();
+      for (const t of tracksForA) {
+        const parts = splitRelPath(t.relPath);
+        // find index of album folder in parts
+        const idx = parts.findIndex((p) => String(p) === String(a.album));
+        const subName = idx >= 0 && parts.length > idx + 1 ? parts[idx + 1] : '';
+        const key = (subName || '').trim();
+        if (!subMap.has(key)) subMap.set(key, []);
+        subMap.get(key).push(t);
+      }
+
+      // if there are multiple non-empty sub-albums, and the parent album looks generic (numeric or 'Music'), split
+      const nonEmptyKeys = Array.from(subMap.keys()).filter((k) => k);
+      const shouldSplit = (nonEmptyKeys.length > 1) && (!plausibleArtist(a.artist) || /^\d+$/.test(String(a.album)));
+      if (!shouldSplit) continue;
+
+      // remove parent album and create child albums
+      nextAlbums.delete(aid);
+      for (const key of nonEmptyKeys) {
+        const childTracks = subMap.get(key) || [];
+        // determine artist for child by checking track-level artist tags
+        let childArtist = '';
+        for (const ct of childTracks) {
+          if (ct.artist && plausibleArtist(ct.artist)) {
+            childArtist = ct.artist;
+            break;
+          }
+        }
+        if (!childArtist) childArtist = a.artist;
+
+        const childAlbum = key;
+        const childAlbumId = makeAlbumId(childArtist || a.artist || '', childAlbum || a.album || '');
+        // ensure unique album id
+        if (!nextAlbums.has(childAlbumId)) {
+          nextAlbums.set(childAlbumId, {
+            id: childAlbumId,
+            artist: childArtist || a.artist,
+            album: childAlbum,
+            year: a.year,
+            coverRelPath: null,
+            memberDirs: new Set()
+          });
+        }
+
+        // reassign tracks to new child album and collect member dirs
+        const childEntry = nextAlbums.get(childAlbumId);
+        for (const ct of childTracks) {
+          ct.albumId = childAlbumId;
+          if (ct.relPath) {
+            const dir = normalizePathForId(path.dirname(ct.relPath));
+            if (!childEntry.memberDirs) childEntry.memberDirs = new Set();
+            childEntry.memberDirs.add(dir);
+          }
+          nextTracks.set(ct.id, ct);
+        }
+      }
+    }
 
     // cover discovery: search album member directories first (if available), then fallback to path-based artist/album folder
     for (const a of nextAlbums.values()) {
@@ -520,6 +726,36 @@ class MusicLibrary {
       }
 
       // finally, if still not found, leave coverRelPath null
+    }
+
+    // Embedded cover fallback: if no cover file was found on disk, try extracting embedded artwork
+    // from one representative track per album and cache it under EDGE_DATA_DIR.
+    for (const a of nextAlbums.values()) {
+      if (a.coverRelPath) continue;
+      const trackAbs = albumCoverTrackAbs.get(a.id);
+      if (!trackAbs) continue;
+
+      const cover = await extractEmbeddedCover(trackAbs);
+      if (!cover) continue;
+
+      const rel = coverCacheRelPath(a.id, cover.mime);
+      const abs = coverCacheAbsPath(a.id, cover.mime);
+      if (!rel || !abs) continue;
+
+      try {
+        ensureDirSync(path.dirname(abs));
+        // Only write if missing; keeps IO low on repeated scans.
+        await fs.promises.stat(abs);
+      } catch {
+        try {
+          await fs.promises.writeFile(abs, cover.data);
+        } catch {
+          // ignore write failures
+          continue;
+        }
+      }
+
+      a.coverRelPath = rel;
     }
 
     // convert memberDirs Sets to arrays for JSON-serializable state
