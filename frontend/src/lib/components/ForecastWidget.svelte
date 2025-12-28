@@ -2,8 +2,6 @@
   import { onMount } from 'svelte';
   import { fetchForecast, type ForecastDto, type ForecastDayDto } from '$lib/api';
 
-  export let tone: 'light' | 'dark' = 'light';
-
   let forecast: ForecastDto | null = null;
 
   async function load() {
@@ -39,7 +37,7 @@
   }
 </script>
 
-<div class={`${tone === 'dark' ? 'text-black text-shadow-light' : 'text-white text-shadow'} select-none`}>
+<div class="text-white text-shadow select-none">
   {#if forecast?.ok}
     <div class="space-y-3">
       {#if forecast.city}

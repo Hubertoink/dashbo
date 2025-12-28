@@ -120,6 +120,11 @@
   let showAddEventModal = false;
   let eventToEdit: EventDto | null = null;
 
+  $: bgOverlay =
+    tone === 'dark'
+      ? 'linear-gradient(to right, rgba(0,0,0,0.75), rgba(0,0,0,0.88))'
+      : 'linear-gradient(to right, rgba(0,0,0,0.55), rgba(0,0,0,0.78))';
+
   function openAddEventModal() {
     eventToEdit = null;
     showAddEventModal = true;
@@ -617,7 +622,7 @@
   <div class="absolute inset-0 overflow-hidden">
     <div
       class="kenburns absolute inset-0"
-      style={`background-image: linear-gradient(to right, rgba(0,0,0,0.55), rgba(0,0,0,0.78)), url('${backgroundUrl}'); background-size: cover; background-position: center;`}
+      style={`background-image: ${bgOverlay}, url('${backgroundUrl}'); background-size: cover; background-position: center;`}
     ></div>
   </div>
 
@@ -637,26 +642,22 @@
     <!-- Left: weather + ToDo + clock -->
     {#if !upcomingMode}
       <div class="w-[34%] min-w-[320px] hidden md:flex flex-col p-10 h-screen">
-        <div class={tone === 'dark' ? 'text-black' : 'text-white'}>
-          <WeatherWidget {tone} />
-        </div>
+        <div class="text-white"><WeatherWidget tone="light" /></div>
 
         {#if todoEnabled}
-          <div class={`mt-6 pb-8 ${tone === 'dark' ? 'text-black' : 'text-white'}`}>
+          <div class="mt-6 pb-8 text-white">
             <TodoWidget />
           </div>
         {/if}
 
         {#if newsEnabled}
-          <div class={`mt-2 pb-8 ${tone === 'dark' ? 'text-black' : 'text-white'}`}>
+          <div class="mt-2 pb-8 text-white">
             <ZeitNewsWidget />
           </div>
         {/if}
 
         <div class="mt-auto pb-2">
-          <div class={tone === 'dark' ? 'text-black' : 'text-white'}>
-            <Clock {tone} />
-          </div>
+          <div class="text-white"><Clock tone="light" /></div>
         </div>
       </div>
     {/if}
@@ -670,19 +671,15 @@
           <div class="h-full flex" on:click|stopPropagation={exitStandby}>
             <div class="hidden md:flex w-[34%] min-w-[280px] flex-col justify-between p-10 h-full">
               {#if todoEnabled}
-                <div class={tone === 'dark' ? 'text-black' : 'text-white'}>
-                  <TodoWidget />
-                </div>
+                <div class="text-white"><TodoWidget /></div>
               {/if}
 
-              <div class={tone === 'dark' ? 'text-black' : 'text-white'}>
-                <ForecastWidget {tone} />
-              </div>
+              <div class="text-white"><ForecastWidget /></div>
 
               <div class="pb-2">
-                <div class={tone === 'dark' ? 'text-black' : 'text-white'}>
+                <div class="text-white">
                   <div class="text-xl md:text-2xl font-semibold tracking-wide mb-3">{todayFullDate}</div>
-                  <Clock {tone} />
+                  <Clock tone="light" />
                 </div>
               </div>
             </div>
@@ -749,7 +746,7 @@
                     {#key standbyNewsIndex}
                       {@const n = standbyNewsItems[standbyNewsIndex]}
                       <div
-                        class="relative w-full overflow-hidden rounded-2xl border border-white/10 backdrop-blur-sm"
+                        class="standby-zeit-news relative w-full overflow-hidden rounded-2xl border border-white/10 backdrop-blur-sm"
                         in:fade={{ duration: 500, delay: 200 }}
                         out:fade={{ duration: 400 }}
                       >
@@ -779,7 +776,7 @@
                       </div>
                     {/key}
                   {:else}
-                    <div class="w-full overflow-hidden rounded-2xl border border-white/10 bg-white/5 backdrop-blur-sm">
+                    <div class="standby-zeit-news w-full overflow-hidden rounded-2xl border border-white/10 bg-white/5 backdrop-blur-sm">
                       <div class="p-6">
                         <div class="flex items-center gap-2 text-xs tracking-widest uppercase text-white/50 font-medium">
                           <span class="inline-block w-4 h-px bg-white/30"></span>
@@ -832,20 +829,16 @@
           <div class="h-full flex">
             <!-- Left: forecast + todo + clock -->
             <div class="hidden md:flex w-[34%] min-w-[280px] flex-col p-10 h-full">
-              <div class={tone === 'dark' ? 'text-black' : 'text-white'}>
-                <ForecastWidget {tone} />
-              </div>
+              <div class="text-white"><ForecastWidget /></div>
 
               {#if todoEnabled}
-                <div class={`mt-6 pb-8 ${tone === 'dark' ? 'text-black' : 'text-white'}`}>
-                  <TodoWidget variant="plain" />
-                </div>
+                <div class="mt-6 pb-8 text-white"><TodoWidget variant="plain" /></div>
               {/if}
 
               <div class="mt-auto pb-2">
-                <div class={tone === 'dark' ? 'text-black' : 'text-white'}>
+                <div class="text-white">
                   <div class="text-xl md:text-2xl font-semibold tracking-wide mb-3">{todayFullDate}</div>
-                  <Clock {tone} />
+                  <Clock tone="light" />
                 </div>
               </div>
             </div>
@@ -907,6 +900,61 @@
                   {/key}
                 {/if}
               </div>
+
+              {#if newsEnabled}
+                <div class="mt-auto pt-6">
+                  {#if standbyNewsItems.length > 0}
+                    {#key standbyNewsIndex}
+                      {@const n = standbyNewsItems[standbyNewsIndex]}
+                      <div
+                        class="standby-zeit-news relative w-full overflow-hidden rounded-2xl border border-white/10 backdrop-blur-sm"
+                        in:fade={{ duration: 500, delay: 200 }}
+                        out:fade={{ duration: 400 }}
+                      >
+                        {#if n.imageUrl}
+                          <div class="absolute inset-0 bg-cover bg-center opacity-30" style={`background-image: url('${n.imageUrl}');`}></div>
+                          <div class="absolute inset-0 bg-gradient-to-r from-black/80 via-black/60 to-black/40"></div>
+                        {:else}
+                          <div class="absolute inset-0 bg-white/5"></div>
+                        {/if}
+                        <div class="relative p-6">
+                          <div class="flex items-center gap-2 text-xs tracking-widest uppercase text-white/50 font-medium">
+                            <span class="inline-block w-4 h-px bg-white/30"></span>
+                            ZEIT Online
+                          </div>
+                          <div class="mt-3 text-xl md:text-2xl font-semibold leading-snug">{n.title}</div>
+                          {#if n.teaser}
+                            <div class="mt-3 text-white/60 text-base leading-relaxed line-clamp-2">{n.teaser}</div>
+                          {/if}
+                          {#if standbyNewsItems.length > 1}
+                            <div class="mt-4 flex gap-1.5">
+                              {#each standbyNewsItems as _, i}
+                                <div class="h-1 rounded-full transition-all duration-300 {i === standbyNewsIndex ? 'w-6 bg-white/70' : 'w-1.5 bg-white/20'}"></div>
+                              {/each}
+                            </div>
+                          {/if}
+                        </div>
+                      </div>
+                    {/key}
+                  {:else}
+                    <div class="standby-zeit-news w-full overflow-hidden rounded-2xl border border-white/10 bg-white/5 backdrop-blur-sm">
+                      <div class="p-6">
+                        <div class="flex items-center gap-2 text-xs tracking-widest uppercase text-white/50 font-medium">
+                          <span class="inline-block w-4 h-px bg-white/30"></span>
+                          ZEIT Online
+                        </div>
+                        <div class="mt-3 text-white/60 text-base">
+                          {#if standbyNewsLoading}
+                            Lade News…
+                          {:else}
+                            Keine Artikel verfügbar.
+                          {/if}
+                        </div>
+                      </div>
+                    </div>
+                  {/if}
+                </div>
+              {/if}
             </div>
           </div>
         </div>
