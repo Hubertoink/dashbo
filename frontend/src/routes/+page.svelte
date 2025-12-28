@@ -51,6 +51,7 @@
 
   let standbyNewsItems: NewsItemDto[] = [];
   let standbyNewsIndex = 0;
+  let standbyNewsLoading = false;
   let standbyNewsRotateInterval: ReturnType<typeof setInterval> | null = null;
   let standbyNewsRotationKey = '';
   let standbyNewsRefreshInterval: ReturnType<typeof setInterval> | null = null;
@@ -75,6 +76,7 @@
   }
 
   async function loadNews() {
+    standbyNewsLoading = true;
     try {
       const r = await fetchNews();
       standbyNewsItems = (r.items ?? []).slice(0, 4);
@@ -88,6 +90,8 @@
       }
     } catch {
       standbyNewsItems = [];
+    } finally {
+      standbyNewsLoading = false;
     }
   }
 
@@ -343,6 +347,15 @@
           standbyNewsIndex = (standbyNewsIndex + 1) % standbyNewsItems.length;
         }, STANDBY_PAGE_MS);
       }
+    }
+  }
+
+  $: {
+    // When standby starts, make sure news is actually loaded.
+    // (At page load, the cache may not exist yet because the dashboard widget writes it later.)
+    if (standbyMode && newsEnabled && standbyNewsItems.length === 0 && !standbyNewsLoading) {
+      loadNewsFromCache();
+      if (standbyNewsItems.length === 0) void loadNews();
     }
   }
 
@@ -730,45 +743,58 @@
                 {/if}
               </div>
 
-              {#if newsEnabled && standbyNewsItems.length > 0}
+              {#if newsEnabled}
                 <div class="mt-auto pt-6">
-                  {#key standbyNewsIndex}
-                    {@const n = standbyNewsItems[standbyNewsIndex]}
-                    <div
-                      class="relative w-full overflow-hidden rounded-2xl border border-white/10 backdrop-blur-sm"
-                      in:fade={{ duration: 500, delay: 200 }}
-                      out:fade={{ duration: 400 }}
-                    >
-                      {#if n.imageUrl}
-                        <div
-                          class="absolute inset-0 bg-cover bg-center opacity-30"
-                          style={`background-image: url('${n.imageUrl}');`}
-                        ></div>
-                        <div class="absolute inset-0 bg-gradient-to-r from-black/80 via-black/60 to-black/40"></div>
-                      {:else}
-                        <div class="absolute inset-0 bg-white/5"></div>
-                      {/if}
-                      <div class="relative p-6">
+                  {#if standbyNewsItems.length > 0}
+                    {#key standbyNewsIndex}
+                      {@const n = standbyNewsItems[standbyNewsIndex]}
+                      <div
+                        class="relative w-full overflow-hidden rounded-2xl border border-white/10 backdrop-blur-sm"
+                        in:fade={{ duration: 500, delay: 200 }}
+                        out:fade={{ duration: 400 }}
+                      >
+                        {#if n.imageUrl}
+                          <div class="absolute inset-0 bg-cover bg-center opacity-30" style={`background-image: url('${n.imageUrl}');`}></div>
+                          <div class="absolute inset-0 bg-gradient-to-r from-black/80 via-black/60 to-black/40"></div>
+                        {:else}
+                          <div class="absolute inset-0 bg-white/5"></div>
+                        {/if}
+                        <div class="relative p-6">
+                          <div class="flex items-center gap-2 text-xs tracking-widest uppercase text-white/50 font-medium">
+                            <span class="inline-block w-4 h-px bg-white/30"></span>
+                            ZEIT Online
+                          </div>
+                          <div class="mt-3 text-xl md:text-2xl font-semibold leading-snug">{n.title}</div>
+                          {#if n.teaser}
+                            <div class="mt-3 text-white/60 text-base leading-relaxed line-clamp-2">{n.teaser}</div>
+                          {/if}
+                          {#if standbyNewsItems.length > 1}
+                            <div class="mt-4 flex gap-1.5">
+                              {#each standbyNewsItems as _, i}
+                                <div class="h-1 rounded-full transition-all duration-300 {i === standbyNewsIndex ? 'w-6 bg-white/70' : 'w-1.5 bg-white/20'}"></div>
+                              {/each}
+                            </div>
+                          {/if}
+                        </div>
+                      </div>
+                    {/key}
+                  {:else}
+                    <div class="w-full overflow-hidden rounded-2xl border border-white/10 bg-white/5 backdrop-blur-sm">
+                      <div class="p-6">
                         <div class="flex items-center gap-2 text-xs tracking-widest uppercase text-white/50 font-medium">
                           <span class="inline-block w-4 h-px bg-white/30"></span>
                           ZEIT Online
                         </div>
-                        <div class="mt-3 text-xl md:text-2xl font-semibold leading-snug">{n.title}</div>
-                        {#if n.teaser}
-                          <div class="mt-3 text-white/60 text-base leading-relaxed line-clamp-2">{n.teaser}</div>
-                        {/if}
-                        {#if standbyNewsItems.length > 1}
-                          <div class="mt-4 flex gap-1.5">
-                            {#each standbyNewsItems as _, i}
-                              <div
-                                class="h-1 rounded-full transition-all duration-300 {i === standbyNewsIndex ? 'w-6 bg-white/70' : 'w-1.5 bg-white/20'}"
-                              ></div>
-                            {/each}
-                          </div>
-                        {/if}
+                        <div class="mt-3 text-white/60 text-base">
+                          {#if standbyNewsLoading}
+                            Lade News…
+                          {:else}
+                            Keine Artikel verfügbar.
+                          {/if}
+                        </div>
                       </div>
                     </div>
-                  {/key}
+                  {/if}
                 </div>
               {/if}
             </div>
