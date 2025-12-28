@@ -44,6 +44,7 @@
   import {
     EDGE_PLAYER_WIDGET_ENABLED_KEY,
     EDGE_HEOS_ENABLED_KEY,
+    EDGE_HEOS_HOSTS_KEY,
     edgeHealth,
     normalizeEdgeBaseUrl,
     edgeFetchJson
@@ -170,6 +171,7 @@
   let edgeSaving = false;
   let edgePlayerWidgetEnabled = false;
   let edgeHeosEnabled = false;
+  let edgeHeosHosts = '';
   let edgeTestBusy = false;
   let edgeTestMessage: string | null = null;
   let edgeTestOk: boolean | null = null;
@@ -250,6 +252,7 @@
     edgeToken = localStorage.getItem(EDGE_TOKEN_KEY) ?? '';
     edgePlayerWidgetEnabled = localStorage.getItem(EDGE_PLAYER_WIDGET_ENABLED_KEY) === '1';
     edgeHeosEnabled = localStorage.getItem(EDGE_HEOS_ENABLED_KEY) === '1';
+    edgeHeosHosts = localStorage.getItem(EDGE_HEOS_HOSTS_KEY) ?? '';
   }
 
   function saveEdgeConfig() {
@@ -258,10 +261,20 @@
       if (typeof localStorage !== 'undefined') {
         localStorage.setItem(EDGE_BASE_URL_KEY, normalizeEdgeBaseUrl(edgeBaseUrl));
         localStorage.setItem(EDGE_TOKEN_KEY, edgeToken);
+        localStorage.setItem(EDGE_HEOS_HOSTS_KEY, edgeHeosHosts.trim());
       }
       showToast('Pi Edge gespeichert');
     } finally {
       edgeSaving = false;
+    }
+  }
+
+  function isLocalhostUrl(rawUrl: string): boolean {
+    try {
+      const u = new URL(rawUrl);
+      return u.hostname === 'localhost' || u.hostname === '127.0.0.1' || u.hostname === '::1';
+    } catch {
+      return false;
     }
   }
 
@@ -1408,6 +1421,27 @@
             />
             HEOS aktivieren
           </label>
+
+          {#if edgeHeosEnabled}
+            <div class="mt-2">
+              <input
+                class="w-full h-9 px-3 rounded-lg bg-white/10 border-0 text-sm placeholder:text-white/40"
+                placeholder="HEOS Speaker IPs (optional, z.B. 192.168.178.24,192.168.178.40)"
+                bind:value={edgeHeosHosts}
+                on:change={saveEdgeConfig}
+              />
+              <div class="text-[11px] text-white/50 mt-1">
+                Tipp: Unter Windows/Docker ist SSDP oft blockiert. Mit IPs funktioniert die Speaker-Liste zuverlässig.
+              </div>
+
+              {#if edgeBaseUrl.trim() && isLocalhostUrl(edgeBaseUrl)}
+                <div class="text-[11px] text-amber-300 mt-1">
+                  Hinweis: HEOS Speaker können <span class="font-medium">localhost</span> nicht erreichen.
+                  Setze die Edge Base URL auf eine LAN-IP/Hostname (z.B. <span class="font-medium">http://192.168.178.X:8787</span>).
+                </div>
+              {/if}
+            </div>
+          {/if}
 
           <div class="flex items-center gap-2 mt-3">
             <button

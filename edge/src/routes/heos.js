@@ -4,6 +4,16 @@ const { listPlayers, scanPlayers, getStatus, playStream, setPlayState } = requir
 
 const heosRouter = express.Router();
 
+function parseHeosHostsHeader(req) {
+  const raw = req.get('x-heos-hosts');
+  if (!raw) return null;
+  const hosts = String(raw)
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  return hosts.length > 0 ? hosts : null;
+}
+
 function normalizeHeosError(err) {
   if (!err) return 'heos_error';
   if (typeof err === 'string') return err;
@@ -18,7 +28,8 @@ function normalizeHeosError(err) {
 
 heosRouter.get('/players', (req, res) => {
   (async () => {
-    const players = await listPlayers();
+    const hosts = parseHeosHostsHeader(req);
+    const players = await listPlayers({ hosts });
     res.json({ ok: true, players, ...getStatus() });
   })().catch((err) => {
     const error = normalizeHeosError(err);
@@ -36,7 +47,8 @@ heosRouter.get('/status', (req, res) => {
 heosRouter.post('/scan', (req, res) => {
   (async () => {
     const force = Boolean(req?.query?.force) || Boolean(req?.body?.force);
-    const players = await scanPlayers({ force });
+    const hosts = parseHeosHostsHeader(req);
+    const players = await scanPlayers({ force, hosts });
     res.json({ ok: true, players, ...getStatus() });
   })().catch((err) => {
     const error = normalizeHeosError(err);
@@ -56,7 +68,8 @@ heosRouter.post('/play_stream', (req, res) => {
     if (!Number.isFinite(pid) || pid === 0) return res.status(400).json({ ok: false, error: 'pid_required' });
     if (!url) return res.status(400).json({ ok: false, error: 'url_required' });
 
-    const r = await playStream(pid, url, name);
+    const hosts = parseHeosHostsHeader(req);
+    const r = await playStream(pid, url, name, { hosts });
     res.json({ ok: true, response: r });
   })().catch((err) => {
     const error = normalizeHeosError(err);
@@ -71,7 +84,8 @@ heosRouter.post('/play_state', (req, res) => {
     if (!Number.isFinite(pid) || pid === 0) return res.status(400).json({ ok: false, error: 'pid_required' });
     if (!state) return res.status(400).json({ ok: false, error: 'state_required' });
 
-    const r = await setPlayState(pid, state);
+    const hosts = parseHeosHostsHeader(req);
+    const r = await setPlayState(pid, state, { hosts });
     res.json({ ok: true, response: r });
   })().catch((err) => {
     const error = normalizeHeosError(err);

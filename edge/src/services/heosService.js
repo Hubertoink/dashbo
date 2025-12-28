@@ -13,7 +13,16 @@ let lastScanAt = null;
 let lastError = null;
 let lastScanMethod = null;
 
-function getHeosHosts() {
+function normalizeHostsList(list) {
+  return (Array.isArray(list) ? list : [])
+    .map((s) => String(s || '').trim())
+    .filter(Boolean);
+}
+
+function getHeosHosts(overrideHosts) {
+  const normalizedOverride = normalizeHostsList(overrideHosts);
+  if (normalizedOverride.length > 0) return normalizedOverride;
+
   const host = String(process.env.HEOS_HOST || '').trim();
   if (host) return [host];
 
@@ -222,7 +231,7 @@ async function sendOnConn(conn, commandGroup, command, attributes, opts) {
 }
 
 async function sendWithHostsFallback(commandGroup, command, attributes, opts) {
-  const hosts = getHeosHosts();
+  const hosts = getHeosHosts(opts?.hosts);
   if (hosts.length === 0) {
     return send(commandGroup, command, attributes, opts);
   }
@@ -290,7 +299,7 @@ async function scanPlayers(opts) {
   }
 
   try {
-    const hosts = getHeosHosts();
+    const hosts = getHeosHosts(opts?.hosts);
 
     let players = [];
     if (hosts.length > 1) {
@@ -343,8 +352,8 @@ async function scanPlayers(opts) {
   }
 }
 
-async function listPlayers() {
-  return scanPlayers({ force: false });
+async function listPlayers(opts) {
+  return scanPlayers({ force: false, hosts: opts?.hosts });
 }
 
 function getStatus() {
@@ -357,22 +366,22 @@ function getStatus() {
   };
 }
 
-async function playStream(pid, url, name) {
+async function playStream(pid, url, name, opts) {
   const attrs = {
     pid: Number(pid),
     url: String(url || '').trim()
   };
   if (name) attrs.name = String(name);
 
-  return sendWithHostsFallback('browse', 'play_stream', attrs);
+  return sendWithHostsFallback('browse', 'play_stream', attrs, { hosts: opts?.hosts });
 }
 
-async function setPlayState(pid, state) {
+async function setPlayState(pid, state, opts) {
   const s = String(state || '').toLowerCase();
   if (!['play', 'pause', 'stop'].includes(s)) {
     throw new Error('Invalid play state');
   }
-  return sendWithHostsFallback('player', 'set_play_state', { pid: Number(pid), state: s });
+  return sendWithHostsFallback('player', 'set_play_state', { pid: Number(pid), state: s }, { hosts: opts?.hosts });
 }
 
 module.exports = {

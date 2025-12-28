@@ -6,6 +6,8 @@
     EDGE_TOKEN_KEY,
     EDGE_HEOS_ENABLED_KEY,
     EDGE_HEOS_SELECTED_PLAYER_ID_KEY,
+    EDGE_HEOS_HOSTS_KEY,
+    EDGE_HEOS_SELECTED_PLAYER_NAME_KEY,
     edgeFetchJson,
     normalizeEdgeBaseUrl
   } from '$lib/edge';
@@ -26,6 +28,8 @@
   let speakersError: string | null = null;
   let speakers: HeosPlayerDto[] = [];
   let selectedPid = '';
+  let selectedName = '';
+  let heosHosts = '';
   let heosStatusLine: string | null = null;
 
   function closeSpeakerModal() {
@@ -39,6 +43,8 @@
     edgeToken = localStorage.getItem(EDGE_TOKEN_KEY) ?? '';
     const pidRaw = localStorage.getItem(EDGE_HEOS_SELECTED_PLAYER_ID_KEY);
     selectedPid = pidRaw ? String(pidRaw) : '';
+    selectedName = localStorage.getItem(EDGE_HEOS_SELECTED_PLAYER_NAME_KEY) ?? '';
+    heosHosts = localStorage.getItem(EDGE_HEOS_HOSTS_KEY) ?? '';
   }
 
   function fmtIsoShort(iso: string | null | undefined): string {
@@ -63,9 +69,27 @@
       const force = Boolean(opts?.force);
       const path = force ? '/api/heos/scan?force=1' : '/api/heos/players';
 
-      const r = await edgeFetchJson<any>(base, path, edgeToken || undefined, force ? { method: 'POST' } : undefined);
+      const headers: Record<string, string> = {};
+      if (heosHosts.trim()) headers['X-HEOS-HOSTS'] = heosHosts.trim();
+
+      const r = await edgeFetchJson<any>(
+        base,
+        path,
+        edgeToken || undefined,
+        force ? { method: 'POST', headers } : { headers }
+      );
       const players = Array.isArray(r?.players) ? r.players : [];
       speakers = players;
+
+      // If we already have a pid selected, refresh the cached name.
+      if (selectedPid) {
+        const n = Number(selectedPid);
+        const match = Array.isArray(players) ? players.find((p: any) => Number(p?.pid) === n) : null;
+        if (match?.name && typeof localStorage !== 'undefined') {
+          selectedName = String(match.name);
+          localStorage.setItem(EDGE_HEOS_SELECTED_PLAYER_NAME_KEY, selectedName);
+        }
+      }
 
       const count = Array.isArray(players) ? players.length : 0;
       const scannedAt = fmtIsoShort(r?.lastScanAt);
@@ -95,8 +119,19 @@
       const n = Number(pid);
       if (!pid || !Number.isFinite(n) || n === 0) {
         localStorage.removeItem(EDGE_HEOS_SELECTED_PLAYER_ID_KEY);
+        localStorage.removeItem(EDGE_HEOS_SELECTED_PLAYER_NAME_KEY);
+        selectedName = '';
       } else {
         localStorage.setItem(EDGE_HEOS_SELECTED_PLAYER_ID_KEY, String(n));
+
+        const match = speakers.find((s) => s.pid === n);
+        if (match?.name) {
+          selectedName = match.name;
+          localStorage.setItem(EDGE_HEOS_SELECTED_PLAYER_NAME_KEY, selectedName);
+        } else {
+          localStorage.removeItem(EDGE_HEOS_SELECTED_PLAYER_NAME_KEY);
+          selectedName = '';
+        }
       }
     } catch {
       // ignore
@@ -157,7 +192,14 @@
       </div>
 
       <!-- Controls -->
-      <div class="flex items-center gap-1 ml-2">
+      <div class="flex flex-col items-end gap-1 ml-2">
+        {#if heosEnabled}
+          <div class="text-[10px] text-white/50 leading-none">
+            HEOS: {selectedName ? selectedName : selectedPid ? selectedPid : 'Kein Speaker'}
+          </div>
+        {/if}
+
+        <div class="flex items-center gap-1">
         <button
           type="button"
           class="h-7 w-7 rounded-lg bg-white/10 hover:bg-white/20 inline-flex items-center justify-center"
@@ -235,6 +277,7 @@
             </svg>
           </a>
         {/if}
+      </div>
       </div>
     {:else}
       <div class="flex-1">

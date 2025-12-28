@@ -9,6 +9,8 @@ export const EDGE_TOKEN_KEY = 'dashbo_edge_token';
 export const EDGE_PLAYER_WIDGET_ENABLED_KEY = 'dashbo_edge_player_widget_enabled';
 export const EDGE_HEOS_ENABLED_KEY = 'dashbo_edge_heos_enabled';
 export const EDGE_HEOS_SELECTED_PLAYER_ID_KEY = 'dashbo_edge_heos_selected_player_id';
+export const EDGE_HEOS_HOSTS_KEY = 'dashbo_edge_heos_hosts';
+export const EDGE_HEOS_SELECTED_PLAYER_NAME_KEY = 'dashbo_edge_heos_selected_player_name';
 
 export function normalizeEdgeBaseUrl(input: string): string {
   return input.trim().replace(/\/+$/, '');
@@ -40,6 +42,16 @@ export function getEdgeHeosSelectedPlayerIdFromStorage(): number | null {
   if (!raw) return null;
   const pid = Number(raw);
   return Number.isFinite(pid) && pid !== 0 ? pid : null;
+}
+
+export function getEdgeHeosHostsFromStorage(): string {
+  if (typeof localStorage === 'undefined') return '';
+  return localStorage.getItem(EDGE_HEOS_HOSTS_KEY) ?? '';
+}
+
+export function getEdgeHeosSelectedPlayerNameFromStorage(): string {
+  if (typeof localStorage === 'undefined') return '';
+  return localStorage.getItem(EDGE_HEOS_SELECTED_PLAYER_NAME_KEY) ?? '';
 }
 
 export async function edgeFetchJson<T>(
