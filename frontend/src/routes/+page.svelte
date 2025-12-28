@@ -109,6 +109,7 @@
 
   const STANDBY_PAGE_SIZE = 5;
   const STANDBY_PAGE_MS = 10_000;
+  const STANDBY_NEWS_MS = 10_000;
 
   let dataRefreshMs = 60_000;
   let dataRefreshInterval: ReturnType<typeof setInterval> | null = null;
@@ -337,7 +338,8 @@
   }
 
   $: {
-    const key = `${standbyMode}:${newsEnabled}:${standbyNewsItems.length}`;
+    const showStandbyNews = (standbyMode || upcomingMode) && newsEnabled;
+    const key = `${showStandbyNews}:${standbyNewsItems.length}`;
     if (key !== standbyNewsRotationKey) {
       standbyNewsRotationKey = key;
       standbyNewsIndex = 0;
@@ -347,10 +349,10 @@
         standbyNewsRotateInterval = null;
       }
 
-      if (standbyMode && newsEnabled && standbyNewsItems.length > 1) {
+      if (showStandbyNews && standbyNewsItems.length > 1) {
         standbyNewsRotateInterval = setInterval(() => {
           standbyNewsIndex = (standbyNewsIndex + 1) % standbyNewsItems.length;
-        }, STANDBY_PAGE_MS);
+        }, STANDBY_NEWS_MS);
       }
     }
   }
@@ -746,13 +748,13 @@
                     {#key standbyNewsIndex}
                       {@const n = standbyNewsItems[standbyNewsIndex]}
                       <div
-                        class="standby-zeit-news relative w-full overflow-hidden rounded-2xl border border-white/10 backdrop-blur-sm"
+                        class="standby-zeit-news relative w-full overflow-hidden rounded-2xl bg-white/5 backdrop-blur-md"
                         in:fade={{ duration: 500, delay: 200 }}
                         out:fade={{ duration: 400 }}
                       >
                         {#if n.imageUrl}
-                          <div class="absolute inset-0 bg-cover bg-center opacity-30" style={`background-image: url('${n.imageUrl}');`}></div>
-                          <div class="absolute inset-0 bg-gradient-to-r from-black/80 via-black/60 to-black/40"></div>
+                          <div class="absolute inset-0 bg-cover bg-center opacity-45" style={`background-image: url('${n.imageUrl}');`}></div>
+                          <div class="absolute inset-0 bg-gradient-to-r from-black/55 via-black/35 to-black/15"></div>
                         {:else}
                           <div class="absolute inset-0 bg-white/5"></div>
                         {/if}
@@ -776,7 +778,7 @@
                       </div>
                     {/key}
                   {:else}
-                    <div class="standby-zeit-news w-full overflow-hidden rounded-2xl border border-white/10 bg-white/5 backdrop-blur-sm">
+                    <div class="standby-zeit-news w-full overflow-hidden rounded-2xl bg-white/5 backdrop-blur-md">
                       <div class="p-6">
                         <div class="flex items-center gap-2 text-xs tracking-widest uppercase text-white/50 font-medium">
                           <span class="inline-block w-4 h-px bg-white/30"></span>
@@ -907,13 +909,13 @@
                     {#key standbyNewsIndex}
                       {@const n = standbyNewsItems[standbyNewsIndex]}
                       <div
-                        class="standby-zeit-news relative w-full overflow-hidden rounded-2xl border border-white/10 backdrop-blur-sm"
+                        class="standby-zeit-news relative w-full overflow-hidden rounded-2xl bg-white/5 backdrop-blur-md"
                         in:fade={{ duration: 500, delay: 200 }}
                         out:fade={{ duration: 400 }}
                       >
                         {#if n.imageUrl}
-                          <div class="absolute inset-0 bg-cover bg-center opacity-30" style={`background-image: url('${n.imageUrl}');`}></div>
-                          <div class="absolute inset-0 bg-gradient-to-r from-black/80 via-black/60 to-black/40"></div>
+                          <div class="absolute inset-0 bg-cover bg-center opacity-45" style={`background-image: url('${n.imageUrl}');`}></div>
+                          <div class="absolute inset-0 bg-gradient-to-r from-black/55 via-black/35 to-black/15"></div>
                         {:else}
                           <div class="absolute inset-0 bg-white/5"></div>
                         {/if}
@@ -937,7 +939,7 @@
                       </div>
                     {/key}
                   {:else}
-                    <div class="standby-zeit-news w-full overflow-hidden rounded-2xl border border-white/10 bg-white/5 backdrop-blur-sm">
+                    <div class="standby-zeit-news w-full overflow-hidden rounded-2xl bg-white/5 backdrop-blur-md">
                       <div class="p-6">
                         <div class="flex items-center gap-2 text-xs tracking-widest uppercase text-white/50 font-medium">
                           <span class="inline-block w-4 h-px bg-white/30"></span>
@@ -974,3 +976,10 @@
     </div>
   {/if}
 </div>
+
+<style>
+  .standby-zeit-news {
+    -webkit-mask-image: radial-gradient(120% 120% at 50% 50%, #000 72%, transparent 100%);
+    mask-image: radial-gradient(120% 120% at 50% 50%, #000 72%, transparent 100%);
+  }
+</style>
