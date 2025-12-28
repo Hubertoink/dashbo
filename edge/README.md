@@ -9,6 +9,7 @@ Lokaler Edge-Service für DashbO (Raspberry Pi):
 - `EDGE_TOKEN` (required): Bearer Token für API Zugriff
 - `EDGE_ALLOWED_ORIGINS` (default `https://dashbohub.de`): Kommagetrennte Origin-Allowlist
 - `MUSIC_LIBRARY_PATH` (default `/mnt/music`)
+- `EDGE_PUBLIC_BASE_URL` (optional): Public/LAN-reachable Base-URL für Stream-Links (HEOS). Beispiel: `http://192.168.178.27:8787`
 - `HEOS_HOST` (optional): IP/Host eines HEOS-Geräts (bypasst SSDP Discovery)
 - `HEOS_HOSTS` (optional): Kommagetrennte IP/Hosts (Fallback-Liste)
 - `HEOS_SCAN_CIDR` (optional): Aktiviert TCP-Scan-Fallback auf Port `1255` (z.B. `192.168.178.0/24`)

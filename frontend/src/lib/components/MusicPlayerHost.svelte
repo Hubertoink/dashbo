@@ -29,15 +29,6 @@
     return hosts ? { 'Content-Type': 'application/json', 'X-HEOS-HOSTS': hosts } : { 'Content-Type': 'application/json' };
   }
 
-  function isLocalhostUrl(rawUrl: string): boolean {
-    try {
-      const u = new URL(rawUrl);
-      return u.hostname === 'localhost' || u.hostname === '127.0.0.1' || u.hostname === '::1';
-    } catch {
-      return false;
-    }
-  }
-
   function current(): NowPlayingTrack | null {
     return queue[index] ?? null;
   }
@@ -61,11 +52,6 @@
 
     try {
       if (heosEnabled && heosPid && edgeBaseUrl) {
-        if (isLocalhostUrl(edgeBaseUrl)) {
-          throw new Error(
-            'HEOS kann nicht von localhost streamen. Bitte Edge Base URL als LAN-IP/Hostname setzen (z.B. http://192.168.178.X:8787 oder https://...).'
-          );
-        }
         const url = buildEdgeStreamUrl(track.trackId);
         await edgeFetchJson(edgeBaseUrl, '/api/heos/play_stream', edgeToken || undefined, {
           method: 'POST',

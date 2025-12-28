@@ -19,6 +19,8 @@ services:
       EDGE_TOKEN: ${EDGE_TOKEN}
       # Comma-separated allowed origins for CORS.
       EDGE_ALLOWED_ORIGINS: ${EDGE_ALLOWED_ORIGINS:-https://dashbohub.de}
+      # Public/LAN-reachable base URL used for HEOS stream URLs.
+      EDGE_PUBLIC_BASE_URL: ${EDGE_PUBLIC_BASE_URL:-}
       MUSIC_LIBRARY_PATH: /mnt/music
       # HEOS discovery/config (optional):
       HEOS_HOST: ${HEOS_HOST:-}

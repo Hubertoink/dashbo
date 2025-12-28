@@ -27,6 +27,10 @@ services:
       EDGE_TOKEN: ${EDGE_TOKEN:-1000}
       # Comma-separated allowed origins for CORS. Include dashbohub.de + local dev URLs.
       EDGE_ALLOWED_ORIGINS: ${EDGE_ALLOWED_ORIGINS:-https://dashbohub.de,http://localhost:8080,http://127.0.0.1:8080,http://localhost:5173}
+      # Public/LAN-reachable base URL used for HEOS stream URLs.
+      # This allows keeping the UI Edge Base URL on http://localhost:8787 (mixed-content-safe),
+      # while speakers stream from a reachable address (e.g. http://192.168.178.27:8787).
+      EDGE_PUBLIC_BASE_URL: ${EDGE_PUBLIC_BASE_URL:-}
       MUSIC_LIBRARY_PATH: /mnt/music
       # HEOS discovery/config:
       # - Prefer explicit IPs on Windows Docker (SSDP multicast is often blocked).

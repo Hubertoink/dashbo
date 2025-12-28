@@ -26,6 +26,54 @@ function normalizeHeosError(err) {
   }
 }
 
+function isLocalhostHostname(hostname) {
+  const h = String(hostname || '').toLowerCase();
+  return h === 'localhost' || h === '127.0.0.1' || h === '::1' || h === '0.0.0.0';
+}
+
+function normalizePublicBaseUrl(raw) {
+  const s = String(raw || '').trim();
+  if (!s) return '';
+  const withScheme = /^https?:\/\//i.test(s) ? s : `http://${s}`;
+  try {
+    const u = new URL(withScheme);
+    return u.origin;
+  } catch {
+    return '';
+  }
+}
+
+function rewriteStreamUrlForHeos(rawUrl) {
+  const url = String(rawUrl || '').trim();
+  if (!url) return '';
+
+  const publicBase = normalizePublicBaseUrl(process.env.EDGE_PUBLIC_BASE_URL || process.env.EDGE_STREAM_BASE_URL);
+
+  // Allow passing relative URLs; rewrite to public base.
+  if (url.startsWith('/')) {
+    if (!publicBase) throw new Error('stream_url_is_relative; set EDGE_PUBLIC_BASE_URL');
+    return `${publicBase}${url}`;
+  }
+
+  let parsed;
+  try {
+    parsed = new URL(url);
+  } catch {
+    // Not a URL and not a relative path => leave as-is.
+    return url;
+  }
+
+  if (isLocalhostHostname(parsed.hostname)) {
+    if (!publicBase) throw new Error('stream_url_is_localhost; set EDGE_PUBLIC_BASE_URL');
+    const base = new URL(publicBase);
+    base.pathname = parsed.pathname;
+    base.search = parsed.search;
+    return base.toString();
+  }
+
+  return parsed.toString();
+}
+
 heosRouter.get('/players', (req, res) => {
   (async () => {
     const hosts = parseHeosHostsHeader(req);
@@ -68,8 +116,29 @@ heosRouter.post('/play_stream', (req, res) => {
     if (!Number.isFinite(pid) || pid === 0) return res.status(400).json({ ok: false, error: 'pid_required' });
     if (!url) return res.status(400).json({ ok: false, error: 'url_required' });
 
+    const rewrittenUrl = rewriteStreamUrlForHeos(url);
+    try {
+      const u = new URL(rewrittenUrl);
+      if (u.protocol !== 'http:' && u.protocol !== 'https:') {
+        return res.status(400).json({
+          ok: false,
+          error: 'invalid_stream_url',
+          hint: 'stream url must be http(s)'
+        });
+      }
+      if (isLocalhostHostname(u.hostname)) {
+        return res.status(400).json({
+          ok: false,
+          error: 'stream_url_unreachable',
+          hint: 'HEOS cannot reach localhost; set EDGE_PUBLIC_BASE_URL to a LAN/public URL (e.g. http://192.168.178.27:8787)'
+        });
+      }
+    } catch {
+      return res.status(400).json({ ok: false, error: 'invalid_stream_url' });
+    }
+
     const hosts = parseHeosHostsHeader(req);
-    const r = await playStream(pid, url, name, { hosts });
+    const r = await playStream(pid, rewrittenUrl, name, { hosts });
     res.json({ ok: true, response: r });
   })().catch((err) => {
     const error = normalizeHeosError(err);
