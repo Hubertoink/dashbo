@@ -384,10 +384,28 @@ async function setPlayState(pid, state, opts) {
   return sendWithHostsFallback('player', 'set_play_state', { pid: Number(pid), state: s }, { hosts: opts?.hosts });
 }
 
+async function getPlayState(pid, opts) {
+  return sendWithHostsFallback('player', 'get_play_state', { pid: Number(pid) }, { hosts: opts?.hosts });
+}
+
+async function getVolume(pid, opts) {
+  return sendWithHostsFallback('player', 'get_volume', { pid: Number(pid) }, { hosts: opts?.hosts });
+}
+
+async function setVolume(pid, level, opts) {
+  const l = Number(level);
+  if (!Number.isFinite(l)) throw new Error('Invalid volume');
+  const v = Math.max(0, Math.min(100, Math.round(l)));
+  return sendWithHostsFallback('player', 'set_volume', { pid: Number(pid), level: v }, { hosts: opts?.hosts });
+}
+
 module.exports = {
   listPlayers,
   scanPlayers,
   getStatus,
   playStream,
-  setPlayState
+  setPlayState,
+  getPlayState,
+  getVolume,
+  setVolume
 };

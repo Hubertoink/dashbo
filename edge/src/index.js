@@ -43,7 +43,7 @@ app.use(
       return cb(null, false);
     },
     credentials: true,
-    allowedHeaders: ['Content-Type', 'Authorization', 'Range', 'Access-Control-Request-Private-Network'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'Range', 'X-HEOS-HOSTS', 'Access-Control-Request-Private-Network'],
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     exposedHeaders: ['Content-Range', 'Accept-Ranges'],
     optionsSuccessStatus: 204

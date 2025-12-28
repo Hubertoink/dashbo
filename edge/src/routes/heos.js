@@ -1,6 +1,6 @@
 const express = require('express');
 
-const { listPlayers, scanPlayers, getStatus, playStream, setPlayState } = require('../services/heosService');
+const { listPlayers, scanPlayers, getStatus, playStream, setPlayState, getPlayState, getVolume, setVolume } = require('../services/heosService');
 
 const heosRouter = express.Router();
 
@@ -74,6 +74,15 @@ function rewriteStreamUrlForHeos(rawUrl) {
   return parsed.toString();
 }
 
+function sanitizeUrlForDebug(rawUrl) {
+  try {
+    const u = new URL(String(rawUrl || ''));
+    return { origin: u.origin, path: u.pathname };
+  } catch {
+    return null;
+  }
+}
+
 heosRouter.get('/players', (req, res) => {
   (async () => {
     const hosts = parseHeosHostsHeader(req);
@@ -139,6 +148,47 @@ heosRouter.post('/play_stream', (req, res) => {
 
     const hosts = parseHeosHostsHeader(req);
     const r = await playStream(pid, rewrittenUrl, name, { hosts });
+    res.json({ ok: true, response: r, debug: sanitizeUrlForDebug(rewrittenUrl) });
+  })().catch((err) => {
+    const error = normalizeHeosError(err);
+    res.status(502).json({ ok: false, error });
+  });
+});
+
+heosRouter.get('/play_state', (req, res) => {
+  (async () => {
+    const pid = Number(req?.query?.pid);
+    if (!Number.isFinite(pid) || pid === 0) return res.status(400).json({ ok: false, error: 'pid_required' });
+    const hosts = parseHeosHostsHeader(req);
+    const r = await getPlayState(pid, { hosts });
+    res.json({ ok: true, response: r });
+  })().catch((err) => {
+    const error = normalizeHeosError(err);
+    res.status(502).json({ ok: false, error });
+  });
+});
+
+heosRouter.get('/volume', (req, res) => {
+  (async () => {
+    const pid = Number(req?.query?.pid);
+    if (!Number.isFinite(pid) || pid === 0) return res.status(400).json({ ok: false, error: 'pid_required' });
+    const hosts = parseHeosHostsHeader(req);
+    const r = await getVolume(pid, { hosts });
+    res.json({ ok: true, response: r });
+  })().catch((err) => {
+    const error = normalizeHeosError(err);
+    res.status(502).json({ ok: false, error });
+  });
+});
+
+heosRouter.post('/volume', (req, res) => {
+  (async () => {
+    const pid = Number(req?.body?.pid);
+    const level = Number(req?.body?.level);
+    if (!Number.isFinite(pid) || pid === 0) return res.status(400).json({ ok: false, error: 'pid_required' });
+    if (!Number.isFinite(level)) return res.status(400).json({ ok: false, error: 'level_required' });
+    const hosts = parseHeosHostsHeader(req);
+    const r = await setVolume(pid, level, { hosts });
     res.json({ ok: true, response: r });
   })().catch((err) => {
     const error = normalizeHeosError(err);

@@ -32,6 +32,10 @@
   let heosHosts = '';
   let heosStatusLine: string | null = null;
 
+  let heosVolumeBusy = false;
+  let heosVolumeError: string | null = null;
+  let heosVolumeLevel: number | null = null;
+
   function closeSpeakerModal() {
     speakerOpen = false;
   }
@@ -113,6 +117,56 @@
     }
   }
 
+  async function fetchVolumeForSelected() {
+    heosVolumeError = null;
+    heosVolumeLevel = null;
+    const pid = Number(selectedPid);
+    if (!Number.isFinite(pid) || pid === 0) return;
+
+    heosVolumeBusy = true;
+    try {
+      const base = normalizeEdgeBaseUrl(edgeBaseUrl);
+      if (!base) throw new Error('Edge Base URL fehlt');
+
+      const headers: Record<string, string> = {};
+      if (heosHosts.trim()) headers['X-HEOS-HOSTS'] = heosHosts.trim();
+
+      const r = await edgeFetchJson<any>(base, `/api/heos/volume?pid=${encodeURIComponent(String(pid))}`, edgeToken || undefined, { headers });
+      const lvl = Number(r?.response?.payload?.level);
+      if (Number.isFinite(lvl)) heosVolumeLevel = Math.max(0, Math.min(100, Math.round(lvl)));
+    } catch (err) {
+      heosVolumeError = err instanceof Error ? err.message : 'Lautstärke konnte nicht geladen werden.';
+    } finally {
+      heosVolumeBusy = false;
+    }
+  }
+
+  async function setVolumeForSelected(level: number) {
+    heosVolumeError = null;
+    const pid = Number(selectedPid);
+    if (!Number.isFinite(pid) || pid === 0) return;
+
+    heosVolumeBusy = true;
+    try {
+      const base = normalizeEdgeBaseUrl(edgeBaseUrl);
+      if (!base) throw new Error('Edge Base URL fehlt');
+
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (heosHosts.trim()) headers['X-HEOS-HOSTS'] = heosHosts.trim();
+
+      await edgeFetchJson<any>(base, '/api/heos/volume', edgeToken || undefined, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ pid, level })
+      });
+      heosVolumeLevel = Math.max(0, Math.min(100, Math.round(level)));
+    } catch (err) {
+      heosVolumeError = err instanceof Error ? err.message : 'Lautstärke konnte nicht gesetzt werden.';
+    } finally {
+      heosVolumeBusy = false;
+    }
+  }
+
   function persistSelectedPid(pid: string) {
     try {
       if (typeof localStorage === 'undefined') return;
@@ -143,6 +197,9 @@
     speakerOpen = !speakerOpen;
     if (speakerOpen && speakers.length === 0 && !speakersBusy) {
       await fetchSpeakers({ force: true });
+    }
+    if (speakerOpen) {
+      await fetchVolumeForSelected();
     }
   }
 
@@ -351,6 +408,7 @@
                     on:click={() => {
                       selectedPid = String(s.pid);
                       persistSelectedPid(selectedPid);
+                      void fetchVolumeForSelected();
                       closeSpeakerModal();
                     }}
                   >
@@ -361,6 +419,33 @@
             </div>
           {/if}
         </div>
+
+        {#if selectedPid}
+          <div class="mt-3">
+            <div class="flex items-center justify-between">
+              <div class="text-xs text-white/60">Lautstärke</div>
+              <div class="text-xs text-white/50 tabular-nums">{heosVolumeLevel ?? '--'}</div>
+            </div>
+
+            {#if heosVolumeError}
+              <div class="text-xs text-red-300 mt-1">{heosVolumeError}</div>
+            {/if}
+
+            <input
+              class="w-full mt-2"
+              type="range"
+              min="0"
+              max="100"
+              step="1"
+              value={heosVolumeLevel ?? 0}
+              disabled={heosVolumeBusy}
+              on:change={(e) => {
+                const v = Number((e.currentTarget as HTMLInputElement).value);
+                void setVolumeForSelected(v);
+              }}
+            />
+          </div>
+        {/if}
 
         <div class="flex items-center gap-2 mt-3">
           <button
