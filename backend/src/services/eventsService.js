@@ -185,12 +185,17 @@ async function listEventsBetween({ userId, from, to }) {
       t.id AS tag_id, t.name AS tag_name, t.color AS tag_color,
       p.id AS person_id, p.name AS person_name, p.color AS person_color
     FROM events e
-    LEFT JOIN tags t ON t.id = e.tag_id
+    LEFT JOIN tags t ON t.id = e.tag_id AND t.user_id = e.user_id
     LEFT JOIN persons p ON p.id = e.person_id
     WHERE e.user_id = $1 AND (
+      -- Non-recurring events:
+      -- If end_at is NULL, treat it as a point-in-time event at start_at.
       (
-        e.start_at <= $3
-        AND (e.end_at IS NULL OR e.end_at >= $2)
+        e.recurrence_freq IS NULL
+        AND (
+          (e.end_at IS NULL AND e.start_at >= $2 AND e.start_at <= $3)
+          OR (e.end_at IS NOT NULL AND e.start_at <= $3 AND e.end_at >= $2)
+        )
       )
       OR (
         e.recurrence_freq IS NOT NULL
@@ -220,6 +225,24 @@ async function listEventsBetween({ userId, from, to }) {
 
 async function insertEvent({ userId, title, description, location, startAt, endAt, allDay, tagId, personId, recurrence }) {
   const pool = getPool();
+
+  if (tagId != null) {
+    const ok = await pool.query('SELECT 1 FROM tags WHERE id = $1 AND user_id = $2;', [tagId, userId]);
+    if (ok.rowCount === 0) {
+      const err = new Error('invalid_tag');
+      err.status = 400;
+      throw err;
+    }
+  }
+
+  if (personId != null) {
+    const ok = await pool.query('SELECT 1 FROM persons WHERE id = $1 AND user_id = $2;', [personId, userId]);
+    if (ok.rowCount === 0) {
+      const err = new Error('invalid_person');
+      err.status = 400;
+      throw err;
+    }
+  }
 
   const recurrenceFreq = recurrence ?? null;
   const recurrenceInterval = 1;
@@ -267,8 +290,29 @@ async function patchEvent({ userId, id, patch }) {
   if (patch.startAt !== undefined) add('start_at', new Date(patch.startAt).toISOString());
   if (patch.endAt !== undefined) add('end_at', patch.endAt ? new Date(patch.endAt).toISOString() : null);
   if (patch.allDay !== undefined) add('all_day', Boolean(patch.allDay));
-  if (patch.tagId !== undefined) add('tag_id', patch.tagId ?? null);
-  if (patch.personId !== undefined) add('person_id', patch.personId ?? null);
+  if (patch.tagId !== undefined) {
+    if (patch.tagId != null) {
+      const ok = await pool.query('SELECT 1 FROM tags WHERE id = $1 AND user_id = $2;', [patch.tagId, userId]);
+      if (ok.rowCount === 0) {
+        const err = new Error('invalid_tag');
+        err.status = 400;
+        throw err;
+      }
+    }
+    add('tag_id', patch.tagId ?? null);
+  }
+
+  if (patch.personId !== undefined) {
+    if (patch.personId != null) {
+      const ok = await pool.query('SELECT 1 FROM persons WHERE id = $1 AND user_id = $2;', [patch.personId, userId]);
+      if (ok.rowCount === 0) {
+        const err = new Error('invalid_person');
+        err.status = 400;
+        throw err;
+      }
+    }
+    add('person_id', patch.personId ?? null);
+  }
   if (patch.recurrence !== undefined) add('recurrence_freq', patch.recurrence ?? null);
 
   if (fields.length === 0) {

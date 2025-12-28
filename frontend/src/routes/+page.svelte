@@ -43,7 +43,7 @@
   const STANDBY_PAGE_SIZE = 5;
   const STANDBY_PAGE_MS = 10_000;
 
-  const DATA_REFRESH_MS = 60_000;
+  let dataRefreshMs = 60_000;
   let dataRefreshInterval: ReturnType<typeof setInterval> | null = null;
 
   let standbyPageIndex = 0;
@@ -404,13 +404,23 @@
     void loadEvents();
 
     // Auto-refresh events; holidays only on explicit refresh/manual reload.
-    if (dataRefreshInterval) clearInterval(dataRefreshInterval);
-    dataRefreshInterval = setInterval(() => {
-      void loadEvents({ includeHolidays: false });
-    }, DATA_REFRESH_MS);
+    const startRefreshInterval = () => {
+      if (dataRefreshInterval) clearInterval(dataRefreshInterval);
+      dataRefreshInterval = setInterval(() => {
+        void loadEvents({ includeHolidays: false });
+      }, Math.max(5_000, Number(dataRefreshMs) || 60_000));
+    };
+
+    startRefreshInterval();
     void (async () => {
       try {
         const s = await fetchSettings();
+
+        if (typeof s?.dataRefreshMs === 'number' && Number.isFinite(s.dataRefreshMs) && s.dataRefreshMs > 0) {
+          dataRefreshMs = s.dataRefreshMs;
+          startRefreshInterval();
+        }
+
         const uploaded = (s.images ?? []).map((img: string) => `/api/media/${img}`);
         uploadedBackgroundUrls = uploaded;
 

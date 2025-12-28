@@ -43,8 +43,15 @@ async function listEvents(req, res) {
 async function createEvent(req, res) {
   const userId = Number(req.auth?.sub);
   const body = req.validatedBody;
-  const created = await insertEvent({ userId, ...body });
-  res.status(201).json(created);
+  try {
+    const created = await insertEvent({ userId, ...body });
+    res.status(201).json(created);
+  } catch (e) {
+    const status = Number(e?.status || 500);
+    const message = e?.message ? String(e.message) : 'internal_error';
+    const httpStatus = status >= 400 && status < 600 ? status : 500;
+    res.status(httpStatus).json({ error: message });
+  }
 }
 
 async function updateEvent(req, res) {
@@ -53,9 +60,16 @@ async function updateEvent(req, res) {
 
   const userId = Number(req.auth?.sub);
 
-  const updated = await patchEvent({ userId, id: parsedId.data, patch: req.validatedBody });
-  if (!updated) return res.status(404).json({ error: 'not_found' });
-  res.json(updated);
+  try {
+    const updated = await patchEvent({ userId, id: parsedId.data, patch: req.validatedBody });
+    if (!updated) return res.status(404).json({ error: 'not_found' });
+    res.json(updated);
+  } catch (e) {
+    const status = Number(e?.status || 500);
+    const message = e?.message ? String(e.message) : 'internal_error';
+    const httpStatus = status >= 400 && status < 600 ? status : 500;
+    res.status(httpStatus).json({ error: message });
+  }
 }
 
 async function deleteEvent(req, res) {

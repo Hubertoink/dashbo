@@ -308,6 +308,7 @@ export type SettingsDto = {
   holidaysEnabled?: boolean;
   todoEnabled?: boolean;
    todoListName?: string | null;
+  dataRefreshMs?: number | null;
 };
 
 export async function fetchSettings(): Promise<SettingsDto> {

@@ -137,6 +137,56 @@ async function initDb() {
     );
   `);
 
+  // Tags: bind to user (idempotent migrations) - users table must exist first
+  await p.query(`
+    ALTER TABLE tags
+    ADD COLUMN IF NOT EXISTS user_id BIGINT;
+  `);
+
+  // Backfill existing tags to first user (idempotent)
+  await p.query(`
+    UPDATE tags
+    SET user_id = (SELECT id FROM users ORDER BY id ASC LIMIT 1)
+    WHERE user_id IS NULL;
+  `);
+
+  // Replace old unique(name) with unique(user_id, name)
+  await p.query(`
+    ALTER TABLE tags
+    DROP CONSTRAINT IF EXISTS tags_name_key;
+  `);
+
+  await p.query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'tags_user_id_name_key'
+      ) THEN
+        ALTER TABLE tags
+        ADD CONSTRAINT tags_user_id_name_key UNIQUE (user_id, name);
+      END IF;
+    END $$;
+  `);
+
+  await p.query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'tags_user_id_fkey'
+      ) THEN
+        ALTER TABLE tags
+        ADD CONSTRAINT tags_user_id_fkey
+        FOREIGN KEY (user_id)
+        REFERENCES users(id)
+        ON DELETE CASCADE;
+      END IF;
+    END $$;
+  `);
+
+  await p.query(`
+    CREATE INDEX IF NOT EXISTS tags_user_id_idx ON tags (user_id);
+  `);
+
   await p.query(`
     CREATE TABLE IF NOT EXISTS persons (
       id BIGSERIAL PRIMARY KEY,
@@ -171,6 +221,36 @@ async function initDb() {
       value TEXT NOT NULL,
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
+  `);
+
+  // Per-user settings (background/weather/toggles, etc.)
+  await p.query(`
+    CREATE TABLE IF NOT EXISTS user_settings (
+      user_id BIGINT NOT NULL,
+      key TEXT NOT NULL,
+      value TEXT NOT NULL,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (user_id, key)
+    );
+  `);
+
+  await p.query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'user_settings_user_id_fkey'
+      ) THEN
+        ALTER TABLE user_settings
+        ADD CONSTRAINT user_settings_user_id_fkey
+        FOREIGN KEY (user_id)
+        REFERENCES users(id)
+        ON DELETE CASCADE;
+      END IF;
+    END $$;
+  `);
+
+  await p.query(`
+    CREATE INDEX IF NOT EXISTS user_settings_user_id_idx ON user_settings (user_id);
   `);
 
   // Outlook (Microsoft Graph) per-user OAuth tokens (read-only)

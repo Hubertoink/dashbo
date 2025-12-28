@@ -1,4 +1,4 @@
-const { getSetting } = require('./settingsService');
+const { getUserSetting } = require('./settingsService');
 
 let cached = null;
 
@@ -88,14 +88,14 @@ function weatherCodeToGerman(code) {
   return table[c] ?? null;
 }
 
-async function getWeather() {
+async function getWeather({ userId }) {
   const apiKey = process.env.OWM_API_KEY;
   const envLat = process.env.OWM_LAT;
   const envLon = process.env.OWM_LON;
   const units = process.env.OWM_UNITS || 'metric';
   const lang = process.env.OWM_LANG || 'de';
 
-  const weatherLocation = (await getSetting('weather.location')) ?? '';
+  const weatherLocation = (await getUserSetting({ userId, key: 'weather.location' })) ?? '';
 
   let lat = safeNumber(envLat);
   let lon = safeNumber(envLon);
@@ -227,9 +227,9 @@ async function getWeather() {
 // ───────────────────────────────────────────────────────────────
 let forecastCached = null;
 
-async function getForecast() {
+async function getForecast({ userId }) {
   const lang = process.env.OWM_LANG || 'de';
-  const weatherLocation = (await getSetting('weather.location')) ?? '';
+  const weatherLocation = (await getUserSetting({ userId, key: 'weather.location' })) ?? '';
   const locationTrimmed = weatherLocation.trim();
 
   let lat = safeNumber(process.env.OWM_LAT);

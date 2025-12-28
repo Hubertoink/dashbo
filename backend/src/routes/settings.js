@@ -3,16 +3,17 @@ const path = require('path');
 const multer = require('multer');
 const { z } = require('zod');
 
-const { requireAuth, requireAdmin } = require('../middleware/auth');
-const { ensureUploadDir, listImages, deleteImage } = require('../services/mediaService');
-const { getSetting, setSetting } = require('../services/settingsService');
+const { requireAuth } = require('../middleware/auth');
+const { ensureUserUploadDir, listImages, deleteImage } = require('../services/mediaService');
+const { getUserSetting, setUserSetting } = require('../services/settingsService');
 const { getTodoListName } = require('../services/todoService');
 
 const settingsRouter = express.Router();
 
 const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => {
-    cb(null, ensureUploadDir());
+  destination: (req, _file, cb) => {
+    const userId = Number(req.auth?.sub);
+    cb(null, ensureUserUploadDir(userId));
   },
   filename: (_req, file, cb) => {
     const ext = path.extname(file.originalname || '').toLowerCase();
@@ -27,14 +28,15 @@ const upload = multer({
   limits: { fileSize: 10 * 1024 * 1024 }
 });
 
-settingsRouter.get('/', async (_req, res) => {
-  const backgroundRaw = await getSetting('background');
+settingsRouter.get('/', requireAuth, async (_req, res) => {
+  const userId = Number(_req.auth?.sub);
+  const backgroundRaw = await getUserSetting({ userId, key: 'background' });
   const background = backgroundRaw && String(backgroundRaw).trim() ? backgroundRaw : null;
-  const rotateEnabledRaw = await getSetting('background.rotate');
-  const weatherLocation = await getSetting('weather.location');
-  const holidaysEnabledRaw = await getSetting('holidays.enabled');
-  const todoEnabledRaw = await getSetting('todo.enabled');
-  const images = listImages();
+  const rotateEnabledRaw = await getUserSetting({ userId, key: 'background.rotate' });
+  const weatherLocation = await getUserSetting({ userId, key: 'weather.location' });
+  const holidaysEnabledRaw = await getUserSetting({ userId, key: 'holidays.enabled' });
+  const todoEnabledRaw = await getUserSetting({ userId, key: 'todo.enabled' });
+  const images = listImages({ userId });
 
   const backgroundUrl = background ? `/media/${background}` : null;
 
@@ -43,49 +45,54 @@ settingsRouter.get('/', async (_req, res) => {
   // Default to true for backwards compatibility
   const todoEnabled = todoEnabledRaw === null ? true : String(todoEnabledRaw).toLowerCase() === 'true';
   const todoListName = getTodoListName();
-  res.json({ background, backgroundUrl, images, backgroundRotateEnabled, weatherLocation, holidaysEnabled, todoEnabled, todoListName });
+  const refreshEnv = process.env.DASHBO_DATA_REFRESH_MS || process.env.DATA_REFRESH_MS || '';
+  const dataRefreshMs = refreshEnv && Number.isFinite(Number(refreshEnv)) ? Number(refreshEnv) : null;
+  res.json({ background, backgroundUrl, images, backgroundRotateEnabled, weatherLocation, holidaysEnabled, todoEnabled, todoListName, dataRefreshMs });
 });
 
-settingsRouter.post('/background/rotate', requireAuth, requireAdmin, async (req, res) => {
+settingsRouter.post('/background/rotate', requireAuth, async (req, res) => {
   const schema = z.object({ enabled: z.boolean() });
   const parsed = schema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ error: 'invalid_body', details: parsed.error.flatten() });
   }
 
-  await setSetting('background.rotate', parsed.data.enabled ? 'true' : 'false');
+  const userId = Number(req.auth?.sub);
+  await setUserSetting({ userId, key: 'background.rotate', value: parsed.data.enabled ? 'true' : 'false' });
   return res.json({ ok: true });
 });
 
-settingsRouter.delete('/background/:filename', requireAuth, requireAdmin, async (req, res) => {
+settingsRouter.delete('/background/:filename', requireAuth, async (req, res) => {
   const schema = z.object({ filename: z.string().min(1).max(500) });
   const parsed = schema.safeParse(req.params);
   if (!parsed.success) {
     return res.status(400).json({ error: 'invalid_params', details: parsed.error.flatten() });
   }
 
-  const imagesBefore = listImages();
+  const userId = Number(req.auth?.sub);
+
+  const imagesBefore = listImages({ userId });
   if (!imagesBefore.includes(parsed.data.filename)) {
     return res.status(404).json({ error: 'file_not_found' });
   }
 
-  const deleted = deleteImage(parsed.data.filename);
+  const deleted = deleteImage({ userId, filename: parsed.data.filename });
   if (!deleted.ok) {
     return res.status(500).json({ error: deleted.error || 'delete_failed' });
   }
 
-  const currentBgRaw = await getSetting('background');
+  const currentBgRaw = await getUserSetting({ userId, key: 'background' });
   const currentBg = currentBgRaw && String(currentBgRaw).trim() ? String(currentBgRaw) : null;
-  const imagesAfter = listImages();
+  const imagesAfter = listImages({ userId });
   if (currentBg && currentBg === parsed.data.filename) {
     const next = imagesAfter[0] || '';
-    await setSetting('background', next);
+    await setUserSetting({ userId, key: 'background', value: next });
   }
 
   return res.json({ ok: true });
 });
 
-settingsRouter.post('/weather', requireAuth, requireAdmin, async (req, res) => {
+settingsRouter.post('/weather', requireAuth, async (req, res) => {
   const schema = z.object({ location: z.string().trim().min(0).max(200) });
   const parsed = schema.safeParse(req.body);
   if (!parsed.success) {
@@ -93,60 +100,68 @@ settingsRouter.post('/weather', requireAuth, requireAdmin, async (req, res) => {
   }
 
   const loc = parsed.data.location.trim();
-  await setSetting('weather.location', loc);
+  const userId = Number(req.auth?.sub);
+  await setUserSetting({ userId, key: 'weather.location', value: loc });
   return res.json({ ok: true });
 });
 
-settingsRouter.post('/holidays', requireAuth, requireAdmin, async (req, res) => {
+settingsRouter.post('/holidays', requireAuth, async (req, res) => {
   const schema = z.object({ enabled: z.boolean() });
   const parsed = schema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ error: 'invalid_body', details: parsed.error.flatten() });
   }
 
-  await setSetting('holidays.enabled', parsed.data.enabled ? 'true' : 'false');
+  const userId = Number(req.auth?.sub);
+  await setUserSetting({ userId, key: 'holidays.enabled', value: parsed.data.enabled ? 'true' : 'false' });
   return res.json({ ok: true });
 });
 
-settingsRouter.post('/todo', requireAuth, requireAdmin, async (req, res) => {
+settingsRouter.post('/todo', requireAuth, async (req, res) => {
   const schema = z.object({ enabled: z.boolean() });
   const parsed = schema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ error: 'invalid_body', details: parsed.error.flatten() });
   }
 
-  await setSetting('todo.enabled', parsed.data.enabled ? 'true' : 'false');
+  const userId = Number(req.auth?.sub);
+  await setUserSetting({ userId, key: 'todo.enabled', value: parsed.data.enabled ? 'true' : 'false' });
   return res.json({ ok: true });
 });
 
-settingsRouter.post('/background', requireAuth, requireAdmin, async (req, res) => {
+settingsRouter.post('/background', requireAuth, async (req, res) => {
   const schema = z.object({ filename: z.string().min(1).max(500) });
   const parsed = schema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ error: 'invalid_body', details: parsed.error.flatten() });
   }
 
-  const images = listImages();
+  const userId = Number(req.auth?.sub);
+
+  const images = listImages({ userId });
   if (!images.includes(parsed.data.filename)) {
     return res.status(404).json({ error: 'file_not_found' });
   }
 
-  await setSetting('background', parsed.data.filename);
+  await setUserSetting({ userId, key: 'background', value: parsed.data.filename });
   return res.json({ ok: true });
 });
 
 settingsRouter.post(
   '/background/upload',
   requireAuth,
-  requireAdmin,
   upload.single('file'),
   async (req, res) => {
     if (!req.file) return res.status(400).json({ error: 'missing_file' });
 
-    await setSetting('background', req.file.filename);
+    const userId = Number(req.auth?.sub);
+
+    const imageId = `u${userId}/${req.file.filename}`;
+
+    await setUserSetting({ userId, key: 'background', value: imageId });
     return res.status(201).json({
-      filename: req.file.filename,
-      url: `/media/${req.file.filename}`
+      filename: imageId,
+      url: `/media/${imageId}`
     });
   }
 );

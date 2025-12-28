@@ -1,11 +1,12 @@
 const express = require('express');
 const { z } = require('zod');
 
+const { requireAuth } = require('../middleware/auth');
 const { getHolidays } = require('../services/holidaysService');
 
 const holidaysRouter = express.Router();
 
-holidaysRouter.get('/', async (req, res, next) => {
+holidaysRouter.get('/', requireAuth, async (req, res, next) => {
   try {
     const schema = z.object({
       from: z.string().datetime(),
@@ -23,7 +24,8 @@ holidaysRouter.get('/', async (req, res, next) => {
       return res.status(400).json({ error: 'invalid_range' });
     }
 
-    const data = await getHolidays({ from, to });
+    const userId = Number(req.auth?.sub);
+    const data = await getHolidays({ userId, from, to });
     return res.json(data);
   } catch (err) {
     return next(err);

@@ -1,4 +1,4 @@
-const { getSetting } = require('./settingsService');
+const { getUserSetting } = require('./settingsService');
 
 // Nager.Date returns DE public holidays with optional `counties` like ["DE-BW"].
 // We filter by the derived federal state (Bundesland) if available.
@@ -114,11 +114,11 @@ function appliesToState(counties, stateCode) {
   return counties.includes(needle);
 }
 
-async function getHolidays({ from, to }) {
-  const holidaysEnabledRaw = await getSetting('holidays.enabled');
+async function getHolidays({ userId, from, to }) {
+  const holidaysEnabledRaw = await getUserSetting({ userId, key: 'holidays.enabled' });
   const enabled = String(holidaysEnabledRaw ?? '').toLowerCase() === 'true';
 
-  const weatherLocation = (await getSetting('weather.location')) ?? '';
+  const weatherLocation = (await getUserSetting({ userId, key: 'weather.location' })) ?? '';
   const lang = process.env.OWM_LANG || 'de';
 
   if (!enabled) {

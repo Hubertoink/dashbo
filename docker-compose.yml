@@ -34,6 +34,8 @@ services:
       OUTLOOK_SCOPES: ${OUTLOOK_SCOPES:-offline_access Calendars.Read User.Read Tasks.ReadWrite}
       OUTLOOK_SUCCESS_REDIRECT: ${OUTLOOK_SUCCESS_REDIRECT:-/settings}
       OUTLOOK_ERROR_REDIRECT: ${OUTLOOK_ERROR_REDIRECT:-/settings?outlook=error}
+      DASHBO_DATA_REFRESH_MS: ${DASHBO_DATA_REFRESH_MS:-60000}
+      TODO_LIST_NAME: ${TODO_LIST_NAME:-Dashbo}
     depends_on:
       - db
     ports:

@@ -469,12 +469,12 @@
   }
 
   onMount(async () => {
-    await refreshSettings();
-    await refreshTags();
-
     const existing = getStoredToken();
     if (existing) {
       authed = true;
+
+      await refreshSettings();
+      await refreshTags();
       try {
         await refreshUsers();
         isAdmin = true;
@@ -491,11 +491,14 @@
       }
 
       await refreshOutlook();
+    } else {
+      authed = false;
+      isAdmin = false;
     }
   });
 
   async function saveWeatherLocation() {
-    if (!authed || !isAdmin) return;
+    if (!authed) return;
     weatherError = null;
     weatherSaving = true;
     try {
@@ -510,7 +513,7 @@
   }
 
   async function saveHolidays() {
-    if (!authed || !isAdmin) return;
+    if (!authed) return;
     holidaysError = null;
     holidaysSaving = true;
     try {
@@ -525,7 +528,7 @@
   }
 
   async function saveTodo() {
-    if (!authed || !isAdmin) return;
+    if (!authed) return;
     todoError = null;
     todoSaving = true;
     try {
@@ -870,12 +873,12 @@
               class="flex-1 h-9 px-3 rounded-lg bg-white/10 border-0 text-sm placeholder:text-white/40"
               placeholder="Ort (z.B. Berlin)"
               bind:value={weatherLocation}
-              disabled={!authed || !isAdmin}
+              disabled={!authed}
             />
             <button
               class="h-9 px-4 rounded-lg bg-white/20 hover:bg-white/25 text-sm font-medium disabled:opacity-50"
               on:click={saveWeatherLocation}
-              disabled={!authed || !isAdmin || weatherSaving}
+              disabled={!authed || weatherSaving}
             >
               Speichern
             </button>
@@ -890,13 +893,13 @@
               type="checkbox"
               class="rounded bg-white/10 border-0"
               bind:checked={holidaysEnabled}
-              disabled={!authed || !isAdmin}
+              disabled={!authed}
             />
             Feiertage anzeigen
             <button
               class="ml-auto h-8 px-3 rounded-lg bg-white/20 hover:bg-white/25 text-xs font-medium disabled:opacity-50"
               on:click={saveHolidays}
-              disabled={!authed || !isAdmin || holidaysSaving}
+              disabled={!authed || holidaysSaving}
             >
               Speichern
             </button>
@@ -911,7 +914,7 @@
               type="checkbox"
               class="rounded bg-white/10 border-0"
               bind:checked={todoEnabled}
-              disabled={!authed || !isAdmin}
+              disabled={!authed}
             />
             To-Do Liste anzeigen
             {#if settings?.todoListName}
@@ -920,7 +923,7 @@
             <button
               class="ml-auto h-8 px-3 rounded-lg bg-white/20 hover:bg-white/25 text-xs font-medium disabled:opacity-50"
               on:click={saveTodo}
-              disabled={!authed || !isAdmin || todoSaving}
+              disabled={!authed || todoSaving}
             >
               Speichern
             </button>
@@ -930,8 +933,8 @@
             <div class="text-red-400 text-xs mt-1">{todoError}</div>
           {/if}
 
-          {#if !authed || !isAdmin}
-            <div class="text-white/40 text-xs mt-2">Admin-Login erforderlich</div>
+          {#if !authed}
+            <div class="text-white/40 text-xs mt-2">Bitte einloggen, um Einstellungen zu ändern.</div>
           {/if}
         </div>
 
@@ -945,14 +948,14 @@
                 type="checkbox"
                 class="rounded bg-white/10 border-0"
                 bind:checked={backgroundRotateEnabled}
-                disabled={!authed || !isAdmin || rotateSaving}
+                disabled={!authed || rotateSaving}
               />
               Zufällig wechseln (alle 10 Minuten)
             </label>
             <button
               class="ml-auto h-8 px-3 rounded-lg bg-white/20 hover:bg-white/25 text-xs font-medium disabled:opacity-50"
               on:click={saveBackgroundRotate}
-              disabled={!authed || !isAdmin || rotateSaving}
+              disabled={!authed || rotateSaving}
             >
               Speichern
             </button>
@@ -969,14 +972,14 @@
               accept="image/png,image/jpeg,image/webp"
               multiple
               on:change={(e) => onChooseUploadFilesFrom('files', (e.currentTarget as HTMLInputElement).files)}
-              disabled={!authed || !isAdmin}
+              disabled={!authed}
             />
 
             <button
               class="h-9 px-3 rounded-lg bg-white/10 hover:bg-white/15 text-sm font-medium disabled:opacity-50"
               type="button"
               on:click={() => folderInputEl?.click()}
-              disabled={!authed || !isAdmin}
+              disabled={!authed}
             >
               Ordner
             </button>
@@ -989,7 +992,7 @@
               multiple
               webkitdirectory
               on:change={(e) => onChooseUploadFilesFrom('folder', (e.currentTarget as HTMLInputElement).files)}
-              disabled={!authed || !isAdmin}
+              disabled={!authed}
             />
 
             <button
@@ -999,7 +1002,7 @@
                   : 'bg-white/20 hover:bg-white/25'
               }`}
               on:click={doUpload}
-              disabled={!authed || !isAdmin || uploadFiles.length === 0 || savingBg}
+              disabled={!authed || uploadFiles.length === 0 || savingBg}
             >
               Upload
             </button>
@@ -1029,7 +1032,7 @@
                   <button
                     class={`w-full aspect-video rounded-lg overflow-hidden border-2 ${settings?.background === img ? 'border-white/60' : 'border-transparent'} hover:border-white/30`}
                     on:click={() => chooseBg(img)}
-                    disabled={!authed || !isAdmin || savingBg || deletingBg}
+                    disabled={!authed || savingBg || deletingBg}
                     aria-label="Hintergrund auswählen"
                   >
                     <img class="w-full h-full object-cover" src={`/api/media/${img}`} alt={img} />
@@ -1043,7 +1046,7 @@
                       deleteBgError = null;
                       deleteBgFor = img;
                     }}
-                    disabled={!authed || !isAdmin || savingBg || deletingBg}
+                    disabled={!authed || savingBg || deletingBg}
                   >
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                       <path d="M3 6h18" />

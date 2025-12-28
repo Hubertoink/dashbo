@@ -1,7 +1,7 @@
 const express = require('express');
 const { z } = require('zod');
 
-const { requireAuth, requireAdmin } = require('../middleware/auth');
+const { requireAuth } = require('../middleware/auth');
 const { listTags, createTag, updateTag, deleteTag } = require('../services/tagsService');
 
 const tagsRouter = express.Router();
@@ -36,30 +36,33 @@ function validateBody(schema) {
 }
 
 tagsRouter.get('/', requireAuth, async (_req, res) => {
-  const tags = await listTags();
+  const userId = Number(_req.auth?.sub);
+  const tags = await listTags({ userId });
   res.json(tags);
 });
 
-// Admin management
-tagsRouter.post('/', requireAuth, requireAdmin, validateBody(createSchema), async (req, res) => {
-  const created = await createTag(req.validatedBody);
+tagsRouter.post('/', requireAuth, validateBody(createSchema), async (req, res) => {
+  const userId = Number(req.auth?.sub);
+  const created = await createTag({ userId, ...req.validatedBody });
   res.status(201).json(created);
 });
 
-tagsRouter.put('/:id', requireAuth, requireAdmin, validateBody(updateSchema), async (req, res) => {
+tagsRouter.put('/:id', requireAuth, validateBody(updateSchema), async (req, res) => {
   const parsedId = idSchema.safeParse(req.params.id);
   if (!parsedId.success) return res.status(400).json({ error: 'invalid_id' });
 
-  const updated = await updateTag(parsedId.data, req.validatedBody);
+  const userId = Number(req.auth?.sub);
+  const updated = await updateTag({ userId, id: parsedId.data, patch: req.validatedBody });
   if (!updated) return res.status(404).json({ error: 'not_found' });
   res.json(updated);
 });
 
-tagsRouter.delete('/:id', requireAuth, requireAdmin, async (req, res) => {
+tagsRouter.delete('/:id', requireAuth, async (req, res) => {
   const parsedId = idSchema.safeParse(req.params.id);
   if (!parsedId.success) return res.status(400).json({ error: 'invalid_id' });
 
-  const ok = await deleteTag(parsedId.data);
+  const userId = Number(req.auth?.sub);
+  const ok = await deleteTag({ userId, id: parsedId.data });
   if (!ok) return res.status(404).json({ error: 'not_found' });
   res.status(204).end();
 });
