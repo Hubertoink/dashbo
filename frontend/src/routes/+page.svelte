@@ -986,25 +986,24 @@
               <div class="text-white"><ForecastWidget /></div>
 
               {#if musicWidgetEnabled && $musicPlayerState.now}
-                <div class="standby-music mb-8">
-                  <div class="flex items-center gap-4">
-                    <div class="h-16 w-16 overflow-hidden rounded-none shadow-lg shadow-black/30 shrink-0">
-                      {#if $musicPlayerState.now?.coverUrl}
-                        <img src={$musicPlayerState.now.coverUrl} alt="" class="h-full w-full object-cover" loading="lazy" />
-                      {:else}
-                        <div class="h-full w-full bg-white/10 flex items-center justify-center">
-                          <svg viewBox="0 0 24 24" class="h-6 w-6 text-white/30" fill="currentColor"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>
-                        </div>
-                      {/if}
-                    </div>
-                    <div class="min-w-0">
-                      {#if $musicPlayerState.now}
-                        <div class="text-lg font-semibold text-white truncate">{$musicPlayerState.now.artist}</div>
-                        <div class="text-white/50 text-sm truncate">{$musicPlayerState.now.title}</div>
-                      {:else}
-                        <div class="text-white/40 text-sm">Keine Wiedergabe</div>
-                      {/if}
-                    </div>
+                <div class="standby-music mt-10 mb-6">
+                  <div class="relative w-36 h-36 overflow-hidden rounded-lg shadow-2xl shadow-black/50">
+                    {#if $musicPlayerState.now?.coverUrl}
+                      <img src={$musicPlayerState.now.coverUrl} alt="" class="h-full w-full object-cover" loading="lazy" />
+                    {:else}
+                      <div class="h-full w-full bg-white/10 flex items-center justify-center">
+                        <svg viewBox="0 0 24 24" class="h-12 w-12 text-white/30" fill="currentColor"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>
+                      </div>
+                    {/if}
+                    <div class="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent"></div>
+                  </div>
+                  <div class="mt-4 max-w-[180px]">
+                    {#if $musicPlayerState.now}
+                      <div class="text-xl font-semibold text-white leading-tight">{$musicPlayerState.now.artist}</div>
+                      <div class="text-white/60 text-base mt-1 leading-snug line-clamp-2">{$musicPlayerState.now.title}</div>
+                    {:else}
+                      <div class="text-white/40 text-sm">Keine Wiedergabe</div>
+                    {/if}
                   </div>
                 </div>
               {/if}
