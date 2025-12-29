@@ -1,5 +1,28 @@
 <script lang="ts">
+  import { onDestroy } from 'svelte';
+
   export let edgeSetupOpen: boolean;
+
+  let prevBodyOverflow: string | null = null;
+
+  $: {
+    if (typeof document !== 'undefined') {
+      if (edgeSetupOpen) {
+        if (prevBodyOverflow === null) prevBodyOverflow = document.body.style.overflow;
+        document.body.style.overflow = 'hidden';
+      } else if (prevBodyOverflow !== null) {
+        document.body.style.overflow = prevBodyOverflow;
+        prevBodyOverflow = null;
+      }
+    }
+  }
+
+  onDestroy(() => {
+    if (typeof document !== 'undefined' && prevBodyOverflow !== null) {
+      document.body.style.overflow = prevBodyOverflow;
+      prevBodyOverflow = null;
+    }
+  });
 
   type Target = 'windows' | 'pi';
   let target: Target = 'windows';
@@ -101,7 +124,7 @@
     on:click={(e) => e.currentTarget === e.target && (edgeSetupOpen = false)}
   >
     <div class="absolute inset-0 bg-black/70"></div>
-    <div class="relative bg-zinc-900 rounded-2xl p-6 w-full max-w-3xl border border-white/10">
+    <div class="relative bg-zinc-900 rounded-2xl p-6 w-full max-w-3xl border border-white/10 max-h-[85vh] flex flex-col">
       <div class="flex items-start justify-between gap-4 mb-3">
         <div>
           <div class="font-semibold text-lg">Pi/PC Edge Setup</div>
@@ -115,7 +138,7 @@
         </button>
       </div>
 
-      <div class="text-sm text-white/80 space-y-3">
+      <div class="text-sm text-white/80 space-y-3 overflow-y-auto pr-1 max-h-[calc(85vh-88px)]">
         <div class="rounded-xl border border-white/10 bg-white/5 p-3">
           <div class="font-medium mb-2">YML herunterladen</div>
 
