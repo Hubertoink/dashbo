@@ -10,10 +10,13 @@
   let source: NewsResponseDto['source'] = 'zeit';
   let page = 0;
   let pageTimer: ReturnType<typeof setInterval> | null = null;
+  let transitioning = false;
 
-  const PAGE_SIZE = 6;
+  const PAGE_SIZE = 3;
   const MAX_ITEMS = 12;
   const PAGE_ROTATE_MS = 20_000;
+  const TRANSITION_OUT_MS = 180;
+  const TRANSITION_IN_MS = 220;
 
   const NEWS_CACHE_KEY = 'dashbo_news_cache_v1';
   const NEWS_CACHE_TTL_MS = 5 * 60 * 1000;
@@ -83,7 +86,13 @@
         stopPageRotation();
         return;
       }
-      page = (page + 1) % nextCount;
+      transitioning = true;
+      setTimeout(() => {
+        page = (page + 1) % nextCount;
+        setTimeout(() => {
+          transitioning = false;
+        }, TRANSITION_IN_MS + 50);
+      }, TRANSITION_OUT_MS);
     }, PAGE_ROTATE_MS);
   }
 
@@ -123,31 +132,37 @@
       {@const pageCount = Math.ceil(Math.min(items.length, MAX_ITEMS) / PAGE_SIZE)}
       {@const start = page * PAGE_SIZE}
       {@const view = items.slice(start, start + PAGE_SIZE)}
-      {#key page}
-        <div class="space-y-2" in:fade={{ duration: 220 }} out:fade={{ duration: 180 }}>
-          {#each view as it (it.url)}
-            <a
-              class="block text-sm text-white/85 hover:text-white underline-offset-2 hover:underline whitespace-normal break-words"
-              href={it.url}
-              rel="noopener"
-            >
-              {#if source === 'mixed'}
-                {@const lbl = itemSourceLabel(it)}
-                {#if lbl}
-                  <span class="mr-2 text-[10px] tracking-widest uppercase text-white/45">{lbl}</span>
+      <div class="relative overflow-hidden" style="min-height: {PAGE_SIZE * 1.75 + 1.5}rem;">
+        {#key page}
+          <div
+            class="space-y-2 {transitioning ? 'absolute inset-x-0 top-0' : ''}"
+            in:fade={{ duration: TRANSITION_IN_MS, delay: TRANSITION_OUT_MS }}
+            out:fade={{ duration: TRANSITION_OUT_MS }}
+          >
+            {#each view as it (it.url)}
+              <a
+                class="block text-sm text-white/85 hover:text-white underline-offset-2 hover:underline whitespace-normal break-words"
+                href={it.url}
+                rel="noopener"
+              >
+                {#if source === 'mixed'}
+                  {@const lbl = itemSourceLabel(it)}
+                  {#if lbl}
+                    <span class="mr-2 text-[10px] tracking-widest uppercase text-white/45">{lbl}</span>
+                  {/if}
                 {/if}
-              {/if}
-              {it.title}
-            </a>
-          {/each}
+                {it.title}
+              </a>
+            {/each}
 
-          {#if pageCount > 1}
-            <div class="pt-1 text-[10px] tracking-widest uppercase text-white/35">
-              {page + 1}/{pageCount}
-            </div>
-          {/if}
-        </div>
-      {/key}
+            {#if pageCount > 1}
+              <div class="pt-1 text-[10px] tracking-widest uppercase text-white/35">
+                {page + 1}/{pageCount}
+              </div>
+            {/if}
+          </div>
+        {/key}
+      </div>
     {:else}
       <div class="text-white/50 text-sm">Keine Artikel verfügbar.</div>
     {/if}
