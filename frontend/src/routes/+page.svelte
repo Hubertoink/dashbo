@@ -21,6 +21,7 @@
     type NewsItemDto,
     type TagColorKey,
     fetchSettings,
+    fetchOutlookStatus,
     getStoredToken
   } from '$lib/api';
   import { daysForMonthGrid } from '$lib/date';
@@ -54,15 +55,36 @@
   let newsEnabled = false;
   let holidays: HolidayDto[] = [];
 
+  let outlookConnected = false;
+
   let standbyNewsItems: NewsItemDto[] = [];
   let standbyNewsIndex = 0;
   let standbyNewsLoading = false;
+  let standbyNewsMultiSource = false;
   let standbyNewsRotateInterval: ReturnType<typeof setInterval> | null = null;
   let standbyNewsRotationKey = '';
   let standbyNewsRefreshInterval: ReturnType<typeof setInterval> | null = null;
 
-  const NEWS_CACHE_KEY = 'dashbo_zeit_news_cache_v1';
+  const NEWS_CACHE_KEY = 'dashbo_news_cache_v1';
   const NEWS_CACHE_TTL_MS = 5 * 60 * 1000;
+
+  function recomputeStandbyNewsMultiSource(items: NewsItemDto[]) {
+    try {
+      const srcs = new Set((items ?? []).map((it: any) => (typeof it?.source === 'string' ? it.source : null)).filter(Boolean));
+      standbyNewsMultiSource = srcs.size > 1;
+    } catch {
+      standbyNewsMultiSource = false;
+    }
+  }
+
+  function newsSourceLabel(id: any): string {
+    const s = typeof id === 'string' ? id.toLowerCase() : '';
+    if (s === 'guardian') return 'Guardian';
+    if (s === 'newyorker') return 'New Yorker';
+    if (s === 'sz') return 'SZ';
+    if (s === 'zeit') return 'ZEIT';
+    return '';
+  }
 
   function loadNewsFromCache(): boolean {
     if (typeof localStorage === 'undefined') return false;
@@ -73,7 +95,8 @@
       const at = typeof parsed?.at === 'number' ? parsed.at : 0;
       const isFresh = at > 0 && Date.now() - at <= NEWS_CACHE_TTL_MS;
       if (!isFresh || !Array.isArray(parsed?.items)) return false;
-      standbyNewsItems = parsed.items.slice(0, 4);
+      standbyNewsItems = parsed.items.slice(0, 8);
+      recomputeStandbyNewsMultiSource(standbyNewsItems);
       return standbyNewsItems.length > 0;
     } catch {
       return false;
@@ -84,7 +107,8 @@
     standbyNewsLoading = true;
     try {
       const r = await fetchNews();
-      standbyNewsItems = (r.items ?? []).slice(0, 4);
+      standbyNewsItems = (r.items ?? []).slice(0, 8);
+      recomputeStandbyNewsMultiSource(standbyNewsItems);
 
       if (typeof localStorage !== 'undefined') {
         try {
@@ -95,6 +119,7 @@
       }
     } catch {
       standbyNewsItems = [];
+      standbyNewsMultiSource = false;
     } finally {
       standbyNewsLoading = false;
     }
@@ -543,6 +568,13 @@
       try {
         const s = await fetchSettings();
 
+        try {
+          const st = await fetchOutlookStatus();
+          outlookConnected = Boolean(st?.connected);
+        } catch {
+          outlookConnected = false;
+        }
+
         if (typeof s?.dataRefreshMs === 'number' && Number.isFinite(s.dataRefreshMs) && s.dataRefreshMs > 0) {
           dataRefreshMs = s.dataRefreshMs;
           startRefreshInterval();
@@ -661,7 +693,7 @@
       <div class="w-[34%] min-w-[320px] hidden md:flex flex-col p-10 h-screen">
         <div class="text-white"><WeatherWidget tone="light" /></div>
 
-        {#if todoEnabled}
+        {#if todoEnabled && outlookConnected}
           <div class="mt-6 pb-8 text-white">
             <TodoWidget />
           </div>
@@ -716,7 +748,7 @@
         <div class="h-screen overflow-hidden">
           <div class="h-full flex" on:click|stopPropagation={exitStandby}>
             <div class="hidden md:flex w-[34%] min-w-[280px] flex-col justify-between p-10 h-full">
-              {#if todoEnabled}
+              {#if todoEnabled && outlookConnected}
                 <div class="text-white"><TodoWidget /></div>
               {/if}
 
@@ -857,7 +889,10 @@
                           <div class="relative px-6 pt-6 pb-9">
                             <div class="flex items-center gap-2 text-xs tracking-widest uppercase text-white/50 font-medium">
                               <span class="inline-block w-4 h-px bg-white/30"></span>
-                              ZEIT Online
+                              <span>News</span>
+                              {#if standbyNewsMultiSource && n.source}
+                                <span class="ml-2 text-white/35">{newsSourceLabel(n.source)}</span>
+                              {/if}
                             </div>
                             <div class="mt-3 text-xl md:text-2xl font-semibold leading-snug">{n.title}</div>
                             {#if validTeaser}
@@ -879,7 +914,7 @@
                       <div class="px-6 pt-6 pb-9">
                         <div class="flex items-center gap-2 text-xs tracking-widest uppercase text-white/50 font-medium">
                           <span class="inline-block w-4 h-px bg-white/30"></span>
-                          ZEIT Online
+                          <span>News</span>
                         </div>
                         <div class="mt-3 text-white/60 text-base">
                           {#if standbyNewsLoading}
@@ -926,13 +961,13 @@
       {:else}
         <div class="h-screen overflow-hidden" in:fly={{ x: 120, duration: 220 }}>
           <div class="h-full flex">
-            <!-- Left: forecast + todo + clock -->
+            <!-- Left: todo + forecast + clock -->
             <div class="hidden md:flex w-[34%] min-w-[280px] flex-col p-10 h-full">
-              <div class="text-white"><ForecastWidget /></div>
-
-              {#if todoEnabled}
+              {#if todoEnabled && outlookConnected}
                 <div class="mt-6 pb-8 text-white"><TodoWidget variant="plain" /></div>
               {/if}
+
+              <div class="text-white"><ForecastWidget /></div>
 
               {#if musicWidgetEnabled}
                 <div class="standby-music mb-8">
@@ -1052,7 +1087,7 @@
 
               {#if newsEnabled}
                 <div class="mt-auto pt-6">
-                  {#if standbyNewsItems.length > 0}
+                              {#if standbyNewsItems.length > 0}
                     <div class="standby-news-container relative h-[220px] w-full">
                       {#key standbyNewsIndex}
                         {@const n = standbyNewsItems[standbyNewsIndex]}
@@ -1071,7 +1106,10 @@
                           <div class="relative px-6 pt-6 pb-9">
                             <div class="flex items-center gap-2 text-xs tracking-widest uppercase text-white/50 font-medium">
                               <span class="inline-block w-4 h-px bg-white/30"></span>
-                              ZEIT Online
+                              <span>News</span>
+                              {#if standbyNewsMultiSource && n.source}
+                                <span class="ml-2 text-white/35">{newsSourceLabel(n.source)}</span>
+                              {/if}
                             </div>
                             <div class="mt-3 text-xl md:text-2xl font-semibold leading-snug">{n.title}</div>
                             {#if validTeaser}
@@ -1093,7 +1131,7 @@
                       <div class="px-6 pt-6 pb-9">
                         <div class="flex items-center gap-2 text-xs tracking-widest uppercase text-white/50 font-medium">
                           <span class="inline-block w-4 h-px bg-white/30"></span>
-                          ZEIT Online
+                          <span>News</span>
                         </div>
                         <div class="mt-3 text-white/60 text-base">
                           {#if standbyNewsLoading}

@@ -36,7 +36,9 @@ settingsRouter.get('/', requireAuth, async (_req, res) => {
   const weatherLocation = await getUserSetting({ userId, key: 'weather.location' });
   const holidaysEnabledRaw = await getUserSetting({ userId, key: 'holidays.enabled' });
   const todoEnabledRaw = await getUserSetting({ userId, key: 'todo.enabled' });
+  const todoListNamesRaw = await getUserSetting({ userId, key: 'todo.listNames' });
   const newsEnabledRaw = await getUserSetting({ userId, key: 'news.enabled' });
+  const newsFeedsRaw = await getUserSetting({ userId, key: 'news.feeds' });
   const images = listImages({ userId });
 
   const backgroundUrl = background ? `/media/${background}` : null;
@@ -47,10 +49,59 @@ settingsRouter.get('/', requireAuth, async (_req, res) => {
   const todoEnabled = todoEnabledRaw === null ? true : String(todoEnabledRaw).toLowerCase() === 'true';
   // Default to false
   const newsEnabled = String(newsEnabledRaw ?? '').toLowerCase() === 'true';
-  const todoListName = getTodoListName();
+  let todoListNames = null;
+  if (todoListNamesRaw && String(todoListNamesRaw).trim()) {
+    try {
+      const parsed = JSON.parse(String(todoListNamesRaw));
+      if (Array.isArray(parsed)) {
+        todoListNames = parsed
+          .map((v) => String(v || '').trim())
+          .filter(Boolean)
+          .slice(0, 20);
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  if (!todoListNames || todoListNames.length === 0) {
+    todoListNames = [getTodoListName()];
+  }
+
+  const todoListName = todoListNames[0] || null;
+
+  /** @type {Array<'zeit'|'guardian'|'newyorker'|'sz'>} */
+  let newsFeeds = ['zeit'];
+  if (newsFeedsRaw && String(newsFeedsRaw).trim()) {
+    try {
+      const parsed = JSON.parse(String(newsFeedsRaw));
+      if (Array.isArray(parsed)) {
+        const normalized = parsed
+          .map((v) => String(v || '').trim().toLowerCase())
+          .filter((v) => ['zeit', 'guardian', 'newyorker', 'sz'].includes(v));
+        if (normalized.length > 0) newsFeeds = Array.from(new Set(normalized)).slice(0, 10);
+      }
+    } catch {
+      // ignore
+    }
+  }
+
   const refreshEnv = process.env.DASHBO_DATA_REFRESH_MS || process.env.DATA_REFRESH_MS || '';
   const dataRefreshMs = refreshEnv && Number.isFinite(Number(refreshEnv)) ? Number(refreshEnv) : null;
-  res.json({ background, backgroundUrl, images, backgroundRotateEnabled, weatherLocation, holidaysEnabled, todoEnabled, newsEnabled, todoListName, dataRefreshMs });
+  res.json({
+    background,
+    backgroundUrl,
+    images,
+    backgroundRotateEnabled,
+    weatherLocation,
+    holidaysEnabled,
+    todoEnabled,
+    newsEnabled,
+    todoListName,
+    todoListNames,
+    newsFeeds,
+    dataRefreshMs,
+  });
 });
 
 settingsRouter.post('/background/rotate', requireAuth, async (req, res) => {
@@ -143,6 +194,24 @@ settingsRouter.post('/todo', requireAuth, async (req, res) => {
   return res.json({ ok: true });
 });
 
+settingsRouter.post('/todo/list-names', requireAuth, async (req, res) => {
+  const schema = z.object({
+    listNames: z
+      .array(z.string().trim().min(1).max(200))
+      .max(20)
+      .default([]),
+  });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: 'invalid_body', details: parsed.error.flatten() });
+  }
+
+  const userId = Number(req.auth?.sub);
+  const unique = Array.from(new Set(parsed.data.listNames.map((s) => s.trim()).filter(Boolean))).slice(0, 20);
+  await setUserSetting({ userId, key: 'todo.listNames', value: JSON.stringify(unique) });
+  return res.json({ ok: true });
+});
+
 settingsRouter.post('/news', requireAuth, async (req, res) => {
   const schema = z.object({ enabled: z.boolean() });
   const parsed = schema.safeParse(req.body);
@@ -152,6 +221,22 @@ settingsRouter.post('/news', requireAuth, async (req, res) => {
 
   const userId = Number(req.auth?.sub);
   await setUserSetting({ userId, key: 'news.enabled', value: parsed.data.enabled ? 'true' : 'false' });
+  return res.json({ ok: true });
+});
+
+settingsRouter.post('/news/feeds', requireAuth, async (req, res) => {
+  const feedId = z.enum(['zeit', 'guardian', 'newyorker', 'sz']);
+  const schema = z.object({
+    feeds: z.array(feedId).max(10).default(['zeit']),
+  });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: 'invalid_body', details: parsed.error.flatten() });
+  }
+
+  const userId = Number(req.auth?.sub);
+  const unique = Array.from(new Set(parsed.data.feeds)).slice(0, 10);
+  await setUserSetting({ userId, key: 'news.feeds', value: JSON.stringify(unique.length ? unique : ['zeit']) });
   return res.json({ ok: true });
 });
 

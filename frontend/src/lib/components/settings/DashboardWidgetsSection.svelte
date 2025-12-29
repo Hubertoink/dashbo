@@ -1,0 +1,539 @@
+<script lang="ts">
+  import type { NewsFeedId, SettingsDto } from '$lib/api';
+
+  import DashboardPreview from '$lib/components/DashboardPreview.svelte';
+  import WidgetSettingsCard from '$lib/components/WidgetSettingsCard.svelte';
+
+  export let authed: boolean;
+  export let settings: SettingsDto | null;
+
+  export let weatherLocation: string;
+  export let weatherSaving: boolean;
+  export let weatherError: string | null;
+  export let saveWeatherLocation: () => void | Promise<void>;
+
+  export let holidaysEnabled: boolean;
+  export let holidaysSaving: boolean;
+  export let holidaysError: string | null;
+  export let saveHolidays: () => void | Promise<void>;
+
+  export let todoEnabled: boolean;
+  export let todoSaving: boolean;
+  export let todoError: string | null;
+  export let saveTodo: () => void | Promise<void>;
+
+  export let todoListNamesText: string;
+  export let todoListNamesSaving: boolean;
+  export let todoListNamesError: string | null;
+  export let saveTodoListNames: () => void | Promise<void>;
+
+  export let newsEnabled: boolean;
+  export let newsSaving: boolean;
+  export let newsError: string | null;
+  export let saveNews: () => void | Promise<void>;
+
+  export let newsFeeds: NewsFeedId[];
+  export let newsFeedsSaving: boolean;
+  export let newsFeedsError: string | null;
+  export let saveNewsFeeds: () => void | Promise<void>;
+
+  export let edgeBaseUrl: string;
+  export let edgeToken: string;
+  export let edgeSaving: boolean;
+  export let edgePlayerWidgetEnabled: boolean;
+  export let saveEdgePlayerWidgetEnabled: () => void | Promise<void>;
+  export let openEdgeSetup: () => void;
+
+  export let saveEdgeConfig: () => void | Promise<void>;
+
+  export let testEdgeConnection: () => void | Promise<void>;
+  export let edgeTestBusy: boolean;
+  export let edgeTestMessage: string | null;
+  export let edgeTestOk: boolean | null;
+
+  export let scanEdgeNow: () => void | Promise<void>;
+  export let edgeScanBusy: boolean;
+  export let edgeScanMessage: string | null;
+
+  export let edgeHeosEnabled: boolean;
+  export let saveEdgeHeosEnabled: () => void | Promise<void>;
+  export let edgeHeosHosts: string;
+  export let isLocalhostUrl: (url: string) => boolean;
+
+  type HeosPlayerDto = { pid: number; name: string; model?: string };
+  export let heosGroupPlayers: HeosPlayerDto[];
+  export let heosGroupSelected: Record<string, boolean>;
+  export let heosGroupBusy: boolean;
+  export let heosGroupError: string | null;
+  export let heosGroupMessage: string | null;
+
+  type HeosGroupPlayerDto = { name: string; pid: number; role?: 'leader' | 'member' | string };
+  type HeosGroupDto = { name: string; gid: number | string; players: HeosGroupPlayerDto[] };
+  export let heosGroups: HeosGroupDto[];
+  export let heosGroupsLoaded: boolean;
+  export let heosGroupsBusy: boolean;
+  export let heosGroupsError: string | null;
+  export let heosGroupsMessage: string | null;
+
+  export let loadHeosGroups: () => void | Promise<void>;
+  export let loadHeosPlayersForGrouping: () => void | Promise<void>;
+  export let createHeosGroup: () => void | Promise<void>;
+  export let dissolveHeosGroup: () => void | Promise<void>;
+  export let dissolveHeosGroupByPid: (pid: number) => void | Promise<void>;
+  export let getHeosGroupLeaderPid: (g: HeosGroupDto) => number | null;
+
+  export let showPreview = true;
+  export let previewClass = 'mb-6';
+  export let highlightWidget: string | null = null;
+
+  function toggleNewsFeed(id: NewsFeedId) {
+    if (newsFeeds.includes(id)) newsFeeds = newsFeeds.filter((x) => x !== id);
+    else newsFeeds = [...newsFeeds, id];
+  }
+</script>
+
+<!-- Schematische Dashboard-Vorschau -->
+{#if showPreview}
+  <div class={previewClass}>
+    <DashboardPreview
+      weatherEnabled={true}
+      todoEnabled={todoEnabled}
+      newsEnabled={newsEnabled}
+      musicEnabled={edgePlayerWidgetEnabled}
+      {highlightWidget}
+    />
+  </div>
+{/if}
+
+<div class="space-y-4">
+  <!-- Wetter Widget -->
+  <WidgetSettingsCard
+    title="Wetter & Vorhersage"
+    icon="☀"
+    kicker="weather"
+    enabled={true}
+    widgetKey="weather"
+    saving={weatherSaving}
+    error={weatherError}
+    on:hover={(e) => (highlightWidget = e.detail.key)}
+  >
+    <div class="space-y-3">
+      <div class="flex gap-2">
+        <input
+          class="flex-1 h-9 px-3 rounded-lg bg-white/10 border-0 text-sm placeholder:text-white/40"
+          placeholder="Ort (z.B. Berlin)"
+          bind:value={weatherLocation}
+          disabled={!authed}
+        />
+        <button
+          class="h-9 px-4 rounded-lg bg-white/20 hover:bg-white/25 text-sm font-medium disabled:opacity-50"
+          on:click={saveWeatherLocation}
+          disabled={!authed || weatherSaving}
+        >
+          Speichern
+        </button>
+      </div>
+
+      <label class="flex items-center gap-2 text-sm text-white/80">
+        <input
+          type="checkbox"
+          class="rounded bg-white/10 border-0"
+          bind:checked={holidaysEnabled}
+          disabled={!authed}
+        />
+        Feiertage im Kalender anzeigen
+        <button
+          class="ml-auto h-8 px-3 rounded-lg bg-white/20 hover:bg-white/25 text-xs font-medium disabled:opacity-50"
+          on:click={saveHolidays}
+          disabled={!authed || holidaysSaving}
+        >
+          Speichern
+        </button>
+      </label>
+
+      {#if holidaysError}
+        <div class="text-red-400 text-xs">{holidaysError}</div>
+      {/if}
+    </div>
+  </WidgetSettingsCard>
+
+  <!-- To-Do Widget -->
+  <WidgetSettingsCard
+    title="To-Do Liste"
+    icon="☑"
+    kicker="todo"
+    enabled={todoEnabled}
+    widgetKey="todo"
+    saving={todoSaving}
+    error={todoError}
+    on:toggle={() => {
+      todoEnabled = !todoEnabled;
+      void saveTodo();
+    }}
+    on:hover={(e) => (highlightWidget = e.detail.key)}
+  >
+    <div class="space-y-2">
+      <div class="text-sm text-white/80">Outlook Liste(n)</div>
+
+      <div class="space-y-2">
+        <textarea
+          class="w-full min-h-[72px] px-3 py-2 rounded-lg bg-white/10 border-0 text-sm placeholder:text-white/40"
+          placeholder="z.B. Dashbo\nInbox"
+          bind:value={todoListNamesText}
+          disabled={!authed}
+        ></textarea>
+
+        <div class="flex items-center gap-2">
+          <button
+            class="h-8 px-3 rounded-lg bg-white/20 hover:bg-white/25 text-xs font-medium disabled:opacity-50"
+            on:click={saveTodoListNames}
+            disabled={!authed || todoListNamesSaving}
+          >
+            Speichern
+          </button>
+
+          {#if settings?.todoListNames?.length}
+            <div class="text-xs text-white/50">Aktuell: {settings.todoListNames.join(', ')}</div>
+          {:else if settings?.todoListName}
+            <div class="text-xs text-white/50">Aktuell: {settings.todoListName}</div>
+          {/if}
+        </div>
+
+        {#if todoListNamesError}
+          <div class="text-red-400 text-xs">{todoListNamesError}</div>
+        {/if}
+      </div>
+
+      <div class="text-xs text-white/40">Zeigt offene Aufgaben aus deiner Outlook To-Do Liste in der Sidebar.</div>
+    </div>
+  </WidgetSettingsCard>
+
+  <!-- News Widget -->
+  <WidgetSettingsCard
+    title="News (RSS)"
+    icon="📰"
+    kicker="news"
+    enabled={newsEnabled}
+    widgetKey="news"
+    saving={newsSaving}
+    error={newsError}
+    on:toggle={() => {
+      newsEnabled = !newsEnabled;
+      void saveNews();
+    }}
+    on:hover={(e) => (highlightWidget = e.detail.key)}
+  >
+    <div class="space-y-3">
+      <div class="text-sm text-white/80">Feeds</div>
+
+      <div class="grid sm:grid-cols-2 gap-2 text-sm text-white/80">
+        <label class="flex items-center gap-2">
+          <input
+            type="checkbox"
+            class="rounded bg-white/10 border-0"
+            checked={newsFeeds.includes('zeit')}
+            disabled={!authed}
+            on:change={() => toggleNewsFeed('zeit')}
+          />
+          ZEIT
+        </label>
+        <label class="flex items-center gap-2">
+          <input
+            type="checkbox"
+            class="rounded bg-white/10 border-0"
+            checked={newsFeeds.includes('guardian')}
+            disabled={!authed}
+            on:change={() => toggleNewsFeed('guardian')}
+          />
+          The Guardian
+        </label>
+        <label class="flex items-center gap-2">
+          <input
+            type="checkbox"
+            class="rounded bg-white/10 border-0"
+            checked={newsFeeds.includes('newyorker')}
+            disabled={!authed}
+            on:change={() => toggleNewsFeed('newyorker')}
+          />
+          The New Yorker
+        </label>
+        <label class="flex items-center gap-2">
+          <input
+            type="checkbox"
+            class="rounded bg-white/10 border-0"
+            checked={newsFeeds.includes('sz')}
+            disabled={!authed}
+            on:change={() => toggleNewsFeed('sz')}
+          />
+          Süddeutsche Zeitung
+        </label>
+      </div>
+
+      <div class="flex items-center gap-2">
+        <button
+          class="h-8 px-3 rounded-lg bg-white/20 hover:bg-white/25 text-xs font-medium disabled:opacity-50"
+          on:click={saveNewsFeeds}
+          disabled={!authed || newsFeedsSaving}
+        >
+          Speichern
+        </button>
+
+        {#if settings?.newsFeeds?.length}
+          <div class="text-xs text-white/50">Aktuell: {settings.newsFeeds.join(', ')}</div>
+        {/if}
+      </div>
+
+      {#if newsFeedsError}
+        <div class="text-red-400 text-xs">{newsFeedsError}</div>
+      {/if}
+
+      <div class="text-xs text-white/40">Zeigt aktuelle Schlagzeilen aus den ausgewählten RSS-Feeds in der Sidebar.</div>
+    </div>
+  </WidgetSettingsCard>
+
+  <!-- Musik Widget -->
+  <WidgetSettingsCard
+    title="Musik-Player"
+    icon="🎵"
+    kicker="music"
+    enabled={edgePlayerWidgetEnabled}
+    widgetKey="music"
+    saving={edgeSaving}
+    on:toggle={() => {
+      edgePlayerWidgetEnabled = !edgePlayerWidgetEnabled;
+      void saveEdgePlayerWidgetEnabled();
+    }}
+    on:hover={(e) => (highlightWidget = e.detail.key)}
+  >
+    <div class="space-y-4">
+      <!-- Edge-Verbindung -->
+      <div class="space-y-2">
+        <div class="flex items-center justify-between">
+          <div class="text-sm font-medium text-white/80">Edge-Service Verbindung</div>
+          <button
+            class="h-7 px-2.5 rounded-lg bg-white/10 hover:bg-white/15 text-[11px] font-medium"
+            type="button"
+            on:click={openEdgeSetup}
+          >
+            Setup-Anleitung
+          </button>
+        </div>
+        <div class="text-[11px] text-white/50">Für lokale Musik und HEOS-Steuerung wird der Edge-Service benötigt.</div>
+
+        <div class="grid md:grid-cols-3 gap-2">
+          <input
+            class="md:col-span-2 h-9 px-3 rounded-lg bg-white/10 border-0 text-sm placeholder:text-white/40"
+            placeholder="Edge Base URL (z.B. https://pi.local:8787)"
+            bind:value={edgeBaseUrl}
+          />
+          <button
+            class="h-9 px-4 rounded-lg bg-white/20 hover:bg-white/25 text-sm font-medium disabled:opacity-50"
+            on:click={saveEdgeConfig}
+            disabled={edgeSaving}
+          >
+            Speichern
+          </button>
+        </div>
+
+        <div class="grid md:grid-cols-3 gap-2">
+          <input
+            class="md:col-span-2 h-9 px-3 rounded-lg bg-white/10 border-0 text-sm placeholder:text-white/40"
+            placeholder="Edge Token (Bearer)"
+            bind:value={edgeToken}
+          />
+        </div>
+
+        <div class="flex items-center gap-2">
+          <button
+            class="h-8 px-3 rounded-lg bg-white/20 hover:bg-white/25 text-xs font-medium disabled:opacity-50"
+            on:click={testEdgeConnection}
+            disabled={edgeTestBusy || !edgeBaseUrl.trim()}
+          >
+            Verbindung testen
+          </button>
+
+          <button
+            class="h-8 px-3 rounded-lg bg-white/20 hover:bg-white/25 text-xs font-medium disabled:opacity-50"
+            on:click={scanEdgeNow}
+            disabled={edgeScanBusy || !edgeBaseUrl.trim()}
+            title="Scanne die Musikbibliothek auf dem Edge (force)"
+          >
+            Rescan starten
+          </button>
+
+          {#if edgeTestMessage}
+            <div class={edgeTestOk ? 'text-emerald-300 text-xs' : 'text-red-300 text-xs'}>{edgeTestMessage}</div>
+          {/if}
+
+          {#if edgeScanMessage}
+            <div class="text-white/70 text-xs">{edgeScanMessage}</div>
+          {/if}
+        </div>
+      </div>
+
+      <!-- HEOS Einstellungen -->
+      <div class="rounded-xl border border-white/10 bg-white/5 p-3">
+        <div class="flex items-center justify-between mb-2">
+          <div class="text-sm font-medium text-white/90">HEOS Multi-Room</div>
+          <label class="flex items-center gap-2 text-sm text-white/80">
+            <input
+              type="checkbox"
+              class="rounded bg-white/10 border-0"
+              bind:checked={edgeHeosEnabled}
+              on:change={saveEdgeHeosEnabled}
+            />
+            Aktiviert
+          </label>
+        </div>
+
+        {#if edgeHeosEnabled}
+          <div class="space-y-3">
+            <input
+              class="w-full h-9 px-3 rounded-lg bg-white/10 border-0 text-sm placeholder:text-white/40"
+              placeholder="HEOS Speaker IPs (optional, z.B. 192.168.178.24,192.168.178.40)"
+              bind:value={edgeHeosHosts}
+              on:change={saveEdgeConfig}
+            />
+            <div class="text-[11px] text-white/50">
+              Tipp: Unter Windows/Docker ist SSDP oft blockiert. Mit IPs funktioniert die Speaker-Liste zuverlässig.
+            </div>
+
+            {#if edgeBaseUrl.trim() && isLocalhostUrl(edgeBaseUrl)}
+              <div class="text-[11px] text-amber-300">
+                Hinweis: HEOS Speaker können <span class="font-medium">localhost</span> nicht erreichen. Setze die Edge Base
+                URL auf eine LAN-IP/Hostname (z.B. <span class="font-medium">http://192.168.178.X:8787</span>).
+              </div>
+            {/if}
+
+            <!-- HEOS Gruppen -->
+            <div class="pt-2 border-t border-white/10">
+              <div class="flex items-center justify-between">
+                <div class="text-sm font-medium text-white/80">Gruppen</div>
+                <div class="flex items-center gap-2">
+                  <button
+                    class="h-7 px-2.5 rounded-lg bg-white/10 hover:bg-white/15 text-[11px] font-medium disabled:opacity-50"
+                    type="button"
+                    on:click={loadHeosGroups}
+                    disabled={heosGroupsBusy || heosGroupBusy || !edgeBaseUrl.trim() || !edgeHeosEnabled}
+                  >
+                    Gruppen laden
+                  </button>
+                  <button
+                    class="h-7 px-2.5 rounded-lg bg-white/10 hover:bg-white/15 text-[11px] font-medium disabled:opacity-50"
+                    type="button"
+                    on:click={loadHeosPlayersForGrouping}
+                    disabled={heosGroupBusy || !edgeBaseUrl.trim() || !edgeHeosEnabled}
+                  >
+                    Speaker laden
+                  </button>
+                </div>
+              </div>
+
+              <div class="text-[11px] text-white/50 mt-1">Wähle mehrere Speaker aus. Der erste ausgewählte gilt als Leader.</div>
+
+              {#if heosGroupError}
+                <div class="mt-2 text-xs text-red-200">{heosGroupError}</div>
+              {/if}
+
+              {#if heosGroupMessage}
+                <div class="mt-2 text-xs text-white/70">{heosGroupMessage}</div>
+              {/if}
+
+              {#if heosGroupsError}
+                <div class="mt-2 text-xs text-red-200">{heosGroupsError}</div>
+              {/if}
+
+              {#if heosGroupsMessage}
+                <div class="mt-2 text-xs text-white/70">{heosGroupsMessage}</div>
+              {/if}
+
+              {#if heosGroups.length > 0}
+                <div class="mt-3 rounded-lg border border-white/10 overflow-hidden">
+                  <div class="divide-y divide-white/10">
+                    {#each heosGroups as g (String(g.gid))}
+                      <div class="p-2">
+                        <div class="flex items-center gap-2">
+                          <div class="min-w-0">
+                            <div class="text-sm text-white/90 line-clamp-1">{g.name}</div>
+                            <div class="text-[11px] text-white/40 tabular-nums">gid: {g.gid}</div>
+                          </div>
+                          <button
+                            class="ml-auto h-7 px-2.5 rounded-lg bg-white/10 hover:bg-white/15 text-[11px] font-medium disabled:opacity-50"
+                            type="button"
+                            on:click={() => {
+                              const leaderPid = getHeosGroupLeaderPid(g);
+                              if (leaderPid) void dissolveHeosGroupByPid(leaderPid);
+                            }}
+                            disabled={heosGroupBusy || !edgeBaseUrl.trim() || !edgeHeosEnabled || !getHeosGroupLeaderPid(g)}
+                            title="Gruppe auflösen (Leader)"
+                          >
+                            Auflösen
+                          </button>
+                        </div>
+
+                        {#if g.players.length > 0}
+                          <div class="mt-2 grid gap-1">
+                            {#each g.players as p (p.pid)}
+                              <div class="flex items-center gap-2 text-[12px] text-white/75">
+                                <span class="min-w-0 line-clamp-1">{p.name}</span>
+                                <span class="text-[11px] text-white/40">{String(p.role || '').toLowerCase()}</span>
+                                <span class="ml-auto text-[11px] text-white/40 tabular-nums">{p.pid}</span>
+                              </div>
+                            {/each}
+                          </div>
+                        {/if}
+                      </div>
+                    {/each}
+                  </div>
+                </div>
+              {:else if heosGroupsLoaded}
+                <div class="mt-3 text-[11px] text-white/50">Keine Gruppen vorhanden.</div>
+              {/if}
+
+              {#if heosGroupPlayers.length > 0}
+                <div class="mt-3 max-h-40 overflow-auto rounded-lg border border-white/10">
+                  <div class="divide-y divide-white/10">
+                    {#each heosGroupPlayers as p (p.pid)}
+                      <label class="flex items-center gap-2 p-2 text-sm text-white/85">
+                        <input
+                          type="checkbox"
+                          class="rounded bg-white/10 border-0"
+                          bind:checked={heosGroupSelected[String(p.pid)]}
+                        />
+                        <span class="min-w-0 line-clamp-1">{p.name}</span>
+                        <span class="ml-auto text-[11px] text-white/40 tabular-nums">{p.pid}</span>
+                      </label>
+                    {/each}
+                  </div>
+                </div>
+
+                <div class="mt-3 flex flex-wrap gap-2">
+                  <button
+                    class="h-8 px-3 rounded-lg bg-white/20 hover:bg-white/25 text-xs font-medium disabled:opacity-50"
+                    type="button"
+                    on:click={createHeosGroup}
+                    disabled={heosGroupBusy || !edgeBaseUrl.trim() || !edgeHeosEnabled}
+                  >
+                    Gruppe erstellen
+                  </button>
+                  <button
+                    class="h-8 px-3 rounded-lg bg-white/10 hover:bg-white/15 text-xs font-medium disabled:opacity-50"
+                    type="button"
+                    on:click={dissolveHeosGroup}
+                    disabled={heosGroupBusy || !edgeBaseUrl.trim() || !edgeHeosEnabled}
+                  >
+                    Gruppe auflösen
+                  </button>
+                </div>
+              {/if}
+            </div>
+          </div>
+        {:else}
+          <div class="text-[11px] text-white/50">HEOS ist deaktiviert. Aktiviere HEOS, um Speaker zu laden und Gruppen zu steuern.</div>
+        {/if}
+      </div>
+
+      <div class="text-xs text-white/40">Diese Werte werden nur im Browser (localStorage) gespeichert.</div>
+    </div>
+  </WidgetSettingsCard>
+</div>

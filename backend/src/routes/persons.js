@@ -7,10 +7,12 @@ const { listPersons, createPerson, deletePerson } = require('../services/persons
 const personsRouter = express.Router();
 
 const colorKey = z.enum(['fuchsia', 'cyan', 'emerald', 'amber', 'rose', 'violet', 'sky', 'lime']);
+const hexColor = z.string().regex(/^#[0-9a-fA-F]{6}$/);
+const personColor = z.union([colorKey, hexColor]);
 
 const createSchema = z.object({
   name: z.string().trim().min(1).max(40),
-  color: colorKey,
+  color: personColor,
   sortOrder: z.coerce.number().int().min(0).max(9999).optional(),
 });
 

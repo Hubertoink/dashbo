@@ -2,7 +2,7 @@ const express = require('express');
 
 const { requireAuth } = require('../middleware/auth');
 const { getUserSetting } = require('../services/settingsService');
-const { fetchZeitRss } = require('../services/newsService');
+const { fetchNewsFeeds } = require('../services/newsService');
 
 const newsRouter = express.Router();
 
@@ -16,8 +16,19 @@ newsRouter.get('/', requireAuth, async (req, res) => {
     return res.json({ enabled: false, source: 'zeit', items: [] });
   }
 
+  let feeds = null;
   try {
-    const r = await fetchZeitRss({ limit: 4 });
+    const raw = await getUserSetting({ userId, key: 'news.feeds' });
+    if (raw && String(raw).trim()) {
+      const parsed = JSON.parse(String(raw));
+      if (Array.isArray(parsed)) feeds = parsed;
+    }
+  } catch {
+    // ignore
+  }
+
+  try {
+    const r = await fetchNewsFeeds({ feeds, limit: 12 });
     return res.json({ enabled: true, ...r });
   } catch (e) {
     console.error('[news] fetch failed', e);

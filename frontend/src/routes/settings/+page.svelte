@@ -22,7 +22,9 @@
     setWeatherLocation,
     setHolidaysEnabled,
     setTodoEnabled,
+    setTodoListNames,
     setNewsEnabled,
+    setNewsFeeds,
     uploadBackgroundWithProgress,
     setBackgroundRotateEnabled,
     listTags,
@@ -49,6 +51,17 @@
     normalizeEdgeBaseUrl,
     edgeFetchJson
   } from '$lib/edge';
+
+  import CalendarSection from '$lib/components/settings/CalendarSection.svelte';
+  import DashboardSection from '$lib/components/settings/DashboardSection.svelte';
+  import UsersSection from '$lib/components/settings/UsersSection.svelte';
+  import AccountSection from '$lib/components/settings/AccountSection.svelte';
+  import FirstRunSection from '$lib/components/settings/FirstRunSection.svelte';
+  import ResetPasswordModal from '$lib/components/settings/ResetPasswordModal.svelte';
+  import DeleteUserModal from '$lib/components/settings/DeleteUserModal.svelte';
+  import EdgeSetupModal from '$lib/components/settings/EdgeSetupModal.svelte';
+  import DeleteBackgroundModal from '$lib/components/settings/DeleteBackgroundModal.svelte';
+  import FolderConfirmModal from '$lib/components/settings/FolderConfirmModal.svelte';
 
   let email = '';
   let password = '';
@@ -79,9 +92,18 @@
   let todoSaving = false;
   let todoError: string | null = null;
 
+  let todoListNamesText = '';
+  let todoListNamesSaving = false;
+  let todoListNamesError: string | null = null;
+
   let newsEnabled = false;
   let newsSaving = false;
   let newsError: string | null = null;
+
+  type NewsFeedId = import('$lib/api').NewsFeedId;
+  let newsFeeds: NewsFeedId[] = ['zeit'];
+  let newsFeedsSaving = false;
+  let newsFeedsError: string | null = null;
 
   let tags: TagDto[] = [];
   let newTagName = '';
@@ -128,6 +150,11 @@
   let deleteBgFor: string | null = null;
   let deletingBg = false;
   let deleteBgError: string | null = null;
+
+  function requestDeleteBg(img: string) {
+    deleteBgError = null;
+    deleteBgFor = img;
+  }
 
   async function confirmDeleteBg() {
     if (!deleteBgFor) return;
@@ -537,6 +564,49 @@
     todoEnabled = settings?.todoEnabled !== false;
     newsEnabled = Boolean(settings?.newsEnabled);
     backgroundRotateEnabled = Boolean(settings?.backgroundRotateEnabled);
+
+    const listNames = Array.isArray(settings?.todoListNames) ? settings!.todoListNames! : [];
+    todoListNamesText = listNames.length ? listNames.join('\n') : settings?.todoListName ?? '';
+
+    const feeds = Array.isArray(settings?.newsFeeds) ? settings!.newsFeeds! : [];
+    newsFeeds = (feeds.length ? feeds : ['zeit']) as NewsFeedId[];
+  }
+
+  function parseTodoListNamesText(text: string): string[] {
+    return String(text || '')
+      .split(/[\r\n,;]+/g)
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .slice(0, 20);
+  }
+
+  async function saveTodoListNamesHandler() {
+    todoListNamesError = null;
+    todoListNamesSaving = true;
+    try {
+      const listNames = parseTodoListNamesText(todoListNamesText);
+      await setTodoListNames(listNames);
+      await refreshSettings();
+    } catch {
+      todoListNamesError = 'Speichern fehlgeschlagen.';
+    } finally {
+      todoListNamesSaving = false;
+    }
+  }
+
+  async function saveNewsFeedsHandler() {
+    newsFeedsError = null;
+    newsFeedsSaving = true;
+    try {
+      const unique = Array.from(new Set((newsFeeds || []).map((f) => f))) as NewsFeedId[];
+      const effective = unique.length ? unique : (['zeit'] as NewsFeedId[]);
+      await setNewsFeeds(effective);
+      await refreshSettings();
+    } catch {
+      newsFeedsError = 'Speichern fehlgeschlagen.';
+    } finally {
+      newsFeedsSaving = false;
+    }
   }
 
   async function saveBackgroundRotate() {
@@ -858,7 +928,13 @@
     if (!newPersonName.trim()) return;
     personError = null;
     try {
-      await createPerson({ name: newPersonName.trim(), color: newPersonColor });
+      const color = String(newPersonColor).trim();
+      if (!isTagColorKey(color) && !isHexColor(color)) {
+        personError = 'Ungültige Farbe.';
+        return;
+      }
+
+      await createPerson({ name: newPersonName.trim(), color });
       newPersonName = '';
       newPersonColor = 'cyan';
       personColorMenuOpen = false;
@@ -868,8 +944,14 @@
     }
   }
 
-  function choosePersonColor(c: PersonColorKey) {
+  function choosePersonColor(c: TagColorKey) {
     newPersonColor = c;
+    personColorMenuOpen = false;
+  }
+
+  function chooseCustomPersonColor(hex: string) {
+    if (!isHexColor(hex)) return;
+    newPersonColor = hex;
     personColorMenuOpen = false;
   }
 
@@ -1000,1150 +1082,166 @@
       <a class="text-white/60 hover:text-white text-sm" href="/">← Zurück</a>
     </div>
 
-    <!-- Account Section -->
-    <section class="mb-8" id="section-account">
-      <div class="flex items-center justify-between mb-4">
-        <h2 class="text-lg font-semibold text-white/90">Account</h2>
-        {#if authed}
-          <button class="text-sm text-white/60 hover:text-white" on:click={logout}>Logout</button>
-        {/if}
-      </div>
-
-      {#if !authed}
-        <div class="bg-white/5 rounded-xl p-4">
-          <div class="flex gap-3">
-            <input
-              class="flex-1 h-10 px-3 rounded-lg bg-white/10 border-0 text-sm placeholder:text-white/40"
-              placeholder="E-Mail"
-              bind:value={email}
-              autocomplete="username"
-            />
-            <input
-              class="flex-1 h-10 px-3 rounded-lg bg-white/10 border-0 text-sm placeholder:text-white/40"
-              placeholder="Passwort"
-              type="password"
-              bind:value={password}
-              autocomplete="current-password"
-            />
-            <button
-              class="h-10 px-4 rounded-lg bg-white/20 hover:bg-white/25 text-sm font-medium"
-              on:click={doLogin}
-            >
-              Login
-            </button>
-          </div>
-          {#if authError}
-            <div class="mt-2 text-red-400 text-sm">{authError}</div>
-          {/if}
-        </div>
-      {:else}
-        <div class="bg-white/5 rounded-xl p-4 text-white/70 text-sm">
-          Eingeloggt{isAdmin ? ' als Admin' : ''}.
-        </div>
-      {/if}
-    </section>
+    <AccountSection {authed} {isAdmin} bind:email bind:password {authError} {doLogin} {logout} />
 
     {#if showFirstRunWizard}
-      <section class="mb-8" id="section-first-run">
-        <div class="bg-white/5 rounded-xl p-4">
-          <div class="flex items-start justify-between gap-3">
-            <div>
-              <div class="text-lg font-semibold text-white/90">Erste Schritte</div>
-              <div class="text-sm text-white/60">Einmal einrichten, danach läuft das Dashboard stabil durch.</div>
-            </div>
-            <button class="text-sm text-white/60 hover:text-white" type="button" on:click={hideFirstRun}>Später</button>
-          </div>
-
-          <div class="mt-4 space-y-2">
-            {#if isAdmin}
-              <div class="flex items-center justify-between gap-3 bg-white/5 rounded-lg px-3 py-2">
-                <div class="min-w-0">
-                  <div class="text-sm font-medium">
-                    {wizardNeedsUsers ? '○' : '✓'} Benutzer anlegen
-                  </div>
-                  <div class="text-xs text-white/60">Mindestens einen weiteren Account erstellen.</div>
-                </div>
-                <button
-                  class="h-8 px-3 rounded-lg bg-white/10 hover:bg-white/15 text-xs font-medium"
-                  type="button"
-                  on:click={() => scrollToSection('section-users')}
-                >
-                  Öffnen
-                </button>
-              </div>
-            {/if}
-
-            <div class="flex items-center justify-between gap-3 bg-white/5 rounded-lg px-3 py-2">
-              <div class="min-w-0">
-                <div class="text-sm font-medium">{wizardNeedsWeather ? '○' : '✓'} Wetter‑Ort setzen</div>
-                <div class="text-xs text-white/60">Damit Wetter/Forecast korrekt geladen werden.</div>
-              </div>
-              <button
-                class="h-8 px-3 rounded-lg bg-white/10 hover:bg-white/15 text-xs font-medium"
-                type="button"
-                on:click={() => scrollToSection('section-weather')}
-              >
-                Öffnen
-              </button>
-            </div>
-
-            <div class="flex items-center justify-between gap-3 bg-white/5 rounded-lg px-3 py-2">
-              <div class="min-w-0">
-                <div class="text-sm font-medium">• Hintergrund auswählen (optional)</div>
-                <div class="text-xs text-white/60">Optional: Bilder hochladen und als Background setzen.</div>
-              </div>
-              <button
-                class="h-8 px-3 rounded-lg bg-white/10 hover:bg-white/15 text-xs font-medium"
-                type="button"
-                on:click={() => scrollToSection('section-background')}
-              >
-                Öffnen
-              </button>
-            </div>
-
-            <div class="flex items-center justify-between gap-3 bg-white/5 rounded-lg px-3 py-2">
-              <div class="min-w-0">
-                <div class="text-sm font-medium">• News (ZEIT RSS) aktivieren (optional)</div>
-                <div class="text-xs text-white/60">Zeigt bis zu 4 Artikel-Links unter To‑Do.</div>
-              </div>
-              <button
-                class="h-8 px-3 rounded-lg bg-white/10 hover:bg-white/15 text-xs font-medium"
-                type="button"
-                on:click={() => scrollToSection('section-weather')}
-              >
-                Öffnen
-              </button>
-            </div>
-
-            <div class="flex items-center justify-between gap-3 bg-white/5 rounded-lg px-3 py-2">
-              <div class="min-w-0">
-                <div class="text-sm font-medium">{wizardNeedsTags ? '○' : '✓'} Erste Tags anlegen</div>
-                <div class="text-xs text-white/60">Farben/Kategorien für Termine.</div>
-              </div>
-              <button
-                class="h-8 px-3 rounded-lg bg-white/10 hover:bg-white/15 text-xs font-medium"
-                type="button"
-                on:click={() => scrollToSection('section-tags')}
-              >
-                Öffnen
-              </button>
-            </div>
-
-            <div class="flex items-center justify-between gap-3 bg-white/5 rounded-lg px-3 py-2">
-              <div class="min-w-0">
-                <div class="text-sm font-medium">{wizardNeedsPersons ? '○' : '✓'} Personen anlegen</div>
-                <div class="text-xs text-white/60">Damit Termine Personen zugeordnet werden können.</div>
-              </div>
-              <button
-                class="h-8 px-3 rounded-lg bg-white/10 hover:bg-white/15 text-xs font-medium"
-                type="button"
-                on:click={() => scrollToSection('section-persons')}
-              >
-                Öffnen
-              </button>
-            </div>
-
-            <div class="flex items-center justify-between gap-3 bg-white/5 rounded-lg px-3 py-2">
-              <div class="min-w-0">
-                <div class="text-sm font-medium">{wizardOutlookConnected ? '✓' : '○'} Outlook verbinden (optional)</div>
-                <div class="text-xs text-white/60">Zusätzliche Termine (nur anzeigen) pro User.</div>
-              </div>
-              <button
-                class="h-8 px-3 rounded-lg bg-white/10 hover:bg-white/15 text-xs font-medium"
-                type="button"
-                on:click={() => scrollToSection('section-outlook')}
-              >
-                Öffnen
-              </button>
-            </div>
-          </div>
-        </div>
-      </section>
+      <FirstRunSection
+        {isAdmin}
+        {wizardNeedsUsers}
+        {wizardNeedsWeather}
+        {wizardNeedsTags}
+        {wizardNeedsPersons}
+        {wizardOutlookConnected}
+        {hideFirstRun}
+        {scrollToSection}
+      />
     {/if}
 
-    <!-- Kalender Section -->
-    <section class="mb-8" id="section-calendar">
-      <h2 class="text-lg font-semibold text-white/90 mb-4">Kalender</h2>
-
-      <div class="space-y-4">
-        <!-- Tags -->
-        <div class="bg-white/5 rounded-xl p-4" id="section-tags">
-          <div class="flex items-center justify-between mb-3">
-            <div class="font-medium">Tags</div>
-            <div class="text-white/50 text-xs">Farben für Termine</div>
-          </div>
-
-          <div class="flex gap-2 mb-3">
-            <input
-              class="flex-1 h-9 px-3 rounded-lg bg-white/10 border-0 text-sm placeholder:text-white/40"
-              placeholder="Neuer Tag"
-              bind:value={newTagName}
-              disabled={!authed}
-            />
-            <div class="relative">
-              <button
-                class="h-9 px-3 rounded-lg bg-white/10 flex items-center gap-2 text-sm disabled:opacity-50"
-                on:click|stopPropagation={() => (tagColorMenuOpen = !tagColorMenuOpen)}
-                disabled={!authed}
-              >
-                {#if isTagColorKey(newTagColor)}
-                  <span class={`w-3 h-3 rounded-full ${colorBg[newTagColor]}`}></span>
-                {:else}
-                  <span class="w-3 h-3 rounded-full" style={`background-color: ${newTagColor}`}></span>
-                {/if}
-                <span class="text-white/60">▾</span>
-              </button>
-              {#if tagColorMenuOpen}
-                <div class="absolute right-0 mt-1 z-20 bg-zinc-900 border border-white/10 rounded-lg overflow-hidden shadow-xl">
-                  {#each colorNames as c}
-                    <button
-                      class="w-full px-3 py-2 flex items-center gap-2 text-sm hover:bg-white/10"
-                      on:click={() => chooseTagColor(c)}
-                    >
-                      <span class={`w-3 h-3 rounded-full ${colorBg[c]}`}></span>
-                      <span class="capitalize">{c}</span>
-                    </button>
-                  {/each}
-
-                  <div class="px-3 py-2 border-t border-white/10">
-                    <label class="flex items-center justify-between gap-2 text-sm text-white/80">
-                      <span>Eigene Farbe</span>
-                      <input
-                        type="color"
-                        class="h-7 w-10 bg-transparent border-0 p-0"
-                        value={isHexColor(newTagColor) ? newTagColor : '#22d3ee'}
-                        on:input={(e) => chooseCustomTagColor((/** @type {HTMLInputElement} */ (e.currentTarget)).value)}
-                      />
-                    </label>
-                  </div>
-                </div>
-              {/if}
-            </div>
-            <button
-              class="h-9 px-4 rounded-lg bg-white/20 hover:bg-white/25 text-sm font-medium disabled:opacity-50"
-              on:click={doCreateTag}
-              disabled={!authed || !newTagName.trim()}
-            >
-              +
-            </button>
-          </div>
-
-          {#if tagError}
-            <div class="text-red-400 text-xs mb-2">{tagError}</div>
-          {/if}
-
-          <div class="flex flex-wrap gap-2">
-            {#each tags as t (t.id)}
-              <div class="flex items-center gap-2 bg-white/10 rounded-lg px-3 py-1.5 text-sm">
-                {#if isTagColorKey(t.color)}
-                  <span class={`w-2.5 h-2.5 rounded-full ${colorBg[t.color]}`}></span>
-                {:else}
-                  <span class="w-2.5 h-2.5 rounded-full" style={`background-color: ${t.color}`}></span>
-                {/if}
-                <span>{t.name}</span>
-                {#if authed}
-                  <button class="text-white/40 hover:text-white/70 ml-1" on:click={() => doDeleteTag(t.id)}>×</button>
-                {/if}
-              </div>
-            {/each}
-            {#if tags.length === 0}
-              <div class="text-white/40 text-sm">Keine Tags</div>
-            {/if}
-          </div>
-        </div>
-
-        <!-- Personen -->
-        <div class="bg-white/5 rounded-xl p-4" id="section-persons">
-          <div class="flex items-center justify-between mb-3">
-            <div class="font-medium">Personen</div>
-            <div class="text-white/50 text-xs">Für Termine zuweisbar</div>
-          </div>
-
-          {#if !authed}
-            <div class="text-white/40 text-sm">Login erforderlich</div>
-          {:else}
-            <div class="flex gap-2 mb-3">
-              <input
-                class="flex-1 h-9 px-3 rounded-lg bg-white/10 border-0 text-sm placeholder:text-white/40"
-                placeholder="Name"
-                bind:value={newPersonName}
-              />
-              <div class="relative">
-                <button
-                  class="h-9 px-3 rounded-lg bg-white/10 flex items-center gap-2 text-sm"
-                  on:click|stopPropagation={() => (personColorMenuOpen = !personColorMenuOpen)}
-                >
-                  <span class={`w-3 h-3 rounded-full ${colorBg[newPersonColor]}`}></span>
-                  <span class="text-white/60">▾</span>
-                </button>
-                {#if personColorMenuOpen}
-                  <div class="absolute right-0 mt-1 z-20 bg-zinc-900 border border-white/10 rounded-lg overflow-hidden shadow-xl">
-                    {#each colorNames as c}
-                      <button
-                        class="w-full px-3 py-2 flex items-center gap-2 text-sm hover:bg-white/10"
-                        on:click={() => choosePersonColor(c as PersonColorKey)}
-                      >
-                        <span class={`w-3 h-3 rounded-full ${colorBg[c]}`}></span>
-                        <span class="capitalize">{c}</span>
-                      </button>
-                    {/each}
-                  </div>
-                {/if}
-              </div>
-              <button
-                class="h-9 px-4 rounded-lg bg-white/20 hover:bg-white/25 text-sm font-medium disabled:opacity-50"
-                on:click={doCreatePerson}
-                disabled={!newPersonName.trim()}
-              >
-                +
-              </button>
-            </div>
-
-            {#if personError}
-              <div class="text-red-400 text-xs mb-2">{personError}</div>
-            {/if}
-
-            <div class="flex flex-wrap gap-2">
-              {#each persons as p (p.id)}
-                <div class="flex items-center gap-2 bg-white/10 rounded-lg px-3 py-1.5 text-sm">
-                  <span class={`w-2.5 h-2.5 rounded-full ${colorBg[p.color as TagColorKey]}`}></span>
-                  <span>{p.name}</span>
-                  <button class="text-white/40 hover:text-white/70 ml-1" on:click={() => doDeletePerson(p.id)}>×</button>
-                </div>
-              {/each}
-              {#if persons.length === 0}
-                <div class="text-white/40 text-sm">Keine Personen</div>
-              {/if}
-            </div>
-          {/if}
-        </div>
-
-        <!-- Outlook (privat, nur anzeigen) -->
-        <div class="bg-white/5 rounded-xl p-4" id="section-outlook">
-          <div class="flex items-center justify-between mb-3">
-            <div class="font-medium">Outlook Kalender</div>
-            <div class="text-white/50 text-xs">Privat · nur anzeigen</div>
-          </div>
-
-          {#if !authed}
-            <div class="text-white/40 text-sm">Login erforderlich</div>
-          {:else}
-            <div class="flex items-center justify-between gap-3">
-              <div class="text-sm text-white/70">
-                {#if (outlookConnections?.length ?? 0) > 0}
-                  Verbunden ({outlookConnections.length})
-                {:else if outlookStatus?.connected}
-                  Verbunden
-                {:else}
-                  Nicht verbunden
-                {/if}
-              </div>
-
-              <div class="flex items-center gap-2">
-                <button
-                  class="h-9 px-4 rounded-lg bg-white/20 hover:bg-white/25 text-sm font-medium disabled:opacity-50"
-                  on:click={doOutlookConnect}
-                  disabled={outlookBusy}
-                >
-                  {#if (outlookConnections?.length ?? 0) > 0 || outlookStatus?.connected}
-                    Weiteren verbinden
-                  {:else}
-                    Verbinden
-                  {/if}
-                </button>
-
-                {#if outlookStatus?.connected}
-                  <button
-                    class="h-9 px-4 rounded-lg bg-white/10 hover:bg-white/15 text-sm font-medium disabled:opacity-50"
-                    on:click={doOutlookDisconnect}
-                    disabled={outlookBusy}
-                  >
-                    Alle trennen
-                  </button>
-                {/if}
-              </div>
-            </div>
-
-            {#if (outlookConnections?.length ?? 0) > 0}
-              <div class="mt-3 space-y-2">
-                {#each outlookConnections as c (c.id)}
-                  <div class="flex items-center justify-between gap-3 bg-white/5 rounded-lg px-3 py-2">
-                    <div class="min-w-0 flex items-center gap-3">
-                      <div class="relative">
-                        <button
-                          type="button"
-                          class="h-9 px-3 rounded-lg bg-white/10 hover:bg-white/15 text-sm font-medium flex items-center gap-2"
-                          aria-label="Farbe"
-                          disabled={outlookBusy}
-                          on:click|stopPropagation={() => (outlookColorMenuFor = outlookColorMenuFor === c.id ? null : c.id)}
-                        >
-                          <span class={`w-3 h-3 rounded-full ${colorBg[c.color as TagColorKey]}`}></span>
-                          <span class="text-white/70">Farbe</span>
-                          <span class="text-white/50">▼</span>
-                        </button>
-
-                        {#if outlookColorMenuFor === c.id}
-                          <div class="absolute z-20 mt-2 w-44 rounded-xl bg-black/80 backdrop-blur border border-white/10 overflow-hidden">
-                            {#each colorNames as col}
-                              <button
-                                class="w-full px-3 py-2 flex items-center gap-2 text-sm hover:bg-white/10"
-                                on:click={() => doOutlookSetConnectionColor(c.id, col as TagColorKey)}
-                              >
-                                <span class={`w-3 h-3 rounded-full ${colorBg[col]}`}></span>
-                                <span class="capitalize">{col}</span>
-                              </button>
-                            {/each}
-                          </div>
-                        {/if}
-                      </div>
-
-                      <div class="min-w-0">
-                        <div class="text-sm font-medium text-white/90 truncate">
-                          {c.displayName ?? c.email ?? 'Outlook'}
-                        </div>
-                        {#if c.email && c.displayName}
-                          <div class="text-xs text-white/50 truncate">{c.email}</div>
-                        {/if}
-                      </div>
-                    </div>
-
-                    <button
-                      class="h-9 px-4 rounded-lg bg-white/10 hover:bg-white/15 text-sm font-medium disabled:opacity-50"
-                      on:click={() => doOutlookDisconnectConnection(c.id)}
-                      disabled={outlookBusy}
-                    >
-                      Trennen
-                    </button>
-                  </div>
-                {/each}
-              </div>
-            {/if}
-
-            {#if outlookError}
-              <div class="mt-2 text-red-400 text-xs">{outlookError}</div>
-            {/if}
-          {/if}
-        </div>
-      </div>
-    </section>
-
-    <!-- Dashboard Section -->
-    <section class="mb-8" id="section-dashboard">
-      <h2 class="text-lg font-semibold text-white/90 mb-4">Dashboard</h2>
-
-      <div class="space-y-4">
-        <!-- Wetter -->
-        <div class="bg-white/5 rounded-xl p-4" id="section-weather">
-          <div class="font-medium mb-3">Wetter & Feiertage</div>
-
-          <div class="flex gap-2 mb-3">
-            <input
-              class="flex-1 h-9 px-3 rounded-lg bg-white/10 border-0 text-sm placeholder:text-white/40"
-              placeholder="Ort (z.B. Berlin)"
-              bind:value={weatherLocation}
-              disabled={!authed}
-            />
-            <button
-              class="h-9 px-4 rounded-lg bg-white/20 hover:bg-white/25 text-sm font-medium disabled:opacity-50"
-              on:click={saveWeatherLocation}
-              disabled={!authed || weatherSaving}
-            >
-              Speichern
-            </button>
-          </div>
-
-          {#if weatherError}
-            <div class="text-red-400 text-xs mb-2">{weatherError}</div>
-          {/if}
-
-          <label class="flex items-center gap-2 text-sm text-white/80">
-            <input
-              type="checkbox"
-              class="rounded bg-white/10 border-0"
-              bind:checked={holidaysEnabled}
-              disabled={!authed}
-            />
-            Feiertage anzeigen
-            <button
-              class="ml-auto h-8 px-3 rounded-lg bg-white/20 hover:bg-white/25 text-xs font-medium disabled:opacity-50"
-              on:click={saveHolidays}
-              disabled={!authed || holidaysSaving}
-            >
-              Speichern
-            </button>
-          </label>
-
-          {#if holidaysError}
-            <div class="text-red-400 text-xs mt-1">{holidaysError}</div>
-          {/if}
-
-          <label class="flex items-center gap-2 text-sm text-white/80 mt-3">
-            <input
-              type="checkbox"
-              class="rounded bg-white/10 border-0"
-              bind:checked={todoEnabled}
-              disabled={!authed}
-            />
-            To-Do Liste anzeigen
-            {#if settings?.todoListName}
-              <span class="text-white/50">({settings.todoListName})</span>
-            {/if}
-            <button
-              class="ml-auto h-8 px-3 rounded-lg bg-white/20 hover:bg-white/25 text-xs font-medium disabled:opacity-50"
-              on:click={saveTodo}
-              disabled={!authed || todoSaving}
-            >
-              Speichern
-            </button>
-          </label>
-
-          {#if todoError}
-            <div class="text-red-400 text-xs mt-1">{todoError}</div>
-          {/if}
-
-          <label class="flex items-center gap-2 text-sm text-white/80 mt-3">
-            <input
-              type="checkbox"
-              class="rounded bg-white/10 border-0"
-              bind:checked={newsEnabled}
-              disabled={!authed}
-            />
-            News (ZEIT RSS) anzeigen
-            <button
-              class="ml-auto h-8 px-3 rounded-lg bg-white/20 hover:bg-white/25 text-xs font-medium disabled:opacity-50"
-              on:click={saveNews}
-              disabled={!authed || newsSaving}
-            >
-              Speichern
-            </button>
-          </label>
-
-          {#if newsError}
-            <div class="text-red-400 text-xs mt-1">{newsError}</div>
-          {/if}
-
-          {#if !authed}
-            <div class="text-white/40 text-xs mt-2">Bitte einloggen, um Einstellungen zu ändern.</div>
-          {/if}
-        </div>
-
-        <!-- Musik / HEOS (Pi Edge) -->
-        <div class="bg-white/5 rounded-xl p-4" id="section-edge">
-          <div class="flex items-center justify-between mb-3">
-            <div class="font-medium">Musik & HEOS (Pi Edge)</div>
-            <button
-              class="h-8 px-3 rounded-lg bg-white/10 hover:bg-white/15 text-xs font-medium"
-              type="button"
-              on:click={() => (edgeSetupOpen = true)}
-            >
-              Setup
-            </button>
-          </div>
-
-          <div class="text-xs text-white/60 mb-3">
-            DashbO läuft auf Mittwald; für SSD-Musik und HEOS im LAN wird ein lokaler Edge-Service am Pi genutzt.
-            Verwende hier eine HTTPS-URL (sonst blockt der Browser Mixed-Content).
-          </div>
-
-          <div class="grid md:grid-cols-3 gap-2">
-            <input
-              class="md:col-span-2 h-9 px-3 rounded-lg bg-white/10 border-0 text-sm placeholder:text-white/40"
-              placeholder="Edge Base URL (z.B. https://pi.local:8787)"
-              bind:value={edgeBaseUrl}
-            />
-            <button
-              class="h-9 px-4 rounded-lg bg-white/20 hover:bg-white/25 text-sm font-medium disabled:opacity-50"
-              on:click={saveEdgeConfig}
-              disabled={edgeSaving}
-            >
-              Speichern
-            </button>
-          </div>
-
-          <div class="mt-2 grid md:grid-cols-3 gap-2">
-            <input
-              class="md:col-span-2 h-9 px-3 rounded-lg bg-white/10 border-0 text-sm placeholder:text-white/40"
-              placeholder="Edge Token (Bearer)"
-              bind:value={edgeToken}
-            />
-          </div>
-
-          <label class="flex items-center gap-2 text-sm text-white/80 mt-3">
-            <input
-              type="checkbox"
-              class="rounded bg-white/10 border-0"
-              bind:checked={edgePlayerWidgetEnabled}
-              on:change={saveEdgePlayerWidgetEnabled}
-            />
-            Player Widget anzeigen
-          </label>
-
-          <label class="flex items-center gap-2 text-sm text-white/80 mt-2">
-            <input
-              type="checkbox"
-              class="rounded bg-white/10 border-0"
-              bind:checked={edgeHeosEnabled}
-              on:change={saveEdgeHeosEnabled}
-            />
-            HEOS aktivieren
-          </label>
-
-          <div class="mt-2">
-            {#if edgeHeosEnabled}
-              <input
-                class="w-full h-9 px-3 rounded-lg bg-white/10 border-0 text-sm placeholder:text-white/40"
-                placeholder="HEOS Speaker IPs (optional, z.B. 192.168.178.24,192.168.178.40)"
-                bind:value={edgeHeosHosts}
-                on:change={saveEdgeConfig}
-              />
-              <div class="text-[11px] text-white/50 mt-1">
-                Tipp: Unter Windows/Docker ist SSDP oft blockiert. Mit IPs funktioniert die Speaker-Liste zuverlässig.
-              </div>
-
-              {#if edgeBaseUrl.trim() && isLocalhostUrl(edgeBaseUrl)}
-                <div class="text-[11px] text-amber-300 mt-1">
-                  Hinweis: HEOS Speaker können <span class="font-medium">localhost</span> nicht erreichen.
-                  Setze die Edge Base URL auf eine LAN-IP/Hostname (z.B. <span class="font-medium">http://192.168.178.X:8787</span>).
-                </div>
-              {/if}
-            {:else}
-              <div class="text-[11px] text-white/50">
-                HEOS ist deaktiviert. Aktiviere HEOS, um Speaker zu laden und Gruppen zu steuern.
-              </div>
-            {/if}
-
-            <div class="mt-4 rounded-xl border border-white/10 bg-white/5 p-3">
-              <div class="flex items-center justify-between">
-                <div class="text-sm font-medium text-white/90">HEOS Gruppen</div>
-                <div class="flex items-center gap-2">
-                  <button
-                    class="h-8 px-3 rounded-lg bg-white/10 hover:bg-white/15 text-xs font-medium disabled:opacity-50"
-                    type="button"
-                    on:click={loadHeosGroups}
-                    disabled={heosGroupsBusy || heosGroupBusy || !edgeBaseUrl.trim() || !edgeHeosEnabled}
-                  >
-                    Gruppen laden
-                  </button>
-                  <button
-                    class="h-8 px-3 rounded-lg bg-white/10 hover:bg-white/15 text-xs font-medium disabled:opacity-50"
-                    type="button"
-                    on:click={loadHeosPlayersForGrouping}
-                    disabled={heosGroupBusy || !edgeBaseUrl.trim() || !edgeHeosEnabled}
-                  >
-                    Speaker laden
-                  </button>
-                </div>
-              </div>
-
-              <div class="text-[11px] text-white/60 mt-1">
-                Wähle mehrere Speaker aus. Der erste ausgewählte gilt als Leader.
-              </div>
-
-              {#if heosGroupError}
-                <div class="mt-2 text-xs text-red-200">{heosGroupError}</div>
-              {/if}
-
-              {#if heosGroupMessage}
-                <div class="mt-2 text-xs text-white/70">{heosGroupMessage}</div>
-              {/if}
-
-              {#if heosGroupsError}
-                <div class="mt-2 text-xs text-red-200">{heosGroupsError}</div>
-              {/if}
-
-              {#if heosGroupsMessage}
-                <div class="mt-2 text-xs text-white/70">{heosGroupsMessage}</div>
-              {/if}
-
-              {#if heosGroups.length > 0}
-                <div class="mt-3 rounded-lg border border-white/10 overflow-hidden">
-                  <div class="divide-y divide-white/10">
-                    {#each heosGroups as g (String(g.gid))}
-                      <div class="p-2">
-                        <div class="flex items-center gap-2">
-                          <div class="min-w-0">
-                            <div class="text-sm text-white/90 line-clamp-1">{g.name}</div>
-                            <div class="text-[11px] text-white/40 tabular-nums">gid: {g.gid}</div>
-                          </div>
-                          <button
-                            class="ml-auto h-8 px-3 rounded-lg bg-white/10 hover:bg-white/15 text-xs font-medium disabled:opacity-50"
-                            type="button"
-                            on:click={() => {
-                              const leaderPid = getHeosGroupLeaderPid(g);
-                              if (leaderPid) void dissolveHeosGroupByPid(leaderPid);
-                            }}
-                            disabled={heosGroupBusy || !edgeBaseUrl.trim() || !edgeHeosEnabled || !getHeosGroupLeaderPid(g)}
-                            title="Gruppe auflösen (Leader)"
-                          >
-                            Auflösen
-                          </button>
-                        </div>
-
-                        {#if g.players.length > 0}
-                          <div class="mt-2 grid gap-1">
-                            {#each g.players as p (p.pid)}
-                              <div class="flex items-center gap-2 text-[12px] text-white/75">
-                                <span class="min-w-0 line-clamp-1">{p.name}</span>
-                                <span class="text-[11px] text-white/40">{String(p.role || '').toLowerCase()}</span>
-                                <span class="ml-auto text-[11px] text-white/40 tabular-nums">{p.pid}</span>
-                              </div>
-                            {/each}
-                          </div>
-                        {/if}
-                      </div>
-                    {/each}
-                  </div>
-                </div>
-              {:else if heosGroupsLoaded}
-                <div class="mt-3 text-[11px] text-white/50">Keine Gruppen vorhanden.</div>
-              {/if}
-
-              {#if heosGroupPlayers.length > 0}
-                <div class="mt-3 max-h-40 overflow-auto rounded-lg border border-white/10">
-                  <div class="divide-y divide-white/10">
-                    {#each heosGroupPlayers as p (p.pid)}
-                      <label class="flex items-center gap-2 p-2 text-sm text-white/85">
-                        <input
-                          type="checkbox"
-                          class="rounded bg-white/10 border-0"
-                          bind:checked={heosGroupSelected[String(p.pid)]}
-                        />
-                        <span class="min-w-0 line-clamp-1">{p.name}</span>
-                        <span class="ml-auto text-[11px] text-white/40 tabular-nums">{p.pid}</span>
-                      </label>
-                    {/each}
-                  </div>
-                </div>
-
-                <div class="mt-3 flex flex-wrap gap-2">
-                  <button
-                    class="h-9 px-3 rounded-lg bg-white/20 hover:bg-white/25 text-sm font-medium disabled:opacity-50"
-                    type="button"
-                    on:click={createHeosGroup}
-                    disabled={heosGroupBusy || !edgeBaseUrl.trim() || !edgeHeosEnabled}
-                  >
-                    Gruppe erstellen
-                  </button>
-                  <button
-                    class="h-9 px-3 rounded-lg bg-white/10 hover:bg-white/15 text-sm font-medium disabled:opacity-50"
-                    type="button"
-                    on:click={dissolveHeosGroup}
-                    disabled={heosGroupBusy || !edgeBaseUrl.trim() || !edgeHeosEnabled}
-                  >
-                    Gruppe auflösen
-                  </button>
-                </div>
-              {/if}
-            </div>
-          </div>
-
-          <div class="flex items-center gap-2 mt-3">
-            <button
-              class="h-8 px-3 rounded-lg bg-white/20 hover:bg-white/25 text-xs font-medium disabled:opacity-50"
-              on:click={testEdgeConnection}
-              disabled={edgeTestBusy || !edgeBaseUrl.trim()}
-            >
-              Verbindung testen
-            </button>
-
-            <button
-              class="h-8 px-3 rounded-lg bg-white/20 hover:bg-white/25 text-xs font-medium disabled:opacity-50"
-              on:click={scanEdgeNow}
-              disabled={edgeScanBusy || !edgeBaseUrl.trim()}
-              title="Scanne die Musikbibliothek auf dem Edge (force)"
-            >
-              Rescan starten
-            </button>
-
-            {#if edgeTestMessage}
-              <div class={edgeTestOk ? 'text-emerald-300 text-xs' : 'text-red-300 text-xs'}>{edgeTestMessage}</div>
-            {/if}
-
-            {#if edgeScanMessage}
-              <div class="text-white/70 text-xs">{edgeScanMessage}</div>
-            {/if}
-          </div>
-
-          <div class="text-xs text-white/50 mt-2">
-            Diese Werte werden nur im Browser (localStorage) gespeichert.
-          </div>
-        </div>
-
-        <!-- Hintergründe -->
-        <div class="bg-white/5 rounded-xl p-4" id="section-background">
-          <div class="font-medium mb-3">Hintergrund</div>
-
-          <div class="flex items-center gap-3 mb-3">
-            <label class="flex items-center gap-2 text-sm text-white/80">
-              <input
-                type="checkbox"
-                class="rounded bg-white/10 border-0"
-                bind:checked={backgroundRotateEnabled}
-                disabled={!authed || rotateSaving}
-              />
-              Zufällig wechseln (alle 10 Minuten)
-            </label>
-            <button
-              class="ml-auto h-8 px-3 rounded-lg bg-white/20 hover:bg-white/25 text-xs font-medium disabled:opacity-50"
-              on:click={saveBackgroundRotate}
-              disabled={!authed || rotateSaving}
-            >
-              Speichern
-            </button>
-          </div>
-
-          {#if rotateError}
-            <div class="text-red-400 text-xs mb-2">{rotateError}</div>
-          {/if}
-
-          <div class="flex gap-2 mb-3">
-            <input
-              class="flex-1 text-sm text-white/70 file:mr-3 file:rounded-lg file:border-0 file:bg-white/10 file:px-3 file:py-1.5 file:text-white file:text-sm file:hover:bg-white/15"
-              type="file"
-              accept="image/png,image/jpeg,image/webp"
-              multiple
-              on:change={(e) => onChooseUploadFilesFrom('files', (e.currentTarget as HTMLInputElement).files)}
-              disabled={!authed}
-            />
-
-            <button
-              class="h-9 px-3 rounded-lg bg-white/10 hover:bg-white/15 text-sm font-medium disabled:opacity-50"
-              type="button"
-              on:click={() => folderInputEl?.click()}
-              disabled={!authed}
-            >
-              Ordner
-            </button>
-
-            <input
-              class="hidden"
-              bind:this={folderInputEl}
-              type="file"
-              accept="image/png,image/jpeg,image/webp"
-              multiple
-              webkitdirectory
-              on:change={(e) => onChooseUploadFilesFrom('folder', (e.currentTarget as HTMLInputElement).files)}
-              disabled={!authed}
-            />
-
-            <button
-              class={`h-9 px-4 rounded-lg text-sm font-medium disabled:opacity-50 ${
-                uploadFiles.length > 0 && !savingBg
-                  ? 'bg-emerald-500/30 hover:bg-emerald-500/40'
-                  : 'bg-white/20 hover:bg-white/25'
-              }`}
-              on:click={doUpload}
-              disabled={!authed || uploadFiles.length === 0 || savingBg}
-            >
-              Upload
-            </button>
-          </div>
-
-          <div class="flex items-center justify-between text-xs text-white/50 mb-2">
-            <div>{uploadFiles.length > 0 ? `${uploadFiles.length} Datei(en) ausgewählt` : 'Mehrere Bilder oder einen Ordner auswählen (Browser-abhängig)'}</div>
-            {#if savingBg && uploadTotalLabel}
-              <div>{uploadTotalLabel}</div>
-            {/if}
-          </div>
-
-          {#if savingBg}
-            <div class="h-2 rounded-full bg-white/10 overflow-hidden mb-2">
-              <div class="h-full bg-white/40" style={`width: ${Math.round(uploadProgress * 100)}%`}></div>
-            </div>
-          {/if}
-
-          {#if uploadError}
-            <div class="text-red-400 text-xs mb-2">{uploadError}</div>
-          {/if}
-
-          {#if (settings?.images?.length ?? 0) > 0}
-            <div class="grid grid-cols-4 gap-2">
-              {#each settings?.images ?? [] as img}
-                <div class="relative">
-                  <button
-                    class={`w-full aspect-video rounded-lg overflow-hidden border-2 ${settings?.background === img ? 'border-white/60' : 'border-transparent'} hover:border-white/30`}
-                    on:click={() => chooseBg(img)}
-                    disabled={!authed || savingBg || deletingBg}
-                    aria-label="Hintergrund auswählen"
-                  >
-                    <img class="w-full h-full object-cover" src={`/api/media/${img}`} alt={img} />
-                  </button>
-
-                  <button
-                    type="button"
-                    class="absolute top-1 right-1 h-7 w-7 rounded-md bg-black/55 hover:bg-black/70 text-white/80 grid place-items-center disabled:opacity-50"
-                    aria-label="Bild löschen"
-                    on:click|stopPropagation={() => {
-                      deleteBgError = null;
-                      deleteBgFor = img;
-                    }}
-                    disabled={!authed || savingBg || deletingBg}
-                  >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                      <path d="M3 6h18" />
-                      <path d="M8 6V4h8v2" />
-                      <path d="M19 6l-1 14H6L5 6" />
-                      <path d="M10 11v6" />
-                      <path d="M14 11v6" />
-                    </svg>
-                  </button>
-                </div>
-              {/each}
-            </div>
-          {:else}
-            <div class="text-white/40 text-sm">Keine Bilder hochgeladen</div>
-          {/if}
-        </div>
-      </div>
-    </section>
+    <CalendarSection
+      {authed}
+      {tags}
+      bind:newTagName
+      bind:newTagColor
+      {tagError}
+      bind:tagColorMenuOpen
+      {persons}
+      bind:newPersonName
+      bind:newPersonColor
+      {personError}
+      bind:personColorMenuOpen
+      {outlookStatus}
+      {outlookConnections}
+      {outlookError}
+      {outlookBusy}
+      bind:outlookColorMenuFor
+      {colorBg}
+      {colorNames}
+      {isTagColorKey}
+      {isHexColor}
+      {chooseTagColor}
+      {chooseCustomTagColor}
+      {doCreateTag}
+      {doDeleteTag}
+      {choosePersonColor}
+      {chooseCustomPersonColor}
+      {doCreatePerson}
+      {doDeletePerson}
+      {doOutlookConnect}
+      {doOutlookDisconnect}
+      {doOutlookDisconnectConnection}
+      {doOutlookSetConnectionColor}
+    />
+
+    <DashboardSection
+      {authed}
+      {settings}
+      bind:weatherLocation
+      {weatherSaving}
+      {weatherError}
+      {saveWeatherLocation}
+      bind:holidaysEnabled
+      {holidaysSaving}
+      {holidaysError}
+      {saveHolidays}
+      bind:todoEnabled
+      {todoSaving}
+      {todoError}
+      {saveTodo}
+      bind:todoListNamesText
+      {todoListNamesSaving}
+      {todoListNamesError}
+      saveTodoListNames={saveTodoListNamesHandler}
+      bind:newsEnabled
+      {newsSaving}
+      {newsError}
+      {saveNews}
+      bind:newsFeeds
+      {newsFeedsSaving}
+      {newsFeedsError}
+      saveNewsFeeds={saveNewsFeedsHandler}
+      bind:edgeBaseUrl
+      bind:edgeToken
+      {edgeSaving}
+      bind:edgePlayerWidgetEnabled
+      {saveEdgePlayerWidgetEnabled}
+      openEdgeSetup={() => (edgeSetupOpen = true)}
+      {saveEdgeConfig}
+      {testEdgeConnection}
+      {edgeTestBusy}
+      {edgeTestMessage}
+      {edgeTestOk}
+      {scanEdgeNow}
+      {edgeScanBusy}
+      {edgeScanMessage}
+      bind:edgeHeosEnabled
+      {saveEdgeHeosEnabled}
+      bind:edgeHeosHosts
+      {isLocalhostUrl}
+      {heosGroupPlayers}
+      {heosGroupSelected}
+      {heosGroupBusy}
+      {heosGroupError}
+      {heosGroupMessage}
+      {heosGroups}
+      {heosGroupsLoaded}
+      {heosGroupsBusy}
+      {heosGroupsError}
+      {heosGroupsMessage}
+      {loadHeosGroups}
+      {loadHeosPlayersForGrouping}
+      {createHeosGroup}
+      {dissolveHeosGroup}
+      {dissolveHeosGroupByPid}
+      {getHeosGroupLeaderPid}
+      bind:backgroundRotateEnabled
+      {rotateSaving}
+      {rotateError}
+      {saveBackgroundRotate}
+      {uploadFiles}
+      {savingBg}
+      {uploadProgress}
+      {uploadTotalLabel}
+      {uploadError}
+      bind:folderInputEl
+      {onChooseUploadFilesFrom}
+      {doUpload}
+      {chooseBg}
+      {deletingBg}
+      {requestDeleteBg}
+    />
 
     <!-- Admin Section -->
     {#if authed && isAdmin}
-      <section class="mb-8" id="section-users">
-        <h2 class="text-lg font-semibold text-white/90 mb-4">Benutzerverwaltung</h2>
-
-        <div class="bg-white/5 rounded-xl p-4">
-          <div class="font-medium mb-3">Neuer Benutzer</div>
-
-          <div class="grid grid-cols-3 gap-2 mb-2">
-            <input
-              class="h-9 px-3 rounded-lg bg-white/10 border-0 text-sm placeholder:text-white/40"
-              placeholder="E-Mail"
-              bind:value={newUserEmail}
-            />
-            <input
-              class="h-9 px-3 rounded-lg bg-white/10 border-0 text-sm placeholder:text-white/40"
-              placeholder="Name"
-              bind:value={newUserName}
-            />
-            <input
-              class="h-9 px-3 rounded-lg bg-white/10 border-0 text-sm placeholder:text-white/40"
-              placeholder="Passwort"
-              type="password"
-              bind:value={newUserPassword}
-            />
-          </div>
-
-          <div class="flex items-center gap-4">
-            <label class="flex items-center gap-2 text-sm text-white/70">
-              <input type="checkbox" class="rounded bg-white/10 border-0" bind:checked={newUserIsAdmin} />
-              Admin
-            </label>
-            <button
-              class="h-9 px-4 rounded-lg bg-white/20 hover:bg-white/25 text-sm font-medium"
-              on:click={doCreateUser}
-            >
-              Anlegen
-            </button>
-          </div>
-
-          {#if userError}
-            <div class="text-red-400 text-xs mt-2">{userError}</div>
-          {/if}
-
-          <!-- User List -->
-          {#if users.length > 0}
-            <div class="mt-4 pt-4 border-t border-white/10 space-y-2">
-              {#each users as u (u.id)}
-                <div class="flex items-center justify-between py-2">
-                  <div>
-                    <span class="font-medium">{u.name}</span>
-                    <span class="text-white/50 text-sm ml-2">{u.email}</span>
-                    {#if u.isAdmin}
-                      <span class="text-xs bg-white/10 rounded px-1.5 py-0.5 ml-2">Admin</span>
-                    {/if}
-                  </div>
-                  <div class="flex gap-2">
-                    <button
-                      class="text-xs text-white/50 hover:text-white"
-                      on:click={() => { resetFor = u; resetPassword = ''; resetError = null; }}
-                    >
-                      Passwort
-                    </button>
-                    <button
-                      class="text-xs text-white/50 hover:text-red-400"
-                      on:click={() => (deletingFor = u)}
-                    >
-                      Löschen
-                    </button>
-                  </div>
-                </div>
-              {/each}
-            </div>
-          {/if}
-        </div>
-      </section>
+      <UsersSection
+        {authed}
+        {isAdmin}
+        {users}
+        bind:newUserEmail
+        bind:newUserName
+        bind:newUserPassword
+        bind:newUserIsAdmin
+        {userError}
+        bind:resetFor
+        bind:resetPassword
+        bind:resetError
+        bind:deletingFor
+        {doCreateUser}
+      />
     {/if}
   </div>
 
-  {#if deleteBgFor}
-    <!-- svelte-ignore a11y_no_static_element_interactions a11y_click_events_have_key_events -->
-    <div class="fixed inset-0 z-50 bg-black/60" on:click={() => (!deletingBg ? (deleteBgFor = null) : undefined)}>
-      <div class="min-h-full flex items-center justify-center p-6">
-        <div class="w-full max-w-md rounded-2xl bg-black/70 border border-white/10 backdrop-blur-md p-5" on:click|stopPropagation>
-          <div class="text-base font-semibold mb-1">Bild löschen?</div>
-          <div class="text-sm text-white/70 mb-4 break-all">{deleteBgFor}</div>
+  <DeleteBackgroundModal bind:deleteBgFor {deletingBg} {deleteBgError} {confirmDeleteBg} />
 
-          {#if deleteBgError}
-            <div class="text-red-400 text-xs mb-3">{deleteBgError}</div>
-          {/if}
-
-          <div class="flex justify-end gap-2">
-            <button
-              class="h-9 px-4 rounded-lg bg-white/10 hover:bg-white/15 text-sm font-medium disabled:opacity-50"
-              type="button"
-              on:click={() => (deleteBgFor = null)}
-              disabled={deletingBg}
-            >
-              Abbrechen
-            </button>
-            <button
-              class="h-9 px-4 rounded-lg bg-white/20 hover:bg-white/25 text-sm font-medium disabled:opacity-50"
-              type="button"
-              on:click={confirmDeleteBg}
-              disabled={deletingBg}
-            >
-              Löschen
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  {/if}
-
-  {#if folderConfirmOpen}
-    <!-- svelte-ignore a11y_no_static_element_interactions a11y_click_events_have_key_events -->
-    <div class="fixed inset-0 z-50 bg-black/60" on:click={cancelFolderSelection}>
-      <div class="min-h-full flex items-center justify-center p-6">
-        <div class="w-full max-w-md rounded-2xl bg-black/70 border border-white/10 backdrop-blur-md p-5" on:click|stopPropagation>
-          <div class="text-base font-semibold mb-1">Ordner-Upload übernehmen?</div>
-          <div class="text-sm text-white/70 mb-4">
-            {pendingFolderFiles.length} Datei(en) erkannt. Der Upload läuft anschließend Datei für Datei. Danach bitte auf <span class="font-medium">Upload</span> klicken.
-          </div>
-
-          <div class="flex items-center justify-end gap-2">
-            <button
-              class="h-9 px-4 rounded-lg bg-white/10 hover:bg-white/15 text-sm font-medium"
-              type="button"
-              on:click={cancelFolderSelection}
-            >
-              Abbrechen
-            </button>
-            <button
-              class="h-9 px-4 rounded-lg bg-white/20 hover:bg-white/25 text-sm font-medium"
-              type="button"
-              on:click={confirmFolderSelection}
-            >
-              Übernehmen
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  {/if}
+  <FolderConfirmModal
+    open={folderConfirmOpen}
+    fileCount={pendingFolderFiles.length}
+    {confirmFolderSelection}
+    {cancelFolderSelection}
+  />
 </div>
 
-<!-- Reset Password Modal -->
-{#if resetFor}
-  <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-  <div class="fixed inset-0 z-50 flex items-center justify-center p-4" on:click={(e) => e.currentTarget === e.target && (resetFor = null)}>
-    <div class="absolute inset-0 bg-black/70"></div>
-    <div class="relative bg-zinc-900 rounded-2xl p-6 w-full max-w-sm border border-white/10">
-      <div class="font-semibold text-lg mb-1">Passwort zurücksetzen</div>
-      <div class="text-white/50 text-sm mb-4">{resetFor.email}</div>
+<ResetPasswordModal bind:resetFor bind:resetPassword bind:resetError {doResetPassword} />
 
-      <input
-        class="w-full h-10 px-3 rounded-lg bg-white/10 border-0 text-sm placeholder:text-white/40 mb-3"
-        placeholder="Neues Passwort"
-        type="password"
-        bind:value={resetPassword}
-      />
+<DeleteUserModal bind:deletingFor {doDeleteUser} />
 
-      {#if resetError}
-        <div class="text-red-400 text-xs mb-3">{resetError}</div>
-      {/if}
-
-      <div class="flex gap-2">
-        <button class="flex-1 h-10 rounded-lg bg-white/20 hover:bg-white/25 text-sm font-medium" on:click={doResetPassword}>
-          Speichern
-        </button>
-        <button class="flex-1 h-10 rounded-lg bg-white/10 hover:bg-white/15 text-sm" on:click={() => (resetFor = null)}>
-          Abbrechen
-        </button>
-      </div>
-    </div>
-  </div>
-{/if}
-
-<!-- Delete User Modal -->
-{#if deletingFor}
-  <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-  <div class="fixed inset-0 z-50 flex items-center justify-center p-4" on:click={(e) => e.currentTarget === e.target && (deletingFor = null)}>
-    <div class="absolute inset-0 bg-black/70"></div>
-    <div class="relative bg-zinc-900 rounded-2xl p-6 w-full max-w-sm border border-white/10">
-      <div class="font-semibold text-lg mb-1">Benutzer löschen?</div>
-      <div class="text-white/50 text-sm mb-4">{deletingFor.name} ({deletingFor.email})</div>
-
-      <div class="flex gap-2">
-        <button class="flex-1 h-10 rounded-lg bg-red-500/20 hover:bg-red-500/30 text-red-400 text-sm font-medium" on:click={doDeleteUser}>
-          Löschen
-        </button>
-        <button class="flex-1 h-10 rounded-lg bg-white/10 hover:bg-white/15 text-sm" on:click={() => (deletingFor = null)}>
-          Abbrechen
-        </button>
-      </div>
-    </div>
-  </div>
-{/if}
-
-<!-- Edge Setup Modal -->
-{#if edgeSetupOpen}
-  <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-  <div class="fixed inset-0 z-50 flex items-center justify-center p-4" on:click={(e) => e.currentTarget === e.target && (edgeSetupOpen = false)}>
-    <div class="absolute inset-0 bg-black/70"></div>
-    <div class="relative bg-zinc-900 rounded-2xl p-6 w-full max-w-lg border border-white/10">
-      <div class="flex items-start justify-between gap-4 mb-3">
-        <div>
-          <div class="font-semibold text-lg">Pi/PC Edge Setup</div>
-          <div class="text-white/50 text-sm">Lokale Musikbibliothek + HEOS über einen lokalen Edge-Service</div>
-        </div>
-        <button class="h-9 px-3 rounded-lg bg-white/10 hover:bg-white/15 text-sm" on:click={() => (edgeSetupOpen = false)}>
-          Schließen
-        </button>
-      </div>
-
-      <div class="text-sm text-white/80 space-y-3">
-        <div>
-          <div class="font-medium mb-1">Wichtig: HTTPS (Mixed Content)</div>
-          <div class="text-white/70">
-            DashbO läuft über <span class="font-medium">https://dashbohub.de</span>. Browser blockieren Aufrufe zu einem lokalen
-            <span class="font-medium">http://</span>-Edge. Verwende daher eine <span class="font-medium">https://</span>-URL (z.B. via Caddy/Nginx Reverse Proxy).
-          </div>
-        </div>
-
-        <div>
-          <div class="font-medium mb-1">Windows PC</div>
-          <div class="text-white/70">
-            1) Docker Desktop starten
-            <br />2) Musik in deiner Bibliothek ablegen (z.B. <span class="font-medium">C:\\Users\\huber\\Musik</span>)
-            <br />3) Edge starten: <span class="font-medium">docker compose -f docker-compose.win-edge.yml up -d --build</span>
-            <br />4) Hier in den Einstellungen die Edge Base URL + Token eintragen
-          </div>
-        </div>
-
-        <div>
-          <div class="font-medium mb-1">Raspberry Pi</div>
-          <div class="text-white/70">
-            1) SSD nach <span class="font-medium">/mnt/music</span> mounten
-            <br />2) Edge starten: <span class="font-medium">docker compose -f docker-compose.pi-edge.yml up -d --build</span>
-            <br />3) Edge Base URL + Token im Browser-Gerät speichern
-          </div>
-        </div>
-
-        <div class="text-white/60 text-xs">
-          Hinweis: Die Edge-Zugangsdaten und der Player-Widget Toggle werden nur lokal im Browser gespeichert (localStorage).
-        </div>
-      </div>
-    </div>
-  </div>
-{/if}
+<EdgeSetupModal bind:edgeSetupOpen />

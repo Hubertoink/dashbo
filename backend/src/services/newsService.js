@@ -1,6 +1,9 @@
 const Parser = require('rss-parser');
 
 const DEFAULT_ZEIT_RSS_URL = 'https://newsfeed.zeit.de/index';
+const DEFAULT_GUARDIAN_RSS_URL = 'https://www.theguardian.com/international/rss';
+const DEFAULT_NEWYORKER_RSS_URL = 'https://www.newyorker.com/feed/rss';
+const DEFAULT_SZ_RSS_URL = 'https://rss.sueddeutsche.de/rss/Topthemen';
 
 const CACHE_TTL_MS = 10 * 60 * 1000;
 
@@ -75,9 +78,33 @@ function firstImageUrl(item) {
   return null;
 }
 
+function isNoiseItem(source, title) {
+  const s = String(source || '').toLowerCase();
+  const t = String(title || '').trim();
+  if (!t) return false;
+
+  // New Yorker feed often contains non-article entries (e.g. crosswords/puzzles).
+  if (s === 'newyorker') {
+    return /(crossword|cryptic|puzzle)/i.test(t);
+  }
+
+  return false;
+}
+
+function rankScore(it) {
+  const hasImage = Boolean(it?.imageUrl);
+  const hasTeaser = Boolean(it?.teaser);
+  const titleLen = typeof it?.title === 'string' ? it.title.length : 0;
+  return (hasImage ? 100 : 0) + (hasTeaser ? 15 : 0) + (titleLen >= 60 ? 2 : 0);
+}
+
 async function fetchZeitRss({ limit = 4 } = {}) {
-  const url = DEFAULT_ZEIT_RSS_URL;
-  const cacheKey = `zeit:${url}`;
+  return fetchRss({ source: 'zeit', url: DEFAULT_ZEIT_RSS_URL, limit });
+}
+
+async function fetchRss({ source, url, limit = 4 } = {}) {
+  const safeSource = String(source || '').trim().toLowerCase() || 'rss';
+  const cacheKey = `${safeSource}:${url}`;
   const cached = getCached(cacheKey);
   if (cached) return cached;
 
@@ -87,7 +114,7 @@ async function fetchZeitRss({ limit = 4 } = {}) {
     }
   });
 
-  const feed = await parser.parseURL(url);
+  const feed = await parser.parseURL(String(url));
   const items = Array.isArray(feed?.items) ? feed.items : [];
 
   const all = items
@@ -97,18 +124,76 @@ async function fetchZeitRss({ limit = 4 } = {}) {
       const publishedAt = toIso(it?.isoDate || it?.pubDate);
       const teaser = firstTextSnippet(it);
       const imageUrl = firstImageUrl(it);
-      return title && link ? { title, url: link, publishedAt, teaser, imageUrl } : null;
+      if (!title || !link) return null;
+      if (isNoiseItem(safeSource, title) && !imageUrl) return null;
+      return { source: safeSource, title, url: link, publishedAt, teaser, imageUrl };
     })
-    .filter(Boolean)
+    .filter(Boolean);
 
   const max = Math.max(1, Math.min(20, Number(limit) || 4));
-  const withTeaser = all.filter((it) => it.teaser);
-  const withoutTeaser = all.filter((it) => !it.teaser);
-  const normalized = [...withTeaser, ...withoutTeaser].slice(0, max);
+  const sorted = [...all].sort((a, b) => {
+    const sa = rankScore(a);
+    const sb = rankScore(b);
+    if (sb !== sa) return sb - sa;
+    const at = a?.publishedAt ? new Date(a.publishedAt).getTime() : 0;
+    const bt = b?.publishedAt ? new Date(b.publishedAt).getTime() : 0;
+    return bt - at;
+  });
+  const normalized = sorted.slice(0, max);
 
-  const out = { source: 'zeit', items: normalized };
+  const out = { source: safeSource, items: normalized };
   setCached(cacheKey, out);
   return out;
 }
 
-module.exports = { fetchZeitRss, DEFAULT_ZEIT_RSS_URL };
+const FEEDS = {
+  zeit: { url: DEFAULT_ZEIT_RSS_URL },
+  guardian: { url: DEFAULT_GUARDIAN_RSS_URL },
+  newyorker: { url: DEFAULT_NEWYORKER_RSS_URL },
+  sz: { url: DEFAULT_SZ_RSS_URL },
+};
+
+async function fetchNewsFeeds({ feeds, limit = 4 } = {}) {
+  const wanted = Array.isArray(feeds) ? feeds : [];
+  const normalized = wanted
+    .map((v) => String(v || '').trim().toLowerCase())
+    .filter((v) => v in FEEDS);
+  const unique = Array.from(new Set(normalized));
+  const effective = unique.length ? unique : ['zeit'];
+
+  const perFeedLimit = Math.max(4, Math.min(20, Number(limit) || 4));
+  const results = await Promise.all(
+    effective.map((id) => fetchRss({ source: id, url: FEEDS[id].url, limit: perFeedLimit }).catch(() => ({ source: id, items: [] })))
+  );
+
+  const seen = new Set();
+  const merged = [];
+  for (const r of results) {
+    const items = Array.isArray(r?.items) ? r.items : [];
+    for (const it of items) {
+      const u = it?.url ? String(it.url) : '';
+      if (!u || seen.has(u)) continue;
+      seen.add(u);
+      merged.push(it);
+    }
+  }
+
+  merged.sort((a, b) => {
+    const at = a?.publishedAt ? new Date(a.publishedAt).getTime() : 0;
+    const bt = b?.publishedAt ? new Date(b.publishedAt).getTime() : 0;
+    return bt - at;
+  });
+
+  const max = Math.max(1, Math.min(20, Number(limit) || 4));
+  const source = effective.length === 1 ? effective[0] : 'mixed';
+  return { source, items: merged.slice(0, max) };
+}
+
+module.exports = {
+  fetchZeitRss,
+  fetchNewsFeeds,
+  DEFAULT_ZEIT_RSS_URL,
+  DEFAULT_GUARDIAN_RSS_URL,
+  DEFAULT_NEWYORKER_RSS_URL,
+  DEFAULT_SZ_RSS_URL,
+};

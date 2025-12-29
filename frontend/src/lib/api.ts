@@ -52,7 +52,10 @@ export type TodosResponseDto = {
   items: TodoItemDto[];
 };
 
+export type NewsFeedId = 'zeit' | 'guardian' | 'newyorker' | 'sz';
+
 export type NewsItemDto = {
+  source?: NewsFeedId;
   title: string;
   url: string;
   publishedAt: string | null;
@@ -62,14 +65,15 @@ export type NewsItemDto = {
 
 export type NewsResponseDto = {
   enabled: boolean;
-  source: 'zeit';
+  source: 'zeit' | 'guardian' | 'newyorker' | 'sz' | 'mixed';
   items: NewsItemDto[];
   error?: string;
 };
 
 export type TagColorKey = 'fuchsia' | 'cyan' | 'emerald' | 'amber' | 'rose' | 'violet' | 'sky' | 'lime';
 
-export type PersonColorKey = TagColorKey;
+// Either one of the predefined palette keys or a custom hex color (#RRGGBB)
+export type PersonColorKey = TagColorKey | string;
 
 export type TagDto = {
   id: number;
@@ -84,7 +88,8 @@ export type TagDto = {
 export type PersonDto = {
   id: number;
   name: string;
-  color: PersonColorKey;
+  // Either one of the predefined palette keys or a custom hex color (#RRGGBB)
+  color: string;
   sortOrder: number;
   createdAt: string;
   updatedAt: string;
@@ -249,7 +254,7 @@ export async function listPersons(): Promise<PersonDto[]> {
   return api<PersonDto[]>('/persons');
 }
 
-export async function createPerson(input: { name: string; color: PersonColorKey; sortOrder?: number }): Promise<PersonDto> {
+export async function createPerson(input: { name: string; color: string; sortOrder?: number }): Promise<PersonDto> {
   return api<PersonDto>('/persons', { method: 'POST', body: JSON.stringify(input) });
 }
 
@@ -328,6 +333,8 @@ export type SettingsDto = {
   todoEnabled?: boolean;
   newsEnabled?: boolean;
   todoListName?: string | null;
+  todoListNames?: string[];
+  newsFeeds?: NewsFeedId[];
   dataRefreshMs?: number | null;
 };
 
@@ -411,6 +418,14 @@ export async function setHolidaysEnabled(enabled: boolean): Promise<{ ok: true }
 
 export async function setTodoEnabled(enabled: boolean): Promise<{ ok: true }> {
   return api<{ ok: true }>('/settings/todo', { method: 'POST', body: JSON.stringify({ enabled }) });
+}
+
+export async function setTodoListNames(listNames: string[]): Promise<{ ok: true }> {
+  return api<{ ok: true }>('/settings/todo/list-names', { method: 'POST', body: JSON.stringify({ listNames }) });
+}
+
+export async function setNewsFeeds(feeds: NewsFeedId[]): Promise<{ ok: true }> {
+  return api<{ ok: true }>('/settings/news/feeds', { method: 'POST', body: JSON.stringify({ feeds }) });
 }
 
 export type HolidayDto = {

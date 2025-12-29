@@ -474,7 +474,12 @@
                   >
                     <div class="flex items-center gap-3 min-w-0">
                       <div
-                        class={`h-3 w-3 rounded-full ${primaryPerson ? tagBg[primaryPerson.color as TagColorKey] : 'bg-white/25'}`}
+                        class={`h-3 w-3 rounded-full ${primaryPerson
+                          ? isHexColor(primaryPerson.color)
+                            ? 'bg-transparent'
+                            : tagBg[primaryPerson.color as TagColorKey] ?? 'bg-white/25'
+                          : 'bg-white/25'}`}
+                        style={primaryPerson && isHexColor(primaryPerson.color) ? `background-color: ${primaryPerson.color}` : ''}
                       ></div>
                       <div class="truncate">{selectedPersonLabel}</div>
                     </div>
@@ -517,7 +522,10 @@
                           on:click={() => choosePerson(p.id)}
                         >
                           <div class="flex items-center gap-3 min-w-0">
-                            <div class={`h-3 w-3 rounded-full ${tagBg[p.color as TagColorKey]}`}></div>
+                            <div
+                              class={`h-3 w-3 rounded-full ${isHexColor(p.color) ? 'bg-transparent' : tagBg[p.color as TagColorKey] ?? 'bg-white/25'}`}
+                              style={isHexColor(p.color) ? `background-color: ${p.color}` : ''}
+                            ></div>
                             <div class="truncate">{p.name}</div>
                           </div>
                           <div class="text-white/60">{selected ? '✓' : ''}</div>

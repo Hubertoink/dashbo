@@ -31,6 +31,15 @@ function getTodoListName() {
   return (process.env.TODO_LIST_NAME || 'Dashbo').trim() || 'Dashbo';
 }
 
+function normalizeTodoListNames(listNames) {
+  const out = Array.isArray(listNames) ? listNames : [];
+  const normalized = out
+    .map((v) => String(v || '').trim())
+    .filter(Boolean)
+    .slice(0, 20);
+  return normalized.length > 0 ? Array.from(new Set(normalized)) : [getTodoListName()];
+}
+
 function getGraphTodoBaseUrl(version) {
   const v = String(version || '').trim() || 'v1.0';
   return `https://graph.microsoft.com/${v}`;
@@ -189,12 +198,11 @@ function normalizeTodoStatus(status) {
   return s;
 }
 
-async function listTodos({ userId }) {
+async function listTodos({ userId, listNames }) {
   // Ensure Outlook config exists; To Do piggybacks on the same OAuth.
   const cfg = getOutlookConfig({ allowMissing: true });
-  if (!cfg) return { listName: getTodoListName(), items: [] };
-
-  const listName = getTodoListName();
+  const effectiveListNames = normalizeTodoListNames(listNames);
+  if (!cfg) return { listName: effectiveListNames.join(', '), items: [] };
 
   // Use multi connections when available; legacy token otherwise.
   const connections = await listOutlookConnections({ userId });
@@ -202,47 +210,50 @@ async function listTodos({ userId }) {
   const out = [];
 
   async function fetchFor({ connectionId, label, color, accessToken }) {
-    let listId;
-    try {
-      listId = await resolveTodoListId({ accessToken, listName });
-    } catch (e) {
-      console.warn('[todo] fetchFor resolveTodoListId error', { connectionId, label }, e?.message);
-      return;
-    }
-    if (!listId) return; // List not found or Graph error – skip silently
+    for (const listName of effectiveListNames) {
+      let listId;
+      try {
+        listId = await resolveTodoListId({ accessToken, listName });
+      } catch (e) {
+        console.warn('[todo] fetchFor resolveTodoListId error', { connectionId, label, listName }, e?.message);
+        continue;
+      }
+      if (!listId) continue; // List not found or Graph error – skip silently
 
-    let tasks;
-    try {
-      tasks = await listTodoTasks({ accessToken, listId });
-    } catch (e) {
-      console.warn('[todo] fetchFor listTodoTasks error', { connectionId, label, listId }, e?.message);
-      return;
-    }
-    for (const t of tasks) {
-      const taskId = t?.id ? String(t.id) : null;
-      if (!taskId) continue;
-      const title = t?.title ? String(t.title) : 'Todo';
-      const status = normalizeTodoStatus(t?.status);
-      const completed = status === 'completed';
-      const dueAt = parseGraphDateTime(t?.dueDateTime) || null;
-      const bodyPreview = t?.bodyPreview ? String(t.bodyPreview) : null;
-      const updatedAt = t?.lastModifiedDateTime ? new Date(String(t.lastModifiedDateTime)).toISOString() : null;
-      const completedAt = t?.completedDateTime ? parseGraphDateTime(t.completedDateTime) : null;
+      let tasks;
+      try {
+        tasks = await listTodoTasks({ accessToken, listId });
+      } catch (e) {
+        console.warn('[todo] fetchFor listTodoTasks error', { connectionId, label, listId, listName }, e?.message);
+        continue;
+      }
 
-      out.push({
-        connectionId,
-        connectionLabel: label,
-        color,
-        listId,
-        taskId,
-        title,
-        status,
-        completed,
-        dueAt,
-        bodyPreview,
-        updatedAt,
-        completedAt,
-      });
+      for (const t of tasks) {
+        const taskId = t?.id ? String(t.id) : null;
+        if (!taskId) continue;
+        const title = t?.title ? String(t.title) : 'Todo';
+        const status = normalizeTodoStatus(t?.status);
+        const completed = status === 'completed';
+        const dueAt = parseGraphDateTime(t?.dueDateTime) || null;
+        const bodyPreview = t?.bodyPreview ? String(t.bodyPreview) : null;
+        const updatedAt = t?.lastModifiedDateTime ? new Date(String(t.lastModifiedDateTime)).toISOString() : null;
+        const completedAt = t?.completedDateTime ? parseGraphDateTime(t.completedDateTime) : null;
+
+        out.push({
+          connectionId,
+          connectionLabel: label,
+          color,
+          listId,
+          taskId,
+          title,
+          status,
+          completed,
+          dueAt,
+          bodyPreview,
+          updatedAt,
+          completedAt,
+        });
+      }
     }
   }
 
@@ -268,7 +279,7 @@ async function listTodos({ userId }) {
     return a.title.localeCompare(b.title);
   });
 
-  return { listName, items: out };
+  return { listName: effectiveListNames.join(', '), items: out };
 }
 
 async function updateTodo({ userId, connectionId, listId, taskId, patch }) {

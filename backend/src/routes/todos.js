@@ -2,6 +2,7 @@ const express = require('express');
 const { z } = require('zod');
 
 const { requireAuth } = require('../middleware/auth');
+const { getUserSetting } = require('../services/settingsService');
 const { listTodos, updateTodo, getTodoListName } = require('../services/todoService');
 
 const todosRouter = express.Router();
@@ -9,8 +10,28 @@ const todosRouter = express.Router();
 todosRouter.get('/', requireAuth, async (req, res) => {
   const userId = Number(req.auth?.sub);
 
+  let configuredListNames = null;
   try {
-    const r = await listTodos({ userId });
+    const raw = await getUserSetting({ userId, key: 'todo.listNames' });
+    if (raw && String(raw).trim()) {
+      const parsed = JSON.parse(String(raw));
+      if (Array.isArray(parsed)) {
+        configuredListNames = parsed
+          .map((v) => String(v || '').trim())
+          .filter(Boolean)
+          .slice(0, 20);
+      }
+    }
+  } catch {
+    // ignore
+  }
+
+  if (!configuredListNames || configuredListNames.length === 0) {
+    configuredListNames = [getTodoListName()];
+  }
+
+  try {
+    const r = await listTodos({ userId, listNames: configuredListNames });
     res.json(r);
   } catch (e) {
     const status = Number(e?.status || 500);
@@ -20,7 +41,7 @@ todosRouter.get('/', requireAuth, async (req, res) => {
     if (status === 401 || status === 403) {
       return res.status(400).json({
         error: 'todo_permission_missing',
-        message: `Microsoft To Do Berechtigung fehlt. Bitte OUTLOOK_SCOPES um Tasks.ReadWrite erweitern und erneut verbinden. (Liste: ${getTodoListName()})`,
+        message: `Microsoft To Do Berechtigung fehlt. Bitte OUTLOOK_SCOPES um Tasks.ReadWrite erweitern und erneut verbinden. (Liste(n): ${configuredListNames.join(', ')})`,
         details: { code, status, message },
       });
     }
@@ -28,7 +49,7 @@ todosRouter.get('/', requireAuth, async (req, res) => {
     if (status === 404) {
       return res.status(400).json({
         error: 'todo_not_available',
-        message: `Microsoft To Do ist für dieses Konto nicht verfügbar oder die API-Antwort war 404. (Liste: ${getTodoListName()})`,
+        message: `Microsoft To Do ist für dieses Konto nicht verfügbar oder die API-Antwort war 404. (Liste(n): ${configuredListNames.join(', ')})`,
         details: { code, status, message },
       });
     }
@@ -39,7 +60,7 @@ todosRouter.get('/', requireAuth, async (req, res) => {
       return res.status(400).json({
         error: 'todo_scope_or_account',
         message: `Microsoft To Do API abgelehnt (400 ${code}). Bitte alle Outlook-Verbindungen trennen und erneut verbinden, damit die neuen Scopes (Tasks.ReadWrite) übernommen werden. Hinweis: Google-Konten haben keinen Zugriff auf Microsoft To Do.`,
-        details: { code, status, message, listName: getTodoListName() },
+        details: { code, status, message, listNames: configuredListNames },
       });
     }
 
