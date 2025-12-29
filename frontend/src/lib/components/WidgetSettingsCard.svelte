@@ -8,6 +8,7 @@
   export let widgetKey: string;
   export let saving: boolean = false;
   export let error: string | null = null;
+  export let showToggle: boolean = true;
 
   $: effectiveKicker = kicker ?? widgetKey;
 
@@ -56,22 +57,24 @@
         <span class="text-xs text-white/50">Speichern…</span>
       {/if}
 
-      <button
-        type="button"
-        class="relative h-6 w-11 rounded-full transition-colors duration-200 {enabled
-          ? 'bg-cyan-500/60'
-          : 'bg-white/20'}"
-        on:click={handleToggle}
-        disabled={saving}
-        aria-pressed={enabled}
-        aria-label="{title} {enabled ? 'deaktivieren' : 'aktivieren'}"
-      >
-        <span
-          class="absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform duration-200 {enabled
-            ? 'translate-x-5'
-            : 'translate-x-0'}"
-        ></span>
-      </button>
+      {#if showToggle}
+        <button
+          type="button"
+          class="relative h-6 w-11 rounded-full transition-colors duration-200 {enabled
+            ? 'bg-cyan-500/60'
+            : 'bg-white/20'}"
+          on:click={handleToggle}
+          disabled={saving}
+          aria-pressed={enabled}
+          aria-label="{title} {enabled ? 'deaktivieren' : 'aktivieren'}"
+        >
+          <span
+            class="absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform duration-200 {enabled
+              ? 'translate-x-5'
+              : 'translate-x-0'}"
+          ></span>
+        </button>
+      {/if}
     </div>
   </div>
 

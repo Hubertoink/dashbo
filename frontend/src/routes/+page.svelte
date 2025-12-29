@@ -27,6 +27,7 @@
   import { daysForMonthGrid } from '$lib/date';
   import { getEdgePlayerWidgetEnabledFromStorage } from '$lib/edge';
   import { musicPlayerState } from '$lib/stores/musicPlayer';
+  import { normalizeClockStyle, type ClockStyle } from '$lib/clockStyle';
 
   let selectedDate = new Date();
   let monthAnchor = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1);
@@ -38,6 +39,8 @@
   let bgRotateInterval: ReturnType<typeof setInterval> | null = null;
   let viewMode: 'month' | 'week' = 'month';
   let tone: 'light' | 'dark' = 'light';
+
+  let clockStyle: ClockStyle = 'modern';
 
   let upcomingMode = false;
   let standbyMode = false;
@@ -570,6 +573,7 @@
     void (async () => {
       try {
         const s = await fetchSettings();
+        clockStyle = normalizeClockStyle((s as any)?.clockStyle);
 
         try {
           const st = await fetchOutlookStatus();
@@ -751,7 +755,7 @@
         {/if}
 
         <div class="mt-auto pb-2">
-          <div class="text-white"><Clock tone="light" /></div>
+          <div class="text-white"><Clock tone="light" style={clockStyle} /></div>
         </div>
       </div>
     {/if}
@@ -797,7 +801,7 @@
                 <div class="pb-2">
                   <div class="text-white">
                     <div class="text-xl md:text-2xl font-semibold tracking-wide mb-3">{todayFullDate}</div>
-                    <Clock tone="light" />
+                    <Clock tone="light" style={clockStyle} />
                   </div>
                 </div>
               </div>
@@ -1014,7 +1018,7 @@
               <div class="mt-auto pb-2">
                 <div class="text-white">
                   <div class="text-xl md:text-2xl font-semibold tracking-wide mb-3">{todayFullDate}</div>
-                  <Clock tone="light" />
+                  <Clock tone="light" style={clockStyle} />
                 </div>
               </div>
             </div>
@@ -1177,7 +1181,7 @@
     <div class="relative z-10 md:hidden p-6 border-t border-white/10 glass">
       <div class="flex items-center justify-between">
         <WeatherWidget />
-        <Clock />
+        <Clock style={clockStyle} />
       </div>
     </div>
   {/if}

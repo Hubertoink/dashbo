@@ -39,6 +39,7 @@ settingsRouter.get('/', requireAuth, async (_req, res) => {
   const todoListNamesRaw = await getUserSetting({ userId, key: 'todo.listNames' });
   const newsEnabledRaw = await getUserSetting({ userId, key: 'news.enabled' });
   const newsFeedsRaw = await getUserSetting({ userId, key: 'news.feeds' });
+  const clockStyleRaw = await getUserSetting({ userId, key: 'clock.style' });
   const images = listImages({ userId });
 
   const backgroundUrl = background ? `/media/${background}` : null;
@@ -88,6 +89,16 @@ settingsRouter.get('/', requireAuth, async (_req, res) => {
 
   const refreshEnv = process.env.DASHBO_DATA_REFRESH_MS || process.env.DATA_REFRESH_MS || '';
   const dataRefreshMs = refreshEnv && Number.isFinite(Number(refreshEnv)) ? Number(refreshEnv) : null;
+
+  const clockStyle = (() => {
+    const v = String(clockStyleRaw ?? '').trim().toLowerCase();
+    // Backwards mapping from previous experimental styles
+    if (v === 'soft') return 'elegant';
+    if (v === 'bold') return 'modern';
+
+    if (['modern', 'elegant', 'serif', 'mono'].includes(v)) return v;
+    return 'modern';
+  })();
   res.json({
     background,
     backgroundUrl,
@@ -101,7 +112,20 @@ settingsRouter.get('/', requireAuth, async (_req, res) => {
     todoListNames,
     newsFeeds,
     dataRefreshMs,
+    clockStyle,
   });
+});
+
+settingsRouter.post('/clock/style', requireAuth, async (req, res) => {
+  const schema = z.object({ style: z.enum(['modern', 'elegant', 'serif', 'mono']) });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: 'invalid_body', details: parsed.error.flatten() });
+  }
+
+  const userId = Number(req.auth?.sub);
+  await setUserSetting({ userId, key: 'clock.style', value: parsed.data.style });
+  return res.json({ ok: true });
 });
 
 settingsRouter.post('/background/rotate', requireAuth, async (req, res) => {

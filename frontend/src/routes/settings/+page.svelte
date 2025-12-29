@@ -25,6 +25,7 @@
     setTodoListNames,
     setNewsEnabled,
     setNewsFeeds,
+    setClockStyle,
     uploadBackgroundWithProgress,
     setBackgroundRotateEnabled,
     listTags,
@@ -42,6 +43,8 @@
     type OutlookStatusDto
     , type OutlookConnectionDto
   } from '$lib/api';
+
+  import { normalizeClockStyle, type ClockStyle } from '$lib/clockStyle';
 
   import {
     EDGE_PLAYER_WIDGET_ENABLED_KEY,
@@ -104,6 +107,10 @@
   let newsFeeds: NewsFeedId[] = ['zeit'];
   let newsFeedsSaving = false;
   let newsFeedsError: string | null = null;
+
+  let clockStyle: ClockStyle = 'modern';
+  let clockStyleSaving = false;
+  let clockStyleError: string | null = null;
 
   let tags: TagDto[] = [];
   let newTagName = '';
@@ -570,6 +577,22 @@
 
     const feeds = Array.isArray(settings?.newsFeeds) ? settings!.newsFeeds! : [];
     newsFeeds = (feeds.length ? feeds : ['zeit']) as NewsFeedId[];
+
+    clockStyle = normalizeClockStyle((settings as any)?.clockStyle);
+  }
+
+  async function saveClockStyleHandler() {
+    clockStyleError = null;
+    clockStyleSaving = true;
+    try {
+      await setClockStyle(clockStyle);
+      await refreshSettings();
+      showToast('Uhrzeit-Stil gespeichert');
+    } catch {
+      clockStyleError = 'Speichern fehlgeschlagen.';
+    } finally {
+      clockStyleSaving = false;
+    }
   }
 
   function parseTodoListNamesText(text: string): string[] {
@@ -1159,6 +1182,10 @@
       {newsFeedsSaving}
       {newsFeedsError}
       saveNewsFeeds={saveNewsFeedsHandler}
+      bind:clockStyle
+      {clockStyleSaving}
+      {clockStyleError}
+      saveClockStyle={saveClockStyleHandler}
       bind:edgeBaseUrl
       bind:edgeToken
       {edgeSaving}

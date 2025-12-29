@@ -42,6 +42,11 @@
   export let newsFeedsError: string | null;
   export let saveNewsFeeds: () => void | Promise<void>;
 
+  export let clockStyle: import('$lib/clockStyle').ClockStyle;
+  export let clockStyleSaving: boolean;
+  export let clockStyleError: string | null;
+  export let saveClockStyle: () => void | Promise<void>;
+
   export let edgeBaseUrl: string;
   export let edgeToken: string;
   export let edgeSaving: boolean;
@@ -141,6 +146,10 @@
           {newsFeedsSaving}
           {newsFeedsError}
           {saveNewsFeeds}
+          bind:clockStyle
+          {clockStyleSaving}
+          {clockStyleError}
+          {saveClockStyle}
           bind:edgeBaseUrl
           bind:edgeToken
           {edgeSaving}

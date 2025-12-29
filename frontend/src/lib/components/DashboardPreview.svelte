@@ -64,7 +64,11 @@
       </div>
 
       <!-- Uhr (immer aktiv) -->
-      <div class="mt-auto rounded-lg px-2 py-1.5 text-[10px] bg-white/15 text-white/90">
+      <div
+        class="mt-auto rounded-lg px-2 py-1.5 text-[10px] bg-white/15 text-white/90 {highlightWidget === 'clock'
+          ? 'ring-2 ring-cyan-400/60'
+          : ''}"
+      >
         <div class="flex items-center gap-1.5">
           <span class="text-sm">🕐</span>
           <span>Uhr</span>

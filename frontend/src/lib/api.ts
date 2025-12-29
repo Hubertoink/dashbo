@@ -1,3 +1,5 @@
+import type { ClockStyle } from './clockStyle';
+
 export type EventDto = {
   id: number;
   occurrenceId: string;
@@ -336,6 +338,7 @@ export type SettingsDto = {
   todoListNames?: string[];
   newsFeeds?: NewsFeedId[];
   dataRefreshMs?: number | null;
+  clockStyle?: ClockStyle;
 };
 
 export async function fetchSettings(): Promise<SettingsDto> {
@@ -348,6 +351,10 @@ export async function fetchNews(): Promise<NewsResponseDto> {
 
 export async function setNewsEnabled(enabled: boolean): Promise<{ ok: true }> {
   return api<{ ok: true }>('/settings/news', { method: 'POST', body: JSON.stringify({ enabled }) });
+}
+
+export async function setClockStyle(style: ClockStyle): Promise<{ ok: true }> {
+  return api<{ ok: true }>('/settings/clock/style', { method: 'POST', body: JSON.stringify({ style }) });
 }
 
 export async function setBackground(filename: string): Promise<{ ok: true }> {

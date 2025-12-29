@@ -3,6 +3,7 @@
 
   import DashboardPreview from '$lib/components/DashboardPreview.svelte';
   import WidgetSettingsCard from '$lib/components/WidgetSettingsCard.svelte';
+  import { CLOCK_STYLE_OPTIONS, clockStyleClasses, type ClockStyle } from '$lib/clockStyle';
 
   export let authed: boolean;
   export let settings: SettingsDto | null;
@@ -36,6 +37,11 @@
   export let newsFeedsSaving: boolean;
   export let newsFeedsError: string | null;
   export let saveNewsFeeds: () => void | Promise<void>;
+
+  export let clockStyle: ClockStyle;
+  export let clockStyleSaving: boolean;
+  export let clockStyleError: string | null;
+  export let saveClockStyle: () => void | Promise<void>;
 
   export let edgeBaseUrl: string;
   export let edgeToken: string;
@@ -534,6 +540,51 @@
       </div>
 
       <div class="text-xs text-white/40">Diese Werte werden nur im Browser (localStorage) gespeichert.</div>
+    </div>
+  </WidgetSettingsCard>
+
+  <!-- Uhrzeit Widget -->
+  <WidgetSettingsCard
+    title="Uhrzeit"
+    icon="🕒"
+    kicker="clock"
+    enabled={true}
+    widgetKey="clock"
+    saving={clockStyleSaving}
+    error={clockStyleError}
+    showToggle={false}
+    on:hover={(e) => (highlightWidget = e.detail.key)}
+  >
+    <div class="space-y-3">
+      <div class="text-sm text-white/80">Stil</div>
+
+      <div class="grid grid-cols-2 gap-2">
+        {#each CLOCK_STYLE_OPTIONS as opt (opt.id)}
+          <button
+            type="button"
+            class="rounded-lg border px-3 py-2 text-left transition-colors {clockStyle === opt.id
+              ? 'border-white/30 bg-white/10'
+              : 'border-white/10 bg-white/5 hover:bg-white/10'}"
+            on:click={() => (clockStyle = opt.id)}
+            disabled={!authed}
+          >
+            <div class={`text-2xl leading-none ${clockStyleClasses(opt.id)} text-shadow`}>12:34</div>
+            <div class="mt-1 text-xs text-white/60">{opt.label}</div>
+          </button>
+        {/each}
+      </div>
+
+      <div class="flex items-center gap-2">
+        <button
+          class="h-8 px-3 rounded-lg bg-white/20 hover:bg-white/25 text-xs font-medium disabled:opacity-50"
+          on:click={saveClockStyle}
+          disabled={!authed || clockStyleSaving}
+        >
+          Speichern
+        </button>
+
+        <div class="text-xs text-white/40">Bestimmt die Uhr im Dashboard und im Standby.</div>
+      </div>
     </div>
   </WidgetSettingsCard>
 </div>
