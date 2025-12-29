@@ -91,6 +91,17 @@ function plausibleArtist(name) {
   return /[A-Za-zÄÖÜäöüß]/.test(s);
 }
 
+function stripFeaturing(artist) {
+  const s = String(artist || '').trim();
+  if (!s) return '';
+  // Common patterns: "Artist feat. X", "Artist ft X", "Artist featuring X", "Artist (feat. X)"
+  return s
+    .replace(/\s*\((?:feat\.|ft\.|featuring)\s+[^)]+\)\s*/gi, ' ')
+    .replace(/\s+(?:feat\.|ft\.|featuring)\s+.+$/gi, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
+
 async function readAudioMetadata(absPath, ext) {
   try {
     // For MP3 files prefer node-id3 (fast and reliable for ID3v2/ID3v1 tags)
@@ -101,7 +112,16 @@ async function readAudioMetadata(absPath, ext) {
         const title = typeof tags.title === 'string' ? tags.title.trim() : '';
         const artist = typeof tags.artist === 'string' ? tags.artist.trim() : '';
         const album = typeof tags.album === 'string' ? tags.album.trim() : '';
-        const albumartist = typeof tags.albumArtist === 'string' ? tags.albumArtist.trim() : typeof tags.albumartist === 'string' ? tags.albumartist.trim() : '';
+        // Album artist is often stored as ID3 TPE2 ("Band/Orchestra/Accompaniment").
+        // Different taggers map this differently; try a few common keys.
+        const albumartist = firstNonEmpty(
+          typeof tags.albumArtist === 'string' ? tags.albumArtist.trim() : '',
+          typeof tags.albumartist === 'string' ? tags.albumartist.trim() : '',
+          typeof tags.band === 'string' ? tags.band.trim() : '',
+          typeof tags.performerInfo === 'string' ? tags.performerInfo.trim() : '',
+          typeof tags.TPE2 === 'string' ? tags.TPE2.trim() : '',
+          typeof tags['TPE2'] === 'string' ? tags['TPE2'].trim() : ''
+        );
         let trackNo = null;
         if (typeof tags.trackNumber === 'string') {
           const m = tags.trackNumber.match(/^(\d+)/);
@@ -148,7 +168,14 @@ async function readAudioMetadata(absPath, ext) {
       const title = typeof tags.title === 'string' ? tags.title.trim() : '';
       const artist = typeof tags.artist === 'string' ? tags.artist.trim() : '';
       const album = typeof tags.album === 'string' ? tags.album.trim() : '';
-      const albumartist = typeof tags.albumArtist === 'string' ? tags.albumArtist.trim() : typeof tags.albumartist === 'string' ? tags.albumartist.trim() : '';
+      const albumartist = firstNonEmpty(
+        typeof tags.albumArtist === 'string' ? tags.albumArtist.trim() : '',
+        typeof tags.albumartist === 'string' ? tags.albumartist.trim() : '',
+        typeof tags.band === 'string' ? tags.band.trim() : '',
+        typeof tags.performerInfo === 'string' ? tags.performerInfo.trim() : '',
+        typeof tags.TPE2 === 'string' ? tags.TPE2.trim() : '',
+        typeof tags['TPE2'] === 'string' ? tags['TPE2'].trim() : ''
+      );
       const trackNo = typeof tags.trackNumber === 'string' ? Number((tags.trackNumber.match(/^(\d+)/) || [null, null])[1]) : null;
       return { title, artist, album, albumartist, trackNo, year: null, durationSec: null };
     } catch {
@@ -639,10 +666,13 @@ class MusicLibrary {
         // Build the library purely based on tags (foobar-like). Folder names must not influence grouping.
         const tagArtist = firstNonEmpty(meta?.artist) || 'Unbekannt';
         const tagAlbum = firstNonEmpty(meta?.album);
-        const tagAlbumArtist = firstNonEmpty(meta?.albumartist, meta?.artist);
+        const tagAlbumArtist = firstNonEmpty(meta?.albumartist);
+        const baseArtist = stripFeaturing(tagArtist) || tagArtist;
 
         const groupingAlbum = tagAlbum || 'Singles';
-        const groupingArtist = tagAlbum ? (tagAlbumArtist || tagArtist || 'Unbekannt') : (tagArtist || 'Unbekannt');
+        const groupingArtist = tagAlbum
+          ? (tagAlbumArtist || baseArtist || 'Unbekannt')
+          : (baseArtist || 'Unbekannt');
 
         const artist = tagArtist;
         const album = groupingAlbum;

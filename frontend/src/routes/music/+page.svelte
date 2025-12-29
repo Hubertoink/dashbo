@@ -525,6 +525,18 @@
     </div>
   {/if}
 
+  {#if loading && albums.length === 0 && !error}
+    <div class="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-6">
+      <div class="w-full max-w-md rounded-2xl border border-white/10 bg-white/5 p-5">
+        <div class="text-white/90 text-sm font-medium">Lade Musikbibliothek…</div>
+        <div class="mt-1 text-white/60 text-xs">Bitte geöffnet lassen – das kann je nach Library etwas dauern.</div>
+        <div class="mt-4 h-2 w-full rounded-full bg-white/10 overflow-hidden">
+          <div class="h-full w-1/2 bg-white/30 animate-pulse"></div>
+        </div>
+      </div>
+    </div>
+  {/if}
+
   <div class="mt-6 grid gap-6 lg:grid-cols-[1fr_340px]">
     <div>
       {#if loading}
