@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onDestroy, onMount } from 'svelte';
   import { goto } from '$app/navigation';
-  import { fade, fly } from 'svelte/transition';
+  import { fade, fly, slide } from 'svelte/transition';
   import Clock from '$lib/components/Clock.svelte';
   import WeatherWidget from '$lib/components/WeatherWidget.svelte';
   import TodoWidget from '$lib/components/TodoWidget.svelte';
@@ -698,30 +698,30 @@
 
         {#if expandedWidget === 'todo'}
           <!-- Expanded To-Do takes all space between weather and clock -->
-          <div class="mt-6 pb-8 text-white flex-1 flex flex-col min-h-0">
+          <div class="mt-6 pb-8 text-white flex-1 flex flex-col min-h-0" transition:slide={{ duration: 300 }}>
             <TodoWidget expanded={true} onToggleExpand={() => expandedWidget = null} />
           </div>
         {:else if expandedWidget === 'news'}
           <!-- Expanded News takes all space between weather and clock -->
-          <div class="mt-6 pb-8 text-white flex-1 flex flex-col min-h-0">
+          <div class="mt-6 pb-8 text-white flex-1 flex flex-col min-h-0" transition:slide={{ duration: 300 }}>
             <ZeitNewsWidget expanded={true} onToggleExpand={() => expandedWidget = null} />
           </div>
         {:else}
           <!-- Normal layout with all widgets -->
           {#if todoEnabled && outlookConnected}
-            <div class="mt-6 pb-8 text-white">
+            <div class="mt-6 pb-8 text-white" transition:slide={{ duration: 300 }}>
               <TodoWidget onToggleExpand={() => expandedWidget = 'todo'} />
             </div>
           {/if}
 
           {#if newsEnabled}
-            <div class="mt-2 pb-8 text-white">
+            <div class="mt-2 pb-8 text-white" transition:slide={{ duration: 300 }}>
               <ZeitNewsWidget onToggleExpand={() => expandedWidget = 'news'} />
             </div>
           {/if}
 
           {#if musicWidgetEnabled}
-            <div class="mt-2 pb-4 text-white">
+            <div class="mt-2 pb-4 text-white" transition:slide={{ duration: 300 }}>
               <MusicWidget />
             </div>
           {/if}
