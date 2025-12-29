@@ -240,6 +240,20 @@ async function sendWithHostsFallback(commandGroup, command, attributes, opts) {
   let lastErr = null;
   let lastResponse = null;
 
+  const describeHeosMessage = (msg) => {
+    if (!msg) return '';
+    if (typeof msg === 'string') return msg;
+    const parsedText = msg?.parsed?.text;
+    if (typeof parsedText === 'string' && parsedText) return parsedText;
+    const unparsed = msg?.unparsed;
+    if (typeof unparsed === 'string' && unparsed) return unparsed;
+    try {
+      return JSON.stringify(msg);
+    } catch {
+      return String(msg);
+    }
+  };
+
   for (const host of hosts) {
     let conn = null;
     try {
@@ -250,7 +264,8 @@ async function sendWithHostsFallback(commandGroup, command, attributes, opts) {
       if (!result || result === 'success') {
         return resp;
       }
-      lastErr = new Error(resp?.heos?.message || 'HEOS command failed');
+      const msg = describeHeosMessage(resp?.heos?.message);
+      lastErr = new Error(msg || 'HEOS command failed');
     } catch (e) {
       lastErr = e;
     } finally {
@@ -264,7 +279,10 @@ async function sendWithHostsFallback(commandGroup, command, attributes, opts) {
     }
   }
 
-  if (lastResponse?.heos?.message) throw new Error(String(lastResponse.heos.message));
+  if (lastResponse?.heos?.message) {
+    const msg = describeHeosMessage(lastResponse.heos.message);
+    throw new Error(msg || 'HEOS command failed');
+  }
   throw lastErr || new Error('heos_error');
 }
 
@@ -352,6 +370,35 @@ async function scanPlayers(opts) {
   }
 }
 
+async function findHostForPid(pid, hosts) {
+  const p = typeof pid === 'number' ? pid : Number(pid);
+  if (!Number.isFinite(p) || p === 0) return null;
+  const hs = normalizeHostsList(hosts);
+  if (hs.length === 0) return null;
+
+  for (const host of hs) {
+    let conn = null;
+    try {
+      conn = await heos.connect(host);
+      const resp = await sendOnConn(conn, 'player', 'get_players');
+      const players = parsePlayersPayload(resp?.payload);
+      if (players.some((pl) => pl.pid === p)) return host;
+    } catch {
+      // ignore
+    } finally {
+      try {
+        if (conn && typeof conn.close === 'function') conn.close();
+        else if (conn && typeof conn.end === 'function') conn.end();
+        else if (conn && typeof conn.destroy === 'function') conn.destroy();
+      } catch {
+        // ignore
+      }
+    }
+  }
+
+  return null;
+}
+
 async function listPlayers(opts) {
   return scanPlayers({ force: false, hosts: opts?.hosts });
 }
@@ -399,6 +446,49 @@ async function setVolume(pid, level, opts) {
   return sendWithHostsFallback('player', 'set_volume', { pid: Number(pid), level: v }, { hosts: opts?.hosts });
 }
 
+async function getNowPlayingMedia(pid, opts) {
+  return sendWithHostsFallback('player', 'get_now_playing_media', { pid: Number(pid) }, { hosts: opts?.hosts });
+}
+
+async function getGroups(opts) {
+  return sendWithHostsFallback('group', 'get_groups', {}, { hosts: opts?.hosts });
+}
+
+function normalizePidList(list) {
+  const arr = Array.isArray(list) ? list : [];
+  const nums = arr
+    .map((x) => (typeof x === 'number' ? x : Number(x)))
+    .filter((n) => Number.isFinite(n) && n !== 0);
+  return Array.from(new Set(nums));
+}
+
+async function setGroup(leaderPid, memberPids, opts) {
+  const leader = typeof leaderPid === 'number' ? leaderPid : Number(leaderPid);
+  if (!Number.isFinite(leader) || leader === 0) throw new Error('Invalid leader pid');
+
+  const members = normalizePidList(memberPids).filter((pid) => pid !== leader);
+  if (members.length < 1) throw new Error('Need at least 2 players to group');
+
+  const targetHost = await findHostForPid(leader, opts?.hosts);
+  const hosts = targetHost ? [targetHost] : opts?.hosts;
+
+  // HEOS CLI spec: heos://group/set_group?pid=leader,member1,member2
+  // (single attribute named "pid" containing a comma-separated list; leader must be first)
+  const pidList = [leader, ...members].map((n) => String(n)).join(',');
+  return sendWithHostsFallback('group', 'set_group', { pid: pidList }, { hosts });
+}
+
+async function unGroup(pid, opts) {
+  const p = typeof pid === 'number' ? pid : Number(pid);
+  if (!Number.isFinite(p) || p === 0) throw new Error('Invalid pid');
+
+  const targetHost = await findHostForPid(p, opts?.hosts);
+  const hosts = targetHost ? [targetHost] : opts?.hosts;
+
+  // HEOS CLI spec: ungroup all players by calling set_group with leader pid only.
+  return sendWithHostsFallback('group', 'set_group', { pid: String(p) }, { hosts });
+}
+
 module.exports = {
   listPlayers,
   scanPlayers,
@@ -407,5 +497,9 @@ module.exports = {
   setPlayState,
   getPlayState,
   getVolume,
-  setVolume
+  setVolume,
+  getNowPlayingMedia,
+  getGroups,
+  setGroup,
+  unGroup
 };

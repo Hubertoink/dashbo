@@ -13,6 +13,8 @@
   } from '$lib/edge';
 
   type HeosPlayerDto = { pid: number; name: string; model?: string };
+  type HeosGroupPlayerDto = { name: string; pid: number; role?: 'leader' | 'member' | string };
+  type HeosGroupDto = { name: string; gid: number | string; players: HeosGroupPlayerDto[] };
 
   $: now = $musicPlayerState.now;
   $: playing = $musicPlayerState.playing;
@@ -27,10 +29,14 @@
   let speakersBusy = false;
   let speakersError: string | null = null;
   let speakers: HeosPlayerDto[] = [];
+  let groupsBusy = false;
+  let groupsError: string | null = null;
+  let groups: HeosGroupDto[] = [];
   let selectedPid = '';
   let selectedName = '';
   let heosHosts = '';
   let heosStatusLine: string | null = null;
+  let heosGroupsLine: string | null = null;
 
   let heosVolumeBusy = false;
   let heosVolumeError: string | null = null;
@@ -117,6 +123,57 @@
     }
   }
 
+  function parseHeosGroupsPayload(payload: any): HeosGroupDto[] {
+    const arr = Array.isArray(payload) ? payload : [];
+    return arr
+      .map((g: any) => {
+        const playersRaw = Array.isArray(g?.players) ? g.players : [];
+        const players: HeosGroupPlayerDto[] = playersRaw
+          .map((p: any) => ({
+            name: String(p?.name || ''),
+            pid: Number(p?.pid),
+            role: p?.role ? String(p.role) : undefined
+          }))
+          .filter((p: any) => Number.isFinite(p.pid) && p.pid !== 0 && p.name);
+
+        return {
+          name: String(g?.name || ''),
+          gid: typeof g?.gid === 'number' ? g.gid : String(g?.gid ?? ''),
+          players
+        } as HeosGroupDto;
+      })
+      .filter((g: HeosGroupDto) => g.name && String(g.gid || '').trim());
+  }
+
+  function getGroupLeaderPid(group: HeosGroupDto): number | null {
+    const leader = group.players.find((p) => String(p.role || '').toLowerCase() === 'leader');
+    const pid = leader?.pid ?? group.players[0]?.pid;
+    return Number.isFinite(pid) && pid !== 0 ? pid : null;
+  }
+
+  async function fetchGroups() {
+    groupsError = null;
+    heosGroupsLine = null;
+    groupsBusy = true;
+    try {
+      const base = normalizeEdgeBaseUrl(edgeBaseUrl);
+      if (!base) throw new Error('Edge Base URL fehlt');
+
+      const headers: Record<string, string> = {};
+      if (heosHosts.trim()) headers['X-HEOS-HOSTS'] = heosHosts.trim();
+
+      const r = await edgeFetchJson<any>(base, '/api/heos/groups', edgeToken || undefined, { headers });
+      const payload = r?.response?.payload;
+      groups = parseHeosGroupsPayload(payload);
+      heosGroupsLine = groups.length > 0 ? `${groups.length} Gruppen` : 'Keine Gruppen';
+    } catch (err) {
+      groupsError = err instanceof Error ? err.message : 'Gruppen konnten nicht geladen werden.';
+      groups = [];
+    } finally {
+      groupsBusy = false;
+    }
+  }
+
   async function fetchVolumeForSelected() {
     heosVolumeError = null;
     heosVolumeLevel = null;
@@ -132,7 +189,9 @@
       if (heosHosts.trim()) headers['X-HEOS-HOSTS'] = heosHosts.trim();
 
       const r = await edgeFetchJson<any>(base, `/api/heos/volume?pid=${encodeURIComponent(String(pid))}`, edgeToken || undefined, { headers });
-      const lvl = Number(r?.response?.payload?.level);
+      const lvl = Number.isFinite(Number(r?.level))
+        ? Number(r.level)
+        : Number(r?.response?.heos?.message?.parsed?.level);
       if (Number.isFinite(lvl)) heosVolumeLevel = Math.max(0, Math.min(100, Math.round(lvl)));
     } catch (err) {
       heosVolumeError = err instanceof Error ? err.message : 'Lautstärke konnte nicht geladen werden.';
@@ -154,12 +213,13 @@
       const headers: Record<string, string> = { 'Content-Type': 'application/json' };
       if (heosHosts.trim()) headers['X-HEOS-HOSTS'] = heosHosts.trim();
 
-      await edgeFetchJson<any>(base, '/api/heos/volume', edgeToken || undefined, {
+      const r = await edgeFetchJson<any>(base, '/api/heos/volume', edgeToken || undefined, {
         method: 'POST',
         headers,
         body: JSON.stringify({ pid, level })
       });
-      heosVolumeLevel = Math.max(0, Math.min(100, Math.round(level)));
+      const applied = Number.isFinite(Number(r?.level)) ? Number(r.level) : Number(level);
+      heosVolumeLevel = Math.max(0, Math.min(100, Math.round(applied)));
     } catch (err) {
       heosVolumeError = err instanceof Error ? err.message : 'Lautstärke konnte nicht gesetzt werden.';
     } finally {
@@ -167,7 +227,7 @@
     }
   }
 
-  function persistSelectedPid(pid: string) {
+  function persistSelectedPid(pid: string, nameOverride?: string) {
     try {
       if (typeof localStorage === 'undefined') return;
       const n = Number(pid);
@@ -177,6 +237,12 @@
         selectedName = '';
       } else {
         localStorage.setItem(EDGE_HEOS_SELECTED_PLAYER_ID_KEY, String(n));
+
+        if (typeof nameOverride === 'string' && nameOverride.trim()) {
+          selectedName = nameOverride.trim();
+          localStorage.setItem(EDGE_HEOS_SELECTED_PLAYER_NAME_KEY, selectedName);
+          return;
+        }
 
         const match = speakers.find((s) => s.pid === n);
         if (match?.name) {
@@ -199,6 +265,7 @@
       await fetchSpeakers({ force: true });
     }
     if (speakerOpen) {
+      if (!groupsBusy) await fetchGroups();
       await fetchVolumeForSelected();
     }
   }
@@ -216,7 +283,7 @@
 </script>
 
 <!-- Kompaktes Widget mit Cover als Teil des Rahmens -->
-<div class="relative rounded-2xl bg-white/5 backdrop-blur-md border border-white/10 overflow-hidden h-[88px]">
+<div class="relative rounded-lg bg-white/5 overflow-hidden h-[88px] text-white">
   <!-- Cover als Hintergrund-Teil links (1/3 Breite) -->
   <div class="absolute inset-y-0 left-0 w-1/3">
     {#if now?.coverUrl}
@@ -381,11 +448,15 @@
           <div class="text-[11px] text-white/50 mt-2">{heosStatusLine}</div>
         {/if}
 
+        {#if heosGroupsLine}
+          <div class="text-[11px] text-white/50 mt-1">{heosGroupsLine}</div>
+        {/if}
+
         <div class="mt-3">
-          {#if speakersBusy}
+          {#if speakersBusy || groupsBusy}
             <div class="text-xs text-white/60">Lade…</div>
-          {:else if speakersError}
-            <div class="text-xs text-red-300">{speakersError}</div>
+          {:else if speakersError || groupsError}
+            <div class="text-xs text-red-300">{speakersError || groupsError}</div>
           {:else}
             <div class="rounded-xl bg-white/5 border border-white/10 overflow-hidden">
               <button
@@ -400,7 +471,30 @@
                 Kein Speaker
               </button>
 
+              {#if groups.length > 0}
+                <div class="px-3 py-2 text-[11px] text-white/50 border-t border-white/10">Gruppen</div>
+                {#each groups as g (String(g.gid))}
+                  <button
+                    type="button"
+                    class={`w-full px-3 py-2 text-left text-sm hover:bg-white/10 transition ${selectedName === g.name ? 'bg-white/10' : ''}`}
+                    on:click={() => {
+                      const leaderPid = getGroupLeaderPid(g);
+                      if (!leaderPid) return;
+                      selectedPid = String(leaderPid);
+                      persistSelectedPid(selectedPid, g.name);
+                      void fetchVolumeForSelected();
+                      closeSpeakerModal();
+                    }}
+                  >
+                    {g.name}
+                  </button>
+                {/each}
+              {/if}
+
               <div class="max-h-56 overflow-auto">
+                {#if groups.length > 0}
+                  <div class="px-3 py-2 text-[11px] text-white/50 border-t border-white/10">Speaker</div>
+                {/if}
                 {#each speakers as s}
                   <button
                     type="button"
@@ -451,8 +545,12 @@
           <button
             class="h-9 px-3 rounded-lg bg-white/10 hover:bg-white/15 text-xs font-medium disabled:opacity-50"
             type="button"
-            on:click={() => fetchSpeakers({ force: true })}
-            disabled={speakersBusy}
+            on:click={async () => {
+              await fetchSpeakers({ force: true });
+              await fetchGroups();
+              await fetchVolumeForSelected();
+            }}
+            disabled={speakersBusy || groupsBusy}
           >
             Aktualisieren
           </button>

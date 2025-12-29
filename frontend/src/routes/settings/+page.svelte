@@ -181,6 +181,172 @@
   let edgeScanPollId = 0;
   let edgeScanPollTimer: ReturnType<typeof setTimeout> | null = null;
 
+  type HeosPlayerDto = { pid: number; name: string; model?: string };
+  let heosGroupPlayers: HeosPlayerDto[] = [];
+  let heosGroupSelected: Record<string, boolean> = {};
+  let heosGroupBusy = false;
+  let heosGroupError: string | null = null;
+  let heosGroupMessage: string | null = null;
+
+  type HeosGroupPlayerDto = { name: string; pid: number; role?: 'leader' | 'member' | string };
+  type HeosGroupDto = { name: string; gid: number | string; players: HeosGroupPlayerDto[] };
+  let heosGroups: HeosGroupDto[] = [];
+  let heosGroupsLoaded = false;
+  let heosGroupsBusy = false;
+  let heosGroupsError: string | null = null;
+  let heosGroupsMessage: string | null = null;
+
+  function buildHeosHeaders(): Record<string, string> {
+    const hosts = edgeHeosHosts.trim();
+    return hosts ? { 'Content-Type': 'application/json', 'X-HEOS-HOSTS': hosts } : { 'Content-Type': 'application/json' };
+  }
+
+  function getSelectedGroupPids(): number[] {
+    return heosGroupPlayers
+      .filter((p) => Boolean(heosGroupSelected[String(p.pid)]))
+      .map((p) => p.pid)
+      .filter((n) => Number.isFinite(n) && n !== 0);
+  }
+
+  async function loadHeosPlayersForGrouping() {
+    heosGroupError = null;
+    heosGroupMessage = null;
+    heosGroupBusy = true;
+    try {
+      const b = normalizeEdgeBaseUrl(edgeBaseUrl);
+      if (!b) throw new Error('Edge Base URL fehlt');
+      const r = await edgeFetchJson<any>(b, '/api/heos/players', edgeToken || undefined, { headers: buildHeosHeaders() });
+      const players = Array.isArray(r?.players) ? r.players : [];
+      heosGroupPlayers = players
+        .map((p: any) => ({ pid: Number(p?.pid), name: String(p?.name || ''), model: p?.model ? String(p.model) : undefined }))
+        .filter((p: any) => Number.isFinite(p.pid) && p.pid !== 0 && p.name);
+
+      const nextSel: Record<string, boolean> = {};
+      for (const p of heosGroupPlayers) nextSel[String(p.pid)] = Boolean(heosGroupSelected[String(p.pid)]);
+      heosGroupSelected = nextSel;
+
+      heosGroupMessage = `${heosGroupPlayers.length} Speaker geladen`;
+    } catch (e: any) {
+      heosGroupError = e?.message || 'Speaker konnten nicht geladen werden.';
+      heosGroupPlayers = [];
+    } finally {
+      heosGroupBusy = false;
+    }
+  }
+
+  async function createHeosGroup() {
+    heosGroupError = null;
+    heosGroupMessage = null;
+    const selected = getSelectedGroupPids();
+    if (selected.length < 2) {
+      heosGroupError = 'Bitte mindestens 2 Speaker auswählen.';
+      return;
+    }
+
+    const leaderPid = selected[0];
+    const memberPids = selected.slice(1);
+
+    heosGroupBusy = true;
+    try {
+      const b = normalizeEdgeBaseUrl(edgeBaseUrl);
+      if (!b) throw new Error('Edge Base URL fehlt');
+      await edgeFetchJson<any>(b, '/api/heos/group', edgeToken || undefined, {
+        method: 'POST',
+        headers: buildHeosHeaders(),
+        body: JSON.stringify({ leaderPid, memberPids })
+      });
+      heosGroupMessage = 'Gruppe erstellt.';
+      await loadHeosGroups();
+    } catch (e: any) {
+      heosGroupError = e?.message || 'Gruppe konnte nicht erstellt werden.';
+    } finally {
+      heosGroupBusy = false;
+    }
+  }
+
+  function parseHeosGroupsPayload(payload: any): HeosGroupDto[] {
+    const arr = Array.isArray(payload) ? payload : [];
+    return arr
+      .map((g: any) => {
+        const playersRaw = Array.isArray(g?.players) ? g.players : [];
+        const players: HeosGroupPlayerDto[] = playersRaw
+          .map((p: any) => ({
+            name: String(p?.name || ''),
+            pid: Number(p?.pid),
+            role: p?.role ? String(p.role) : undefined
+          }))
+          .filter((p: any) => Number.isFinite(p.pid) && p.pid !== 0 && p.name);
+
+        return {
+          name: String(g?.name || ''),
+          gid: typeof g?.gid === 'number' ? g.gid : String(g?.gid ?? ''),
+          players
+        } as HeosGroupDto;
+      })
+      .filter((g: HeosGroupDto) => g.name && String(g.gid || '').trim());
+  }
+
+  function getHeosGroupLeaderPid(group: HeosGroupDto): number | null {
+    const leader = group.players.find((p) => String(p.role || '').toLowerCase() === 'leader');
+    const pid = leader?.pid ?? group.players[0]?.pid;
+    return Number.isFinite(pid) && pid !== 0 ? pid : null;
+  }
+
+  async function loadHeosGroups() {
+    heosGroupsError = null;
+    heosGroupsMessage = null;
+    heosGroupsBusy = true;
+    try {
+      const b = normalizeEdgeBaseUrl(edgeBaseUrl);
+      if (!b) throw new Error('Edge Base URL fehlt');
+      const r = await edgeFetchJson<any>(b, '/api/heos/groups', edgeToken || undefined, { headers: buildHeosHeaders() });
+      const payload = r?.response?.payload;
+      heosGroups = parseHeosGroupsPayload(payload);
+      heosGroupsLoaded = true;
+      heosGroupsMessage = heosGroups.length > 0 ? `${heosGroups.length} Gruppe(n) geladen` : 'Keine Gruppen vorhanden.';
+    } catch (e: any) {
+      heosGroupsError = e?.message || 'Gruppen konnten nicht geladen werden.';
+      heosGroupsLoaded = true;
+      heosGroups = [];
+    } finally {
+      heosGroupsBusy = false;
+    }
+  }
+
+  async function dissolveHeosGroupByPid(pid: number) {
+    heosGroupError = null;
+    heosGroupMessage = null;
+    heosGroupBusy = true;
+    try {
+      const b = normalizeEdgeBaseUrl(edgeBaseUrl);
+      if (!b) throw new Error('Edge Base URL fehlt');
+      await edgeFetchJson<any>(b, '/api/heos/ungroup', edgeToken || undefined, {
+        method: 'POST',
+        headers: buildHeosHeaders(),
+        body: JSON.stringify({ pid })
+      });
+      heosGroupMessage = 'Gruppe aufgelöst.';
+      await loadHeosGroups();
+    } catch (e: any) {
+      heosGroupError = e?.message || 'Gruppe konnte nicht aufgelöst werden.';
+    } finally {
+      heosGroupBusy = false;
+    }
+  }
+
+  async function dissolveHeosGroup() {
+    heosGroupError = null;
+    heosGroupMessage = null;
+    const selected = getSelectedGroupPids();
+    if (selected.length < 1) {
+      heosGroupError = 'Bitte mindestens einen Speaker auswählen (Leader).';
+      return;
+    }
+
+    const pid = selected[0];
+    await dissolveHeosGroupByPid(pid);
+  }
+
   type EdgeMusicStatusDto = {
     ok: boolean;
     scanning: boolean;
@@ -1422,8 +1588,8 @@
             HEOS aktivieren
           </label>
 
-          {#if edgeHeosEnabled}
-            <div class="mt-2">
+          <div class="mt-2">
+            {#if edgeHeosEnabled}
               <input
                 class="w-full h-9 px-3 rounded-lg bg-white/10 border-0 text-sm placeholder:text-white/40"
                 placeholder="HEOS Speaker IPs (optional, z.B. 192.168.178.24,192.168.178.40)"
@@ -1440,8 +1606,136 @@
                   Setze die Edge Base URL auf eine LAN-IP/Hostname (z.B. <span class="font-medium">http://192.168.178.X:8787</span>).
                 </div>
               {/if}
+            {:else}
+              <div class="text-[11px] text-white/50">
+                HEOS ist deaktiviert. Aktiviere HEOS, um Speaker zu laden und Gruppen zu steuern.
+              </div>
+            {/if}
+
+            <div class="mt-4 rounded-xl border border-white/10 bg-white/5 p-3">
+              <div class="flex items-center justify-between">
+                <div class="text-sm font-medium text-white/90">HEOS Gruppen</div>
+                <div class="flex items-center gap-2">
+                  <button
+                    class="h-8 px-3 rounded-lg bg-white/10 hover:bg-white/15 text-xs font-medium disabled:opacity-50"
+                    type="button"
+                    on:click={loadHeosGroups}
+                    disabled={heosGroupsBusy || heosGroupBusy || !edgeBaseUrl.trim() || !edgeHeosEnabled}
+                  >
+                    Gruppen laden
+                  </button>
+                  <button
+                    class="h-8 px-3 rounded-lg bg-white/10 hover:bg-white/15 text-xs font-medium disabled:opacity-50"
+                    type="button"
+                    on:click={loadHeosPlayersForGrouping}
+                    disabled={heosGroupBusy || !edgeBaseUrl.trim() || !edgeHeosEnabled}
+                  >
+                    Speaker laden
+                  </button>
+                </div>
+              </div>
+
+              <div class="text-[11px] text-white/60 mt-1">
+                Wähle mehrere Speaker aus. Der erste ausgewählte gilt als Leader.
+              </div>
+
+              {#if heosGroupError}
+                <div class="mt-2 text-xs text-red-200">{heosGroupError}</div>
+              {/if}
+
+              {#if heosGroupMessage}
+                <div class="mt-2 text-xs text-white/70">{heosGroupMessage}</div>
+              {/if}
+
+              {#if heosGroupsError}
+                <div class="mt-2 text-xs text-red-200">{heosGroupsError}</div>
+              {/if}
+
+              {#if heosGroupsMessage}
+                <div class="mt-2 text-xs text-white/70">{heosGroupsMessage}</div>
+              {/if}
+
+              {#if heosGroups.length > 0}
+                <div class="mt-3 rounded-lg border border-white/10 overflow-hidden">
+                  <div class="divide-y divide-white/10">
+                    {#each heosGroups as g (String(g.gid))}
+                      <div class="p-2">
+                        <div class="flex items-center gap-2">
+                          <div class="min-w-0">
+                            <div class="text-sm text-white/90 line-clamp-1">{g.name}</div>
+                            <div class="text-[11px] text-white/40 tabular-nums">gid: {g.gid}</div>
+                          </div>
+                          <button
+                            class="ml-auto h-8 px-3 rounded-lg bg-white/10 hover:bg-white/15 text-xs font-medium disabled:opacity-50"
+                            type="button"
+                            on:click={() => {
+                              const leaderPid = getHeosGroupLeaderPid(g);
+                              if (leaderPid) void dissolveHeosGroupByPid(leaderPid);
+                            }}
+                            disabled={heosGroupBusy || !edgeBaseUrl.trim() || !edgeHeosEnabled || !getHeosGroupLeaderPid(g)}
+                            title="Gruppe auflösen (Leader)"
+                          >
+                            Auflösen
+                          </button>
+                        </div>
+
+                        {#if g.players.length > 0}
+                          <div class="mt-2 grid gap-1">
+                            {#each g.players as p (p.pid)}
+                              <div class="flex items-center gap-2 text-[12px] text-white/75">
+                                <span class="min-w-0 line-clamp-1">{p.name}</span>
+                                <span class="text-[11px] text-white/40">{String(p.role || '').toLowerCase()}</span>
+                                <span class="ml-auto text-[11px] text-white/40 tabular-nums">{p.pid}</span>
+                              </div>
+                            {/each}
+                          </div>
+                        {/if}
+                      </div>
+                    {/each}
+                  </div>
+                </div>
+              {:else if heosGroupsLoaded}
+                <div class="mt-3 text-[11px] text-white/50">Keine Gruppen vorhanden.</div>
+              {/if}
+
+              {#if heosGroupPlayers.length > 0}
+                <div class="mt-3 max-h-40 overflow-auto rounded-lg border border-white/10">
+                  <div class="divide-y divide-white/10">
+                    {#each heosGroupPlayers as p (p.pid)}
+                      <label class="flex items-center gap-2 p-2 text-sm text-white/85">
+                        <input
+                          type="checkbox"
+                          class="rounded bg-white/10 border-0"
+                          bind:checked={heosGroupSelected[String(p.pid)]}
+                        />
+                        <span class="min-w-0 line-clamp-1">{p.name}</span>
+                        <span class="ml-auto text-[11px] text-white/40 tabular-nums">{p.pid}</span>
+                      </label>
+                    {/each}
+                  </div>
+                </div>
+
+                <div class="mt-3 flex flex-wrap gap-2">
+                  <button
+                    class="h-9 px-3 rounded-lg bg-white/20 hover:bg-white/25 text-sm font-medium disabled:opacity-50"
+                    type="button"
+                    on:click={createHeosGroup}
+                    disabled={heosGroupBusy || !edgeBaseUrl.trim() || !edgeHeosEnabled}
+                  >
+                    Gruppe erstellen
+                  </button>
+                  <button
+                    class="h-9 px-3 rounded-lg bg-white/10 hover:bg-white/15 text-sm font-medium disabled:opacity-50"
+                    type="button"
+                    on:click={dissolveHeosGroup}
+                    disabled={heosGroupBusy || !edgeBaseUrl.trim() || !edgeHeosEnabled}
+                  >
+                    Gruppe auflösen
+                  </button>
+                </div>
+              {/if}
             </div>
-          {/if}
+          </div>
 
           <div class="flex items-center gap-2 mt-3">
             <button

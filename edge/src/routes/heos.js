@@ -1,6 +1,19 @@
 const express = require('express');
 
-const { listPlayers, scanPlayers, getStatus, playStream, setPlayState, getPlayState, getVolume, setVolume } = require('../services/heosService');
+const {
+  listPlayers,
+  scanPlayers,
+  getStatus,
+  playStream,
+  setPlayState,
+  getPlayState,
+  getVolume,
+  setVolume,
+  getNowPlayingMedia,
+  getGroups,
+  setGroup,
+  unGroup
+} = require('../services/heosService');
 
 const heosRouter = express.Router();
 
@@ -81,6 +94,12 @@ function sanitizeUrlForDebug(rawUrl) {
   } catch {
     return null;
   }
+}
+
+function extractHeosParsedNumber(resp, key) {
+  const v = resp?.heos?.message?.parsed?.[key];
+  const n = typeof v === 'number' ? v : Number(v);
+  return Number.isFinite(n) ? n : null;
 }
 
 heosRouter.get('/players', (req, res) => {
@@ -174,7 +193,8 @@ heosRouter.get('/volume', (req, res) => {
     if (!Number.isFinite(pid) || pid === 0) return res.status(400).json({ ok: false, error: 'pid_required' });
     const hosts = parseHeosHostsHeader(req);
     const r = await getVolume(pid, { hosts });
-    res.json({ ok: true, response: r });
+    const level = extractHeosParsedNumber(r, 'level');
+    res.json({ ok: true, level, response: r });
   })().catch((err) => {
     const error = normalizeHeosError(err);
     res.status(502).json({ ok: false, error });
@@ -189,6 +209,58 @@ heosRouter.post('/volume', (req, res) => {
     if (!Number.isFinite(level)) return res.status(400).json({ ok: false, error: 'level_required' });
     const hosts = parseHeosHostsHeader(req);
     const r = await setVolume(pid, level, { hosts });
+    const appliedLevel = extractHeosParsedNumber(r, 'level');
+    res.json({ ok: true, level: appliedLevel, response: r });
+  })().catch((err) => {
+    const error = normalizeHeosError(err);
+    res.status(502).json({ ok: false, error });
+  });
+});
+
+heosRouter.get('/now_playing', (req, res) => {
+  (async () => {
+    const pid = Number(req?.query?.pid);
+    if (!Number.isFinite(pid) || pid === 0) return res.status(400).json({ ok: false, error: 'pid_required' });
+    const hosts = parseHeosHostsHeader(req);
+    const r = await getNowPlayingMedia(pid, { hosts });
+    res.json({ ok: true, response: r });
+  })().catch((err) => {
+    const error = normalizeHeosError(err);
+    res.status(502).json({ ok: false, error });
+  });
+});
+
+heosRouter.get('/groups', (req, res) => {
+  (async () => {
+    const hosts = parseHeosHostsHeader(req);
+    const r = await getGroups({ hosts });
+    res.json({ ok: true, response: r });
+  })().catch((err) => {
+    const error = normalizeHeosError(err);
+    res.status(502).json({ ok: false, error });
+  });
+});
+
+heosRouter.post('/group', (req, res) => {
+  (async () => {
+    const leaderPid = Number(req?.body?.leaderPid);
+    const memberPids = Array.isArray(req?.body?.memberPids) ? req.body.memberPids : [];
+    if (!Number.isFinite(leaderPid) || leaderPid === 0) return res.status(400).json({ ok: false, error: 'leaderPid_required' });
+    const hosts = parseHeosHostsHeader(req);
+    const r = await setGroup(leaderPid, memberPids, { hosts });
+    res.json({ ok: true, response: r });
+  })().catch((err) => {
+    const error = normalizeHeosError(err);
+    res.status(502).json({ ok: false, error });
+  });
+});
+
+heosRouter.post('/ungroup', (req, res) => {
+  (async () => {
+    const pid = Number(req?.body?.pid);
+    if (!Number.isFinite(pid) || pid === 0) return res.status(400).json({ ok: false, error: 'pid_required' });
+    const hosts = parseHeosHostsHeader(req);
+    const r = await unGroup(pid, { hosts });
     res.json({ ok: true, response: r });
   })().catch((err) => {
     const error = normalizeHeosError(err);

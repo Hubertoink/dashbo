@@ -66,6 +66,12 @@
   let modalLoading = false;
   let modalError: string | null = null;
 
+  type PlaylistTrack = NowPlayingTrack;
+  const PLAYLIST_KEY = 'dashbo_music_playlist_v1';
+  let playlist: PlaylistTrack[] = [];
+  let playlistBusy = false;
+  let playlistError: string | null = null;
+
   let qTimer: any;
   let mounted = false;
 
@@ -225,6 +231,126 @@
     selected = null;
   }
 
+  function loadPlaylist() {
+    if (typeof localStorage === 'undefined') return;
+    try {
+      const raw = localStorage.getItem(PLAYLIST_KEY);
+      if (!raw) {
+        playlist = [];
+        return;
+      }
+      const parsed = JSON.parse(raw);
+      const arr = Array.isArray(parsed) ? parsed : [];
+      playlist = arr
+        .map((t: any) => ({
+          trackId: String(t?.trackId || ''),
+          title: String(t?.title || ''),
+          artist: String(t?.artist || ''),
+          album: String(t?.album || ''),
+          coverUrl: t?.coverUrl ? String(t.coverUrl) : null,
+          durationSec: Number.isFinite(Number(t?.durationSec)) ? Number(t.durationSec) : null
+        }))
+        .filter((t: PlaylistTrack) => t.trackId && t.title);
+    } catch {
+      playlist = [];
+    }
+  }
+
+  function persistPlaylist(next: PlaylistTrack[]) {
+    playlist = next;
+    if (typeof localStorage === 'undefined') return;
+    try {
+      localStorage.setItem(PLAYLIST_KEY, JSON.stringify(next));
+    } catch {
+      // ignore
+    }
+  }
+
+  function addTracksToPlaylist(tracks: PlaylistTrack[]) {
+    const existing = new Set(playlist.map((t) => t.trackId));
+    const toAdd = (Array.isArray(tracks) ? tracks : []).filter((t) => t?.trackId && !existing.has(t.trackId));
+    if (toAdd.length === 0) return;
+    persistPlaylist([...playlist, ...toAdd]);
+  }
+
+  async function addAlbumToPlaylist(albumId: string) {
+    playlistError = null;
+    playlistBusy = true;
+    try {
+      edgeBaseUrl = getEdgeBaseUrlFromStorage();
+      edgeToken = getEdgeTokenFromStorage();
+      if (!edgeBaseUrl) throw new Error('Pi/PC Edge ist nicht konfiguriert.');
+
+      const r = await edgeFetchJson<{ ok: boolean; album: AlbumDetails }>(
+        edgeBaseUrl,
+        `/api/music/albums/${encodeURIComponent(albumId)}`,
+        edgeToken || undefined
+      );
+      const album = r?.album;
+      if (!album) throw new Error('Album konnte nicht geladen werden.');
+
+      const cover = coverUrl(album.id);
+      const tracks: PlaylistTrack[] = (album.tracks ?? []).map((t) => ({
+        trackId: t.id,
+        title: t.title,
+        artist: t.artist,
+        album: t.album,
+        coverUrl: cover,
+        durationSec: t.durationSec ?? null
+      }));
+      addTracksToPlaylist(tracks);
+    } catch (err) {
+      playlistError = err instanceof Error ? err.message : 'Zur Playlist hinzufügen fehlgeschlagen.';
+    } finally {
+      playlistBusy = false;
+    }
+  }
+
+  function addSelectedAlbumToPlaylist() {
+    if (!selected) return;
+    const cover = coverUrl(selected.id);
+    const tracks: PlaylistTrack[] = (selected.tracks ?? []).map((t) => ({
+      trackId: t.id,
+      title: t.title,
+      artist: t.artist,
+      album: t.album,
+      coverUrl: cover,
+      durationSec: t.durationSec ?? null
+    }));
+    addTracksToPlaylist(tracks);
+  }
+
+  function addSelectedTrackToPlaylist(trackId: string) {
+    if (!selected) return;
+    const t = (selected.tracks ?? []).find((x) => x.id === trackId);
+    if (!t) return;
+    addTracksToPlaylist([
+      {
+        trackId: t.id,
+        title: t.title,
+        artist: t.artist,
+        album: t.album,
+        coverUrl: coverUrl(selected.id),
+        durationSec: t.durationSec ?? null
+      }
+    ]);
+  }
+
+  function removePlaylistIndex(i: number) {
+    if (i < 0 || i >= playlist.length) return;
+    persistPlaylist(playlist.filter((_, idx) => idx !== i));
+  }
+
+  function clearPlaylist() {
+    persistPlaylist([]);
+  }
+
+  function playPlaylist() {
+    if (playlist.length === 0) return;
+    playAlbum(playlist, 0);
+    void goto('/');
+  }
+
   function playSelectedAlbum() {
     if (!selected) return;
     const cover = coverUrl(selected.id);
@@ -233,7 +359,8 @@
       title: t.title,
       artist: t.artist,
       album: t.album,
-      coverUrl: cover
+      coverUrl: cover,
+      durationSec: t.durationSec ?? null
     }));
 
     if (queue.length === 0) return;
@@ -252,7 +379,8 @@
       title: t.title,
       artist: t.artist,
       album: t.album,
-      coverUrl: coverUrl(selected.id)
+      coverUrl: coverUrl(selected.id),
+      durationSec: t.durationSec ?? null
     });
     closeModal();
     void goto('/');
@@ -265,6 +393,7 @@
     }
 
     mounted = true;
+    loadPlaylist();
     void loadStatusAndAlbums();
   });
 
@@ -344,28 +473,107 @@
     </div>
   {/if}
 
-  <div class="mt-6">
-    {#if loading}
-      <div class="text-sm text-white/60">Lade…</div>
-    {:else if albums.length === 0}
-      <div class="text-sm text-white/60">Keine Alben gefunden.</div>
-    {:else}
-      <div class="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
-        {#each albums as a (a.id)}
-          <button class="group text-left" on:click={() => openAlbum(a.id)} aria-label={`Album öffnen: ${a.artist} - ${a.album}`}>
-            <div class="aspect-square overflow-hidden rounded-xl border border-white/10 bg-white/5">
-              {#if coverUrl(a.id)}
-                <img src={coverUrl(a.id) ?? ''} alt="" class="h-full w-full object-cover" loading="lazy" />
-              {/if}
+  <div class="mt-6 grid gap-6 lg:grid-cols-[1fr_340px]">
+    <div>
+      {#if loading}
+        <div class="text-sm text-white/60">Lade…</div>
+      {:else if albums.length === 0}
+        <div class="text-sm text-white/60">Keine Alben gefunden.</div>
+      {:else}
+        <div class="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
+          {#each albums as a (a.id)}
+            <div class="group text-left relative">
+              <button
+                class="block w-full text-left"
+                type="button"
+                on:click={() => openAlbum(a.id)}
+                aria-label={`Album öffnen: ${a.artist} - ${a.album}`}
+              >
+                <div class="aspect-square overflow-hidden rounded-xl border border-white/10 bg-white/5">
+                  {#if coverUrl(a.id)}
+                    <img src={coverUrl(a.id) ?? ''} alt="" class="h-full w-full object-cover" loading="lazy" />
+                  {/if}
+                </div>
+                <div class="mt-2 min-w-0">
+                  <div class="text-xs text-white/90 line-clamp-1">{a.album}</div>
+                  <div class="text-[11px] text-white/60 line-clamp-1">{a.artist}</div>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                class="absolute top-2 right-2 h-8 w-8 rounded-lg bg-black/50 hover:bg-black/60 border border-white/10 text-sm font-semibold text-white disabled:opacity-50"
+                title="Zur Playlist hinzufügen"
+                aria-label="Zur Playlist hinzufügen"
+                disabled={playlistBusy}
+                on:click={() => addAlbumToPlaylist(a.id)}
+              >
+                +
+              </button>
             </div>
-            <div class="mt-2 min-w-0">
-              <div class="text-xs text-white/90 line-clamp-1">{a.album}</div>
-              <div class="text-[11px] text-white/60 line-clamp-1">{a.artist}</div>
-            </div>
+          {/each}
+        </div>
+      {/if}
+    </div>
+
+    <aside class="rounded-xl bg-white/5 p-4">
+      <div class="flex items-center justify-between gap-2">
+        <div>
+          <div class="font-medium">Playlist</div>
+          <div class="text-xs text-white/50">{playlist.length} Tracks</div>
+        </div>
+        <div class="flex items-center gap-2">
+          <button
+            type="button"
+            class="h-9 px-3 rounded-lg bg-white/20 hover:bg-white/25 text-sm font-medium disabled:opacity-50"
+            on:click={playPlaylist}
+            disabled={playlist.length === 0}
+            title="Playlist abspielen"
+          >
+            Play
           </button>
-        {/each}
+          <button
+            type="button"
+            class="h-9 px-3 rounded-lg bg-white/10 hover:bg-white/15 text-sm font-medium disabled:opacity-50"
+            on:click={clearPlaylist}
+            disabled={playlist.length === 0}
+            title="Playlist leeren"
+          >
+            Leeren
+          </button>
+        </div>
       </div>
-    {/if}
+
+      {#if playlistError}
+        <div class="mt-2 text-xs text-red-200">{playlistError}</div>
+      {/if}
+
+      <div class="mt-3 rounded-lg border border-white/10 overflow-hidden">
+        {#if playlist.length === 0}
+          <div class="p-3 text-sm text-white/60">Noch leer. Füge Alben oder Songs hinzu.</div>
+        {:else}
+          <ul class="divide-y divide-white/10 max-h-[60vh] overflow-auto">
+            {#each playlist as t, i (t.trackId)}
+              <li class="flex items-center gap-2 p-2">
+                <div class="min-w-0 flex-1">
+                  <div class="text-sm text-white/90 line-clamp-1">{t.title}</div>
+                  <div class="text-xs text-white/50 line-clamp-1">{t.artist}</div>
+                </div>
+                <button
+                  type="button"
+                  class="h-8 w-8 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-sm font-semibold"
+                  aria-label="Aus Playlist entfernen"
+                  title="Entfernen"
+                  on:click={() => removePlaylistIndex(i)}
+                >
+                  -
+                </button>
+              </li>
+            {/each}
+          </ul>
+        {/if}
+      </div>
+    </aside>
   </div>
 
   {#if modalOpen}
@@ -393,6 +601,13 @@
                 <button class="h-9 rounded-lg border border-white/10 bg-white/5 px-3 text-sm hover:bg-white/10" on:click={playSelectedAlbum}>
                   Album abspielen
                 </button>
+                <button
+                  class="h-9 rounded-lg border border-white/10 bg-white/5 px-3 text-sm hover:bg-white/10 disabled:opacity-50"
+                  on:click={addSelectedAlbumToPlaylist}
+                  disabled={playlistBusy}
+                >
+                  Zur Playlist
+                </button>
                 <button class="h-9 rounded-lg border border-white/10 bg-white/5 px-3 text-sm hover:bg-white/10" on:click={closeModal}>
                   Schließen
                 </button>
@@ -412,12 +627,24 @@
                     </div>
                     <div class="text-xs text-white/50 line-clamp-1">{t.artist}</div>
                   </div>
-                  <button
-                    class="h-8 shrink-0 rounded-lg border border-white/10 bg-white/5 px-3 text-xs hover:bg-white/10"
-                    on:click={() => playSelectedTrack(t.id)}
-                  >
-                    Play
-                  </button>
+                  <div class="flex items-center gap-2 shrink-0">
+                    <button
+                      type="button"
+                      class="h-8 w-8 rounded-lg border border-white/10 bg-white/5 text-sm font-semibold hover:bg-white/10 disabled:opacity-50"
+                      aria-label="Zur Playlist hinzufügen"
+                      title="Zur Playlist hinzufügen"
+                      disabled={playlistBusy}
+                      on:click={() => addSelectedTrackToPlaylist(t.id)}
+                    >
+                      +
+                    </button>
+                    <button
+                      class="h-8 rounded-lg border border-white/10 bg-white/5 px-3 text-xs hover:bg-white/10"
+                      on:click={() => playSelectedTrack(t.id)}
+                    >
+                      Play
+                    </button>
+                  </div>
                 </li>
               {/each}
             </ul>

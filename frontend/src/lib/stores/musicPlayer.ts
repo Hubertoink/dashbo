@@ -7,6 +7,7 @@ export type NowPlayingTrack = {
   artist: string;
   album: string;
   coverUrl?: string | null;
+  durationSec?: number | null;
 };
 
 type PlayerState = {
@@ -44,19 +45,40 @@ export const musicPlayerCommand = {
 };
 
 export function setNowPlaying(now: NowPlayingTrack | null, playing: boolean) {
-  _state.update((prev) => ({
-    ...prev,
-    now,
-    playing,
-    positionSec: now ? prev.positionSec : 0,
-    durationSec: now ? prev.durationSec : 0
-  }));
+  _state.update((prev) => {
+    const prevId = prev.now?.trackId ?? null;
+    const nextId = now?.trackId ?? null;
+    const trackChanged = prevId !== nextId;
+
+    const hasKnownDuration =
+      now != null && typeof now.durationSec === 'number' && Number.isFinite(now.durationSec);
+    const nextDuration = now
+      ? hasKnownDuration
+        ? Math.max(0, now.durationSec as number)
+        : trackChanged
+          ? 0
+          : prev.durationSec
+      : 0;
+
+    return {
+      ...prev,
+      now,
+      playing,
+      positionSec: now ? (trackChanged ? 0 : prev.positionSec) : 0,
+      durationSec: nextDuration
+    };
+  });
 }
 
 export function setProgress(positionSec: number, durationSec: number) {
   const p = Number.isFinite(positionSec) ? Math.max(0, positionSec) : 0;
   const d = Number.isFinite(durationSec) ? Math.max(0, durationSec) : 0;
-  _state.update((prev) => ({ ...prev, positionSec: p, durationSec: d }));
+  _state.update((prev) => {
+    // Avoid regressing duration back to 0 during transient states (e.g. before metadata loads,
+    // or when HEOS doesn't provide duration updates).
+    const nextDuration = d > 0 ? d : prev.durationSec;
+    return { ...prev, positionSec: p, durationSec: nextDuration };
+  });
 }
 
 export function playTrack(track: NowPlayingTrack) {
