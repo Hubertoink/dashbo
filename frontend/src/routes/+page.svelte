@@ -711,7 +711,7 @@
           </div>
         {/if}
 
-        {#if standbyMode && musicWidgetEnabled}
+        {#if standbyMode && musicWidgetEnabled && $musicPlayerState.now}
           <div class="standby-music mt-2 pb-4 text-white">
             <div class="relative h-24 w-24 overflow-hidden rounded-none shadow-lg shadow-black/30">
               {#if $musicPlayerState.now?.coverUrl}
@@ -755,7 +755,7 @@
               <div class="text-white"><ForecastWidget /></div>
 
               <div class="mt-auto">
-                {#if musicWidgetEnabled}
+                {#if musicWidgetEnabled && $musicPlayerState.now}
                   <div class="standby-music mb-5">
                     <div class="relative h-24 w-24 overflow-hidden rounded-none shadow-lg shadow-black/30">
                       {#if $musicPlayerState.now?.coverUrl}
@@ -845,7 +845,7 @@
                 {/if}
               </div>
 
-              {#if musicWidgetEnabled}
+              {#if musicWidgetEnabled && $musicPlayerState.now}
                 <div class="standby-music mt-6 md:hidden">
                   <div class="relative h-24 w-24 overflow-hidden rounded-none shadow-lg shadow-black/30">
                     {#if $musicPlayerState.now?.coverUrl}
@@ -969,7 +969,7 @@
 
               <div class="text-white"><ForecastWidget /></div>
 
-              {#if musicWidgetEnabled}
+              {#if musicWidgetEnabled && $musicPlayerState.now}
                 <div class="standby-music mb-8">
                   <div class="flex items-center gap-4">
                     <div class="h-16 w-16 overflow-hidden rounded-none shadow-lg shadow-black/30 shrink-0">
@@ -1061,7 +1061,7 @@
                 {/if}
               </div>
 
-              {#if musicWidgetEnabled}
+              {#if musicWidgetEnabled && $musicPlayerState.now}
                 <div class="standby-music mt-6 md:hidden">
                   <div class="flex items-center gap-4">
                     <div class="h-14 w-14 overflow-hidden rounded-none shadow-lg shadow-black/30 shrink-0">

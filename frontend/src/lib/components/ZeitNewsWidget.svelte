@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { fade } from 'svelte/transition';
   import { fetchNews, type NewsItemDto, type NewsResponseDto } from '$lib/api';
 
   export let variant: 'panel' | 'plain' = 'panel';
@@ -7,6 +8,12 @@
   let items: NewsItemDto[] = [];
   let loading = true;
   let source: NewsResponseDto['source'] = 'zeit';
+  let page = 0;
+  let pageTimer: ReturnType<typeof setInterval> | null = null;
+
+  const PAGE_SIZE = 6;
+  const MAX_ITEMS = 12;
+  const PAGE_ROTATE_MS = 20_000;
 
   const NEWS_CACHE_KEY = 'dashbo_news_cache_v1';
   const NEWS_CACHE_TTL_MS = 5 * 60 * 1000;
@@ -22,6 +29,7 @@
       if (!isFresh || !Array.isArray(parsed?.items)) return false;
       items = parsed.items;
       if (typeof parsed?.source === 'string') source = parsed.source as any;
+      startPageRotation();
       loading = false;
       return true;
     } catch {
@@ -34,7 +42,8 @@
     try {
       const r = await fetchNews();
       source = r.source;
-      items = (r.items ?? []).slice(0, 8);
+      items = (r.items ?? []).slice(0, MAX_ITEMS);
+      startPageRotation();
 
       if (typeof localStorage !== 'undefined') {
         try {
@@ -46,9 +55,36 @@
     } catch {
       // fail closed: hide items
       items = [];
+      stopPageRotation();
     } finally {
       loading = false;
     }
+  }
+
+  function stopPageRotation() {
+    if (pageTimer) {
+      clearInterval(pageTimer);
+      pageTimer = null;
+    }
+  }
+
+  function startPageRotation() {
+    stopPageRotation();
+    const pageCount = Math.ceil(Math.min(items.length, MAX_ITEMS) / PAGE_SIZE);
+    if (pageCount <= 1) {
+      page = 0;
+      return;
+    }
+    if (page >= pageCount) page = 0;
+    pageTimer = setInterval(() => {
+      const nextCount = Math.ceil(Math.min(items.length, MAX_ITEMS) / PAGE_SIZE);
+      if (nextCount <= 1) {
+        page = 0;
+        stopPageRotation();
+        return;
+      }
+      page = (page + 1) % nextCount;
+    }, PAGE_ROTATE_MS);
   }
 
   const SOURCE_LABEL: Record<string, string> = {
@@ -69,7 +105,10 @@
     loadFromCache();
     void load(false);
     const t = setInterval(() => void load(false), 10 * 60 * 1000);
-    return () => clearInterval(t);
+    return () => {
+      clearInterval(t);
+      stopPageRotation();
+    };
   });
 </script>
 
@@ -81,23 +120,34 @@
     </div>
 
     {#if items.length > 0}
-      <div class="space-y-2">
-        {#each items.slice(0, 8) as it (it.url)}
-          <a
-            class="block text-sm text-white/85 hover:text-white underline-offset-2 hover:underline whitespace-normal break-words"
-            href={it.url}
-            rel="noopener"
-          >
-            {#if source === 'mixed'}
-              {@const lbl = itemSourceLabel(it)}
-              {#if lbl}
-                <span class="mr-2 text-[10px] tracking-widest uppercase text-white/45">{lbl}</span>
+      {@const pageCount = Math.ceil(Math.min(items.length, MAX_ITEMS) / PAGE_SIZE)}
+      {@const start = page * PAGE_SIZE}
+      {@const view = items.slice(start, start + PAGE_SIZE)}
+      {#key page}
+        <div class="space-y-2" in:fade={{ duration: 220 }} out:fade={{ duration: 180 }}>
+          {#each view as it (it.url)}
+            <a
+              class="block text-sm text-white/85 hover:text-white underline-offset-2 hover:underline whitespace-normal break-words"
+              href={it.url}
+              rel="noopener"
+            >
+              {#if source === 'mixed'}
+                {@const lbl = itemSourceLabel(it)}
+                {#if lbl}
+                  <span class="mr-2 text-[10px] tracking-widest uppercase text-white/45">{lbl}</span>
+                {/if}
               {/if}
-            {/if}
-            {it.title}
-          </a>
-        {/each}
-      </div>
+              {it.title}
+            </a>
+          {/each}
+
+          {#if pageCount > 1}
+            <div class="pt-1 text-[10px] tracking-widest uppercase text-white/35">
+              {page + 1}/{pageCount}
+            </div>
+          {/if}
+        </div>
+      {/key}
     {:else}
       <div class="text-white/50 text-sm">Keine Artikel verfügbar.</div>
     {/if}
