@@ -3,6 +3,8 @@
   import { fetchTodos, updateTodo, type TodoItemDto } from '$lib/api';
 
   export let variant: 'panel' | 'plain' = 'panel';
+  export let expanded = false;
+  export let onToggleExpand: (() => void) | null = null;
 
   let listName = 'Dashbo';
   let items: TodoItemDto[] = [];
@@ -211,12 +213,28 @@
 
 <!-- Only render when there are visible items (graceful hide when To Do not available) -->
 {#if visibleItems.length > 0}
-<div class={containerClass}>
+<div class="{containerClass} {expanded ? 'flex-1 flex flex-col' : ''}">
   <div class="mb-2 flex items-center justify-between">
     <div class="text-base font-semibold">To Do</div>
+    {#if onToggleExpand}
+      <button
+        type="button"
+        class="p-1 rounded hover:bg-white/10 transition-colors"
+        on:click|stopPropagation={onToggleExpand}
+        title={expanded ? 'Verkleinern' : 'Vergrößern'}
+      >
+        <svg class="w-4 h-4 text-white/60" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          {#if expanded}
+            <path stroke-linecap="round" stroke-linejoin="round" d="M4 14h6m0 0v6m0-6L3 21M20 10h-6m0 0V4m0 6l7-7" />
+          {:else}
+            <path stroke-linecap="round" stroke-linejoin="round" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5" />
+          {/if}
+        </svg>
+      </button>
+    {/if}
   </div>
-    <div class="space-y-2">
-      {#each visibleItems.slice(0, 6) as item (item.taskId)}
+    <div class="space-y-2 {expanded ? 'flex-1 overflow-y-auto' : ''}">
+      {#each visibleItems.slice(0, expanded ? 20 : 5) as item (item.taskId)}
         {@const key = `${item.connectionId}:${item.listId}:${item.taskId}`}
         <div class="flex items-center gap-2">
           <button
@@ -248,9 +266,9 @@
             />
           {:else}
             <button
-              class={`flex-1 text-left text-base ${item.completed ? 'line-through opacity-60' : ''}`}
+              class={`flex-1 text-left text-base truncate ${item.completed ? 'line-through opacity-60' : ''}`}
               on:click={() => startEdit(item)}
-              title={item.connectionLabel}
+              title={item.title}
             >
               {item.title}
             </button>

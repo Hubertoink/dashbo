@@ -4,6 +4,8 @@
   import { fetchNews, type NewsItemDto, type NewsResponseDto } from '$lib/api';
 
   export let variant: 'panel' | 'plain' = 'panel';
+  export let expanded = false;
+  export let onToggleExpand: (() => void) | null = null;
 
   let items: NewsItemDto[] = [];
   let loading = true;
@@ -109,6 +111,7 @@
   }
 
   $: containerClass = variant === 'plain' ? 'text-white' : 'rounded-lg bg-white/5 p-3 text-white';
+  $: effectivePageSize = expanded ? 12 : PAGE_SIZE;
 
   onMount(() => {
     loadFromCache();
@@ -122,21 +125,40 @@
 </script>
 
 {#if loading || items.length > 0}
-  <div class={containerClass}>
+  <div class="{containerClass} {expanded ? 'flex-1 flex flex-col' : ''}">
     <div class="mb-2 flex items-center justify-between">
       <div class="text-base font-semibold">News</div>
-      <div class="text-xs text-white/60">RSS</div>
+      <div class="flex items-center gap-2">
+        <div class="text-xs text-white/60">RSS</div>
+        {#if onToggleExpand}
+          <button
+            type="button"
+            class="p-1 rounded hover:bg-white/10 transition-colors"
+            on:click|stopPropagation={onToggleExpand}
+            title={expanded ? 'Verkleinern' : 'Vergrößern'}
+          >
+            <svg class="w-4 h-4 text-white/60" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              {#if expanded}
+                <path stroke-linecap="round" stroke-linejoin="round" d="M4 14h6m0 0v6m0-6L3 21M20 10h-6m0 0V4m0 6l7-7" />
+              {:else}
+                <path stroke-linecap="round" stroke-linejoin="round" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5" />
+              {/if}
+            </svg>
+          </button>
+        {/if}
+      </div>
     </div>
 
     {#if items.length > 0}
-      {@const pageCount = Math.ceil(Math.min(items.length, MAX_ITEMS) / PAGE_SIZE)}
-      {@const start = page * PAGE_SIZE}
-      {@const view = items.slice(start, start + PAGE_SIZE)}
-      <div class="relative overflow-hidden" style="min-height: {PAGE_SIZE * 1.75 + 1.5}rem;">
-        {#key page}
+      {@const displayItems = expanded ? items : items.slice(0, MAX_ITEMS)}
+      {@const pageCount = expanded ? 1 : Math.ceil(Math.min(items.length, MAX_ITEMS) / PAGE_SIZE)}
+      {@const start = expanded ? 0 : page * PAGE_SIZE}
+      {@const view = expanded ? displayItems : items.slice(start, start + PAGE_SIZE)}
+      <div class="relative {expanded ? 'flex-1 overflow-y-auto' : 'overflow-hidden'}" style="{expanded ? '' : `min-height: ${PAGE_SIZE * 1.75 + 1.5}rem;`}">
+        {#key expanded ? 'expanded' : page}
           <div
-            class="space-y-2 {transitioning ? 'absolute inset-x-0 top-0' : ''}"
-            in:fade={{ duration: TRANSITION_IN_MS, delay: TRANSITION_OUT_MS }}
+            class="space-y-2 {transitioning && !expanded ? 'absolute inset-x-0 top-0' : ''}"
+            in:fade={{ duration: TRANSITION_IN_MS, delay: expanded ? 0 : TRANSITION_OUT_MS }}
             out:fade={{ duration: TRANSITION_OUT_MS }}
           >
             {#each view as it (it.url)}
@@ -155,7 +177,7 @@
               </a>
             {/each}
 
-            {#if pageCount > 1}
+            {#if pageCount > 1 && !expanded}
               <div class="pt-1 text-[10px] tracking-widest uppercase text-white/35">
                 {page + 1}/{pageCount}
               </div>

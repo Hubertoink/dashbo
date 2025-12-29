@@ -57,6 +57,9 @@
 
   let outlookConnected = false;
 
+  // Track which widget is expanded in the dashboard sidebar (null = none)
+  let expandedWidget: 'todo' | 'news' | null = null;
+
   let standbyNewsItems: NewsItemDto[] = [];
   let standbyNewsIndex = 0;
   let standbyNewsLoading = false;
@@ -693,22 +696,35 @@
       <div class="w-[34%] min-w-[320px] hidden md:flex flex-col p-10 h-screen">
         <div class="text-white"><WeatherWidget tone="light" /></div>
 
-        {#if todoEnabled && outlookConnected}
-          <div class="mt-6 pb-8 text-white">
-            <TodoWidget />
+        {#if expandedWidget === 'todo'}
+          <!-- Expanded To-Do takes all space between weather and clock -->
+          <div class="mt-6 pb-8 text-white flex-1 flex flex-col min-h-0">
+            <TodoWidget expanded={true} onToggleExpand={() => expandedWidget = null} />
           </div>
-        {/if}
+        {:else if expandedWidget === 'news'}
+          <!-- Expanded News takes all space between weather and clock -->
+          <div class="mt-6 pb-8 text-white flex-1 flex flex-col min-h-0">
+            <ZeitNewsWidget expanded={true} onToggleExpand={() => expandedWidget = null} />
+          </div>
+        {:else}
+          <!-- Normal layout with all widgets -->
+          {#if todoEnabled && outlookConnected}
+            <div class="mt-6 pb-8 text-white">
+              <TodoWidget onToggleExpand={() => expandedWidget = 'todo'} />
+            </div>
+          {/if}
 
-        {#if newsEnabled}
-          <div class="mt-2 pb-8 text-white">
-            <ZeitNewsWidget />
-          </div>
-        {/if}
+          {#if newsEnabled}
+            <div class="mt-2 pb-8 text-white">
+              <ZeitNewsWidget onToggleExpand={() => expandedWidget = 'news'} />
+            </div>
+          {/if}
 
-        {#if musicWidgetEnabled}
-          <div class="mt-2 pb-4 text-white">
-            <MusicWidget />
-          </div>
+          {#if musicWidgetEnabled}
+            <div class="mt-2 pb-4 text-white">
+              <MusicWidget />
+            </div>
+          {/if}
         {/if}
 
         {#if standbyMode && musicWidgetEnabled && $musicPlayerState.now}
