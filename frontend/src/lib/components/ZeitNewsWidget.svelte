@@ -154,7 +154,10 @@
       {@const pageCount = expanded ? 1 : Math.ceil(Math.min(items.length, MAX_ITEMS) / PAGE_SIZE)}
       {@const start = expanded ? 0 : page * PAGE_SIZE}
       {@const view = expanded ? displayItems : items.slice(start, start + PAGE_SIZE)}
-      <div class="relative {expanded ? 'flex-1 overflow-y-auto' : 'overflow-hidden'}" style="{expanded ? '' : `min-height: ${PAGE_SIZE * 1.75 + 1.5}rem;`}">
+      <div
+        class="relative {expanded ? 'flex-1 overflow-y-auto' : 'overflow-hidden'}"
+        style="{expanded ? '' : 'height: 10rem;'}"
+      >
         {#key expanded ? 'expanded' : page}
           <div
             class="space-y-2 {transitioning && !expanded ? 'absolute inset-x-0 top-0' : ''}"
@@ -163,7 +166,7 @@
           >
             {#each view as it (it.url)}
               <a
-                class="block text-sm text-white/85 hover:text-white underline-offset-2 hover:underline whitespace-normal break-words"
+                class="block text-sm leading-snug min-h-[2.5rem] line-clamp-2 text-white/85 hover:text-white underline-offset-2 hover:underline whitespace-normal break-words"
                 href={it.url}
                 rel="noopener"
               >
