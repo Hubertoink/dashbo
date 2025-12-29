@@ -731,7 +731,7 @@
           {/if}
         {/if}
 
-        {#if standbyMode && musicWidgetEnabled && $musicPlayerState.now}
+        {#if standbyMode && musicWidgetEnabled && $musicPlayerState.playing && $musicPlayerState.now}
           <div class="standby-music mt-2 pb-4 text-white">
             <div class="relative h-24 w-24 overflow-hidden rounded-none shadow-lg shadow-black/30">
               {#if $musicPlayerState.now?.coverUrl}
@@ -775,7 +775,7 @@
               <div class="text-white"><ForecastWidget /></div>
 
               <div class="mt-auto">
-                {#if musicWidgetEnabled && $musicPlayerState.now}
+                {#if musicWidgetEnabled && $musicPlayerState.playing && $musicPlayerState.now}
                   <div class="standby-music mb-5">
                     <div class="relative h-24 w-24 overflow-hidden rounded-none shadow-lg shadow-black/30">
                       {#if $musicPlayerState.now?.coverUrl}
@@ -865,7 +865,7 @@
                 {/if}
               </div>
 
-              {#if musicWidgetEnabled && $musicPlayerState.now}
+              {#if musicWidgetEnabled && $musicPlayerState.playing && $musicPlayerState.now}
                 <div class="standby-music mt-6 md:hidden">
                   <div class="relative h-24 w-24 overflow-hidden rounded-none shadow-lg shadow-black/30">
                     {#if $musicPlayerState.now?.coverUrl}

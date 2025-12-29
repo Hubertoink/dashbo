@@ -114,7 +114,9 @@ async function readAudioMetadata(absPath, ext) {
       }
     }
 
-    const meta = await mm.parseFile(absPath, { duration: true });
+    // duration=true can be very slow for large libraries because it may scan audio frames.
+    // We fetch durations on-demand via the /meta endpoint when needed.
+    const meta = await mm.parseFile(absPath, { duration: false });
     const common = meta.common || {};
     const format = meta.format || {};
 
@@ -138,10 +140,7 @@ async function readAudioMetadata(absPath, ext) {
     const yearRaw = typeof common.year === 'number' ? common.year : null;
     const year = Number.isFinite(yearRaw) ? yearRaw : null;
 
-    const durationRaw = typeof format.duration === 'number' ? format.duration : null;
-    const durationSec = Number.isFinite(durationRaw) ? Math.round(durationRaw) : null;
-
-    return { title, artist, album, albumartist, trackNo, year, durationSec };
+    return { title, artist, album, albumartist, trackNo, year, durationSec: null };
   } catch {
     // final fallback: try node-id3 directly for MP3s
     try {
@@ -243,12 +242,14 @@ class MusicLibrary {
       scanning: false,
       lastScanAt: null,
       lastError: null,
-      counts: { tracks: 0, albums: 0 }
+      counts: { tracks: 0, albums: 0 },
+      progress: null
     };
 
     this._tracks = new Map();
     this._albums = new Map();
     this._scanPromise = null;
+    this._progressLastUpdateMs = 0;
 
     ensureDirSync(getDataDir());
 
@@ -292,7 +293,22 @@ class MusicLibrary {
       lastScanAt: this._state.lastScanAt,
       lastError: this._state.lastError,
       libraryPath: getLibraryPath(),
-      counts: this._state.counts
+      counts: this._state.counts,
+      progress: this._state.progress
+    };
+  }
+
+  _setProgress(patch, opts = {}) {
+    const force = Boolean(opts && opts.force);
+    const now = Date.now();
+    if (!force && now - this._progressLastUpdateMs < 250) return;
+    this._progressLastUpdateMs = now;
+
+    const prev = this._state.progress && typeof this._state.progress === 'object' ? this._state.progress : {};
+    this._state.progress = {
+      ...prev,
+      ...patch,
+      updatedAt: new Date().toISOString()
     };
   }
 
@@ -310,6 +326,21 @@ class MusicLibrary {
 
     this._state.scanning = true;
     this._state.lastError = null;
+
+    this._state.progress = {
+      phase: 'walking',
+      startedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      dirsDone: 0,
+      filesTotal: 0,
+      filesDone: 0,
+      tracksBuilt: 0,
+      albumsBuilt: 0,
+      coversDone: 0,
+      coversTotal: 0,
+      currentRelPath: null
+    };
+    this._progressLastUpdateMs = 0;
     this._persistState();
 
     this._scanPromise = this._scanNow()
@@ -322,6 +353,22 @@ class MusicLibrary {
       .finally(async () => {
         this._state.scanning = false;
         this._recount();
+
+        this._setProgress(
+          {
+            phase: this._state.lastError ? 'error' : 'done',
+            filesDone:
+              typeof this._state.progress?.filesTotal === 'number'
+                ? this._state.progress.filesTotal
+                : typeof this._state.progress?.filesDone === 'number'
+                  ? this._state.progress.filesDone
+                  : 0,
+            tracksBuilt: this._state.counts.tracks,
+            albumsBuilt: this._state.counts.albums,
+            currentRelPath: null
+          },
+          { force: true }
+        );
         this._persistAll();
         this._scanPromise = null;
 
@@ -416,10 +463,11 @@ class MusicLibrary {
     return path.join(root, safeRel);
   }
 
-  resolveAlbumCoverAbsPath(albumId) {
+  async resolveAlbumCoverAbsPath(albumId) {
     const a = this._albums.get(String(albumId || ''));
-    if (!a || !a.coverRelPath) return null;
-    const rel = String(a.coverRelPath || '');
+    if (!a) return null;
+
+    const rel = a.coverRelPath ? String(a.coverRelPath || '') : '';
 
     if (rel.startsWith(COVER_CACHE_PREFIX)) {
       const withoutPrefix = rel.slice(COVER_CACHE_PREFIX.length);
@@ -427,9 +475,39 @@ class MusicLibrary {
       return path.join(getDataDir(), safeRel);
     }
 
+    if (rel) {
+      const root = getLibraryPath();
+      const safeRel = rel.split('/').join(path.sep);
+      return path.join(root, safeRel);
+    }
+
+    // On-demand embedded cover extraction (keeps full scans fast).
+    const trackRel = typeof a.coverTrackRelPath === 'string' ? a.coverTrackRelPath.trim() : '';
+    if (!trackRel) return null;
+
     const root = getLibraryPath();
-    const safeRel = rel.split('/').join(path.sep);
-    return path.join(root, safeRel);
+    const trackAbs = path.join(root, trackRel.split('/').join(path.sep));
+    const cover = await extractEmbeddedCover(trackAbs);
+    if (!cover) return null;
+
+    const cacheRel = coverCacheRelPath(a.id, cover.mime);
+    const cacheAbs = coverCacheAbsPath(a.id, cover.mime);
+    if (!cacheRel || !cacheAbs) return null;
+
+    try {
+      ensureDirSync(path.dirname(cacheAbs));
+      await fs.promises.stat(cacheAbs);
+    } catch {
+      try {
+        await fs.promises.writeFile(cacheAbs, cover.data);
+      } catch {
+        return null;
+      }
+    }
+
+    a.coverRelPath = cacheRel;
+    this._persistAlbums();
+    return cacheAbs;
   }
 
   _persistState() {
@@ -478,10 +556,12 @@ class MusicLibrary {
     const nextTracks = new Map();
     const nextAlbums = new Map();
 
-    // albumId -> absolute track path to attempt embedded-cover extraction (first hit wins)
-    const albumCoverTrackAbs = new Map();
+    // albumId -> representative track relative path for possible on-demand embedded-cover extraction
+    const albumCoverTrackRel = new Map();
 
     const trackCandidates = [];
+
+    this._setProgress({ phase: 'walking', dirsDone: 0, filesTotal: 0, filesDone: 0, currentRelPath: null }, { force: true });
 
     const walk = async (dir) => {
       const entries = await fs.promises.readdir(dir, { withFileTypes: true });
@@ -525,19 +605,35 @@ class MusicLibrary {
           baseName,
           parsed
         });
+
+        this._setProgress({ filesTotal: trackCandidates.length, currentRelPath: normalizedRel });
       }
+
+      this._setProgress({
+        dirsDone: (typeof this._state.progress?.dirsDone === 'number' ? this._state.progress.dirsDone : 0) + 1
+      });
     };
 
     await walk(root);
 
+    this._setProgress({ phase: 'metadata', filesTotal: trackCandidates.length, filesDone: 0, currentRelPath: null }, { force: true });
+
     // Read metadata with limited concurrency (avoid hammering disks)
-    const CONCURRENCY = 6;
+    const CONCURRENCY = Math.max(1, Math.min(24, Number(process.env.MUSIC_SCAN_CONCURRENCY || 8)));
     let cursor = 0;
     const workers = Array.from({ length: CONCURRENCY }, async () => {
       while (cursor < trackCandidates.length) {
         const i = cursor++;
         const t = trackCandidates[i];
         if (!t) continue;
+
+        this._setProgress({
+          filesDone: i,
+          filesTotal: trackCandidates.length,
+          currentRelPath: t.normalizedRel,
+          tracksBuilt: nextTracks.size,
+          albumsBuilt: nextAlbums.size
+        });
         const meta = await readAudioMetadata(t.full, t.ext);
 
         // Build the library purely based on tags (foobar-like). Folder names must not influence grouping.
@@ -554,15 +650,14 @@ class MusicLibrary {
 
         const trackNo = typeof meta?.trackNo === 'number' ? meta.trackNo : t.parsed.trackNo;
         const year = typeof meta?.year === 'number' ? meta.year : null;
-        const durationSec = typeof meta?.durationSec === 'number' ? meta.durationSec : null;
+        const durationSec = null;
 
         // Normalize keys for stable clustering (strip punctuation and collapse whitespace)
         const albumId = makeAlbumId(normalizeForId(groupingArtist), normalizeForId(groupingAlbum));
 
-        // Remember one representative track per album for possible embedded cover extraction later.
-        // We defer actual extraction to avoid buffering many images during the main scan.
-        if (!albumCoverTrackAbs.has(albumId)) {
-          albumCoverTrackAbs.set(albumId, t.full);
+        // Remember one representative track per album for possible on-demand embedded cover extraction later.
+        if (!albumCoverTrackRel.has(albumId)) {
+          albumCoverTrackRel.set(albumId, t.normalizedRel);
         }
 
         nextTracks.set(t.id, {
@@ -585,7 +680,14 @@ class MusicLibrary {
         const trackDirPosix = path.posix.dirname(t.normalizedRel);
         const trackDir = trackDirPosix && trackDirPosix !== '.' ? trackDirPosix : '';
         if (!nextAlbums.has(albumId)) {
-          const albumEntry = { id: albumId, artist: groupingArtist, album: groupingAlbum, year, coverRelPath: null };
+          const albumEntry = {
+            id: albumId,
+            artist: groupingArtist,
+            album: groupingAlbum,
+            year,
+            coverRelPath: null,
+            coverTrackRelPath: albumCoverTrackRel.get(albumId) || t.normalizedRel
+          };
           if (trackDir) albumEntry.memberDirs = new Set([trackDir]);
           nextAlbums.set(albumId, albumEntry);
         } else {
@@ -596,7 +698,10 @@ class MusicLibrary {
     });
     await Promise.all(workers);
 
+    this._setProgress({ phase: 'covers', coversTotal: nextAlbums.size, coversDone: 0, currentRelPath: null }, { force: true });
+
     // cover discovery: search album member directories first (if available), then fallback to path-based artist/album folder
+    let coverDone = 0;
     for (const a of nextAlbums.values()) {
       const candidates = COVER_CANDIDATES;
 
@@ -624,37 +729,12 @@ class MusicLibrary {
       }
 
       // If still not found, leave coverRelPath null.
+
+      coverDone += 1;
+      this._setProgress({ coversDone: coverDone, coversTotal: nextAlbums.size, albumsBuilt: nextAlbums.size, tracksBuilt: nextTracks.size });
     }
 
-    // Embedded cover fallback: if no cover file was found on disk, try extracting embedded artwork
-    // from one representative track per album and cache it under EDGE_DATA_DIR.
-    for (const a of nextAlbums.values()) {
-      if (a.coverRelPath) continue;
-      const trackAbs = albumCoverTrackAbs.get(a.id);
-      if (!trackAbs) continue;
-
-      const cover = await extractEmbeddedCover(trackAbs);
-      if (!cover) continue;
-
-      const rel = coverCacheRelPath(a.id, cover.mime);
-      const abs = coverCacheAbsPath(a.id, cover.mime);
-      if (!rel || !abs) continue;
-
-      try {
-        ensureDirSync(path.dirname(abs));
-        // Only write if missing; keeps IO low on repeated scans.
-        await fs.promises.stat(abs);
-      } catch {
-        try {
-          await fs.promises.writeFile(abs, cover.data);
-        } catch {
-          // ignore write failures
-          continue;
-        }
-      }
-
-      a.coverRelPath = rel;
-    }
+    // Note: embedded-cover extraction is deferred to on-demand cover requests for faster scans.
 
     // convert memberDirs Sets to arrays for JSON-serializable state
     for (const a of nextAlbums.values()) {

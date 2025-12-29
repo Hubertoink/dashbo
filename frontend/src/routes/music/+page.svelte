@@ -17,7 +17,38 @@
     lastError: string | null;
     libraryPath: string;
     counts: { tracks: number; albums: number };
+    progress?: {
+      phase?: string;
+      startedAt?: string;
+      updatedAt?: string;
+      dirsDone?: number;
+      filesTotal?: number;
+      filesDone?: number;
+      tracksBuilt?: number;
+      albumsBuilt?: number;
+      coversDone?: number;
+      coversTotal?: number;
+      currentRelPath?: string | null;
+    } | null;
   };
+
+  function scanPercent(st: EdgeMusicStatusDto | null): number | null {
+    const total = st?.progress?.filesTotal;
+    const done = st?.progress?.filesDone;
+    if (typeof total !== 'number' || total <= 0) return null;
+    if (typeof done !== 'number' || done < 0) return 0;
+    return Math.max(0, Math.min(100, Math.floor((done / total) * 100)));
+  }
+
+  function scanPhaseLabel(phase: string | undefined): string {
+    const p = String(phase || '').toLowerCase();
+    if (p === 'walking') return 'Dateien sammeln';
+    if (p === 'metadata') return 'Tags lesen';
+    if (p === 'covers') return 'Cover prüfen';
+    if (p === 'done') return 'Fertig';
+    if (p === 'error') return 'Fehler';
+    return p || 'Scan';
+  }
 
   type AlbumListItem = {
     id: string;
@@ -149,7 +180,19 @@
         status = st;
 
         if (st.scanning) {
-          scanMessage = `Scan läuft… (${st.counts?.albums ?? 0} Alben · ${st.counts?.tracks ?? 0} Tracks)`;
+          const pct = scanPercent(st);
+          const phase = scanPhaseLabel(st.progress?.phase);
+          const total = st.progress?.filesTotal;
+          const done = st.progress?.filesDone;
+          const cur = st.progress?.currentRelPath ? ` · ${st.progress.currentRelPath}` : '';
+          const countAlbums = st.progress?.albumsBuilt ?? st.counts?.albums ?? 0;
+          const countTracks = st.progress?.tracksBuilt ?? st.counts?.tracks ?? 0;
+
+          if (pct != null && typeof total === 'number' && typeof done === 'number') {
+            scanMessage = `${phase}: ${pct}% (${done}/${total}) · ${countAlbums} Alben · ${countTracks} Tracks${cur}`;
+          } else {
+            scanMessage = `${phase}… · ${countAlbums} Alben · ${countTracks} Tracks${cur}`;
+          }
         } else {
           if (st.lastError) {
             scanMessage = `Scan beendet mit Fehler: ${st.lastError}`;
@@ -448,6 +491,15 @@
 
   {#if scanMessage}
     <div class="mt-2 text-xs text-white/60">{scanMessage}</div>
+  {/if}
+
+  {#if status?.scanning}
+    {@const pct = scanPercent(status)}
+    {#if pct != null}
+      <div class="mt-2 h-2 w-full max-w-[520px] rounded-full bg-white/10 overflow-hidden">
+        <div class="h-full bg-white/40" style={`width:${pct}%`}></div>
+      </div>
+    {/if}
   {/if}
 
   <div class="mt-3 flex flex-wrap gap-1">

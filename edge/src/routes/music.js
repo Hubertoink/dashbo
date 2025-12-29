@@ -51,17 +51,19 @@ musicRouter.get('/albums/:albumId', (req, res) => {
 });
 
 musicRouter.get('/albums/:albumId/cover', (req, res) => {
-  const albumId = String(req.params.albumId || '');
-  const abs = getMusicLibrary().resolveAlbumCoverAbsPath(albumId);
-  if (!abs) return res.status(404).json({ error: 'no_cover' });
+  (async () => {
+    const albumId = String(req.params.albumId || '');
+    const abs = await getMusicLibrary().resolveAlbumCoverAbsPath(albumId);
+    if (!abs) return res.status(404).json({ error: 'no_cover' });
 
-  const ext = path.extname(abs).toLowerCase();
-  const mime = ext === '.png' ? 'image/png' : ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg' : 'application/octet-stream';
-  res.setHeader('Content-Type', mime);
-  res.setHeader('Cache-Control', 'private, max-age=300');
-  fs.createReadStream(abs)
-    .on('error', () => res.status(404).end())
-    .pipe(res);
+    const ext = path.extname(abs).toLowerCase();
+    const mime = ext === '.png' ? 'image/png' : ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg' : 'application/octet-stream';
+    res.setHeader('Content-Type', mime);
+    res.setHeader('Cache-Control', 'private, max-age=300');
+    fs.createReadStream(abs)
+      .on('error', () => res.status(404).end())
+      .pipe(res);
+  })().catch(() => res.status(404).json({ error: 'no_cover' }));
 });
 
 musicRouter.get('/tracks/:trackId/stream', async (req, res) => {
