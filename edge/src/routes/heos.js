@@ -10,6 +10,7 @@ const {
   getVolume,
   setVolume,
   getNowPlayingMedia,
+  getPlaybackSummary,
   getGroups,
   setGroup,
   unGroup
@@ -224,6 +225,19 @@ heosRouter.get('/now_playing', (req, res) => {
     const hosts = parseHeosHostsHeader(req);
     const r = await getNowPlayingMedia(pid, { hosts });
     res.json({ ok: true, response: r });
+  })().catch((err) => {
+    const error = normalizeHeosError(err);
+    res.status(502).json({ ok: false, error });
+  });
+});
+
+heosRouter.get('/playback_summary', (req, res) => {
+  (async () => {
+    const pid = Number(req?.query?.pid);
+    if (!Number.isFinite(pid) || pid === 0) return res.status(400).json({ ok: false, error: 'pid_required' });
+    const hosts = parseHeosHostsHeader(req);
+    const summary = await getPlaybackSummary(pid, { hosts });
+    res.json({ ok: true, summary });
   })().catch((err) => {
     const error = normalizeHeosError(err);
     res.status(502).json({ ok: false, error });

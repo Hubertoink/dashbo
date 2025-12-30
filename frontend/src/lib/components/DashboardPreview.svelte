@@ -77,7 +77,11 @@
     </div>
 
     <!-- Rechte Seite: Kalender -->
-    <div class="flex-1 rounded-lg bg-white/10 flex items-center justify-center">
+      <div
+        class="flex-1 rounded-lg bg-white/10 flex items-center justify-center transition-all duration-150 {highlightWidget === 'dashboard' || highlightWidget === 'calendar'
+          ? 'ring-2 ring-cyan-400/60'
+          : ''}"
+      >
       <div class="text-center">
         <div class="text-2xl mb-1 opacity-40">📅</div>
         <div class="text-[10px] text-white/40">Kalender</div>

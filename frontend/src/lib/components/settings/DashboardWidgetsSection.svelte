@@ -66,6 +66,12 @@
   export let edgeHeosHosts: string;
   export let isLocalhostUrl: (url: string) => boolean;
 
+  export let dashboardGlassBlurEnabled: boolean;
+  export let saveDashboardGlassBlurEnabled: () => void | Promise<void>;
+
+  export let dashboardTextStyle: ClockStyle;
+  export let saveDashboardTextStyle: () => void | Promise<void>;
+
   type HeosPlayerDto = { pid: number; name: string; model?: string };
   export let heosGroupPlayers: HeosPlayerDto[];
   export let heosGroupSelected: Record<string, boolean>;
@@ -112,6 +118,57 @@
 {/if}
 
 <div class="space-y-4">
+  <!-- Dashboard (optional blur) -->
+  <WidgetSettingsCard
+    title="Dashboard"
+    icon="▦"
+    kicker="dashboard"
+    enabled={dashboardGlassBlurEnabled}
+    widgetKey="dashboard"
+    saving={false}
+    error={null}
+    disableContentWhenOff={false}
+    on:toggle={() => {
+      dashboardGlassBlurEnabled = !dashboardGlassBlurEnabled;
+      void saveDashboardGlassBlurEnabled();
+    }}
+    on:hover={(e) => (highlightWidget = e.detail.key)}
+  >
+    <div class="space-y-4">
+      <div class="text-xs text-white/50">Optionaler Glas-Effekt im Kalender/Tag-View. Aus = nur transparent.</div>
+
+      <div>
+        <div class="text-sm text-white/80">Schriftstil</div>
+        <div class="mt-2 grid grid-cols-2 gap-2">
+          {#each CLOCK_STYLE_OPTIONS as opt (opt.id)}
+            <button
+              type="button"
+              class="rounded-lg border px-3 py-2 text-left transition-colors {dashboardTextStyle === opt.id
+                ? 'border-white/30 bg-white/10'
+                : 'border-white/10 bg-white/5 hover:bg-white/10'}"
+              on:click={() => (dashboardTextStyle = opt.id)}
+              disabled={!authed}
+            >
+              <div class={`text-2xl leading-none ${clockStyleClasses(opt.id)} text-shadow`}>Mo 30</div>
+              <div class="mt-1 text-xs text-white/60">{opt.label}</div>
+            </button>
+          {/each}
+        </div>
+
+        <div class="mt-2 flex items-center gap-2">
+          <button
+            class="h-8 px-3 rounded-lg bg-white/20 hover:bg-white/25 text-xs font-medium disabled:opacity-50"
+            on:click={saveDashboardTextStyle}
+            disabled={!authed}
+          >
+            Speichern
+          </button>
+          <div class="text-xs text-white/40">Gilt für Kalender & Tagesliste.</div>
+        </div>
+      </div>
+    </div>
+  </WidgetSettingsCard>
+
   <!-- Wetter Widget -->
   <WidgetSettingsCard
     title="Wetter & Vorhersage"

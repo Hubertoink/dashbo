@@ -293,7 +293,7 @@
   <div class="px-8">
     <div class="grid grid-cols-7 gap-4 text-white/70">
       {#each weekDays as d}
-        <div class="text-sm md:text-base font-semibold">{formatGermanDayLabel(d)}</div>
+        <div class="px-3 text-sm md:text-base font-semibold">{formatGermanDayLabel(d)}</div>
       {/each}
     </div>
   </div>
@@ -324,12 +324,12 @@
               >
                 <div class="absolute left-3 top-2 text-2xl md:text-3xl font-semibold leading-none">{d.getDate()}</div>
 
-                <div class="pt-8 md:pt-10 pr-10">
+                <div class="pt-8 md:pt-10 pr-7 md:pr-8">
                   {#if singleDayEvents.length > 0}
                     {@const ev0 = singleDayEvents[0]}
                     {@const p0 = (ev0.persons && ev0.persons.length > 0 ? ev0.persons[0] : ev0.person) ?? null}
                     <div
-                      class={`text-xs md:text-sm font-semibold leading-tight truncate ${
+                      class={`text-xs md:text-sm font-semibold leading-tight line-clamp-2 whitespace-normal break-words ${
                         ev0.tag
                           ? isTagColorKey(ev0.tag.color)
                             ? textFg[ev0.tag.color]
@@ -342,11 +342,11 @@
                       {ev0.title}
                     </div>
                   {:else if dayHolidays.length > 0}
-                    <div class="text-xs md:text-sm font-semibold leading-tight truncate text-white/70">{dayHolidays[0]?.title}</div>
+                    <div class="text-xs md:text-sm font-semibold leading-tight line-clamp-2 whitespace-normal break-words text-white/70">{dayHolidays[0]?.title}</div>
                   {/if}
                 </div>
                 {#if singleDayEvents.length > 0 || dayHolidays.length > 0}
-                  <div class="absolute right-4 bottom-3 flex gap-1">
+                  <div class="absolute right-4 bottom-3 flex flex-col items-end gap-1">
                     {#if dayHolidays.length > 0}
                       <div class="h-2.5 w-2.5 rounded-full border border-white/60 bg-white/0"></div>
                     {/if}

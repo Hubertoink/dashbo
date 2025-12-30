@@ -55,6 +55,13 @@
     edgeFetchJson
   } from '$lib/edge';
 
+  import {
+    DASHBOARD_GLASS_BLUR_ENABLED_KEY,
+    DASHBOARD_TEXT_STYLE_KEY,
+    getDashboardGlassBlurEnabledFromStorage,
+    getDashboardTextStyleFromStorage
+  } from '$lib/dashboard';
+
   import CalendarSection from '$lib/components/settings/CalendarSection.svelte';
   import DashboardSection from '$lib/components/settings/DashboardSection.svelte';
   import UsersSection from '$lib/components/settings/UsersSection.svelte';
@@ -111,6 +118,9 @@
   let clockStyle: ClockStyle = 'modern';
   let clockStyleSaving = false;
   let clockStyleError: string | null = null;
+
+  let dashboardGlassBlurEnabled = false;
+  let dashboardTextStyle: ClockStyle = 'modern';
 
   let tags: TagDto[] = [];
   let newTagName = '';
@@ -496,6 +506,32 @@
     edgePlayerWidgetEnabled = localStorage.getItem(EDGE_PLAYER_WIDGET_ENABLED_KEY) === '1';
     edgeHeosEnabled = localStorage.getItem(EDGE_HEOS_ENABLED_KEY) === '1';
     edgeHeosHosts = localStorage.getItem(EDGE_HEOS_HOSTS_KEY) ?? '';
+
+    // Dashboard UI tweaks (local-only)
+    dashboardGlassBlurEnabled = getDashboardGlassBlurEnabledFromStorage();
+    dashboardTextStyle = getDashboardTextStyleFromStorage();
+  }
+
+  function saveDashboardGlassBlurEnabled() {
+    try {
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem(DASHBOARD_GLASS_BLUR_ENABLED_KEY, dashboardGlassBlurEnabled ? '1' : '0');
+      }
+      showToast(dashboardGlassBlurEnabled ? 'Dashboard Blur aktiviert' : 'Dashboard Blur deaktiviert');
+    } catch {
+      // ignore
+    }
+  }
+
+  function saveDashboardTextStyle() {
+    try {
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem(DASHBOARD_TEXT_STYLE_KEY, normalizeClockStyle(dashboardTextStyle));
+      }
+      showToast('Dashboard Schriftstil gespeichert');
+    } catch {
+      // ignore
+    }
   }
 
   function saveEdgeConfig() {
@@ -1247,6 +1283,10 @@
       {saveEdgeHeosEnabled}
       bind:edgeHeosHosts
       {isLocalhostUrl}
+      bind:dashboardGlassBlurEnabled
+      {saveDashboardGlassBlurEnabled}
+      bind:dashboardTextStyle
+      {saveDashboardTextStyle}
       {heosGroupPlayers}
       {heosGroupSelected}
       {heosGroupBusy}

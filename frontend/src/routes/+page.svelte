@@ -26,8 +26,10 @@
   } from '$lib/api';
   import { daysForMonthGrid } from '$lib/date';
   import { getEdgePlayerWidgetEnabledFromStorage } from '$lib/edge';
+  import { getDashboardGlassBlurEnabledFromStorage, getDashboardTextStyleFromStorage } from '$lib/dashboard';
   import { musicPlayerState } from '$lib/stores/musicPlayer';
-  import { normalizeClockStyle, type ClockStyle } from '$lib/clockStyle';
+  import { heosPlaybackStatus } from '$lib/stores/heosPlayback';
+  import { clockStyleClasses, normalizeClockStyle, type ClockStyle } from '$lib/clockStyle';
 
   let selectedDate = new Date();
   let monthAnchor = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1);
@@ -46,6 +48,8 @@
   let standbyMode = false;
 
   let musicWidgetEnabled = false;
+  let dashboardGlassBlurEnabled = false;
+  let dashboardTextStyle: ClockStyle = 'modern';
 
   const STANDBY_TRANSITION_MS = 700;
   let standbyTransitioning = false;
@@ -134,10 +138,16 @@
   function loadLocalWidgetToggles() {
     try {
       musicWidgetEnabled = getEdgePlayerWidgetEnabledFromStorage();
+      dashboardGlassBlurEnabled = getDashboardGlassBlurEnabledFromStorage();
+      dashboardTextStyle = getDashboardTextStyleFromStorage();
     } catch {
       musicWidgetEnabled = false;
+      dashboardGlassBlurEnabled = false;
+      dashboardTextStyle = 'modern';
     }
   }
+
+  $: dashboardTextClasses = clockStyleClasses(dashboardTextStyle);
 
   function startNewsRefresh(enabled: boolean) {
     if (standbyNewsRefreshInterval) {
@@ -731,11 +741,13 @@
           {/if}
         {/if}
 
-        {#if standbyMode && musicWidgetEnabled && $musicPlayerState.playing && $musicPlayerState.now}
+        {#if standbyMode && musicWidgetEnabled && (($musicPlayerState.playing && $musicPlayerState.now) || $heosPlaybackStatus.isExternal)}
           <div class="standby-music mt-2 pb-4 text-white">
             <div class="relative h-24 w-24 overflow-hidden rounded-none shadow-lg shadow-black/30">
               {#if $musicPlayerState.now?.coverUrl}
                 <img src={$musicPlayerState.now.coverUrl} alt="" class="h-full w-full object-cover" loading="lazy" />
+              {:else if $heosPlaybackStatus.isExternal && $heosPlaybackStatus.imageUrl}
+                <img src={$heosPlaybackStatus.imageUrl} alt="" class="h-full w-full object-cover" loading="lazy" />
               {:else}
                 <div class="h-full w-full bg-white/10 flex items-center justify-center">
                   <svg viewBox="0 0 24 24" class="h-7 w-7 text-white/30" fill="currentColor"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>
@@ -746,6 +758,9 @@
                 {#if $musicPlayerState.now}
                   <div class="text-sm font-semibold text-white leading-tight line-clamp-1">{$musicPlayerState.now.artist}</div>
                   <div class="text-[11px] text-white/70 leading-tight line-clamp-1">{$musicPlayerState.now.title}</div>
+                {:else if $heosPlaybackStatus.isExternal}
+                  <div class="text-sm font-semibold text-white leading-tight line-clamp-1">{$heosPlaybackStatus.artist ?? 'Musik'}</div>
+                  <div class="text-[11px] text-white/70 leading-tight line-clamp-1">{$heosPlaybackStatus.title ?? 'Wiedergabe'}</div>
                 {:else}
                   <div class="text-[11px] text-white/60">Keine Wiedergabe</div>
                 {/if}
@@ -775,11 +790,13 @@
               <div class="text-white"><ForecastWidget /></div>
 
               <div class="mt-auto">
-                {#if musicWidgetEnabled && $musicPlayerState.playing && $musicPlayerState.now}
+                {#if musicWidgetEnabled && (($musicPlayerState.playing && $musicPlayerState.now) || $heosPlaybackStatus.isExternal)}
                   <div class="standby-music mb-5">
                     <div class="relative h-24 w-24 overflow-hidden rounded-none shadow-lg shadow-black/30">
                       {#if $musicPlayerState.now?.coverUrl}
                         <img src={$musicPlayerState.now.coverUrl} alt="" class="h-full w-full object-cover" loading="lazy" />
+                      {:else if $heosPlaybackStatus.isExternal && $heosPlaybackStatus.imageUrl}
+                        <img src={$heosPlaybackStatus.imageUrl} alt="" class="h-full w-full object-cover" loading="lazy" />
                       {:else}
                         <div class="h-full w-full bg-white/10 flex items-center justify-center">
                           <svg viewBox="0 0 24 24" class="h-7 w-7 text-white/30" fill="currentColor"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>
@@ -790,6 +807,9 @@
                         {#if $musicPlayerState.now}
                           <div class="text-sm font-semibold text-white leading-tight line-clamp-1">{$musicPlayerState.now.artist}</div>
                           <div class="text-[11px] text-white/70 leading-tight line-clamp-1">{$musicPlayerState.now.title}</div>
+                        {:else if $heosPlaybackStatus.isExternal}
+                          <div class="text-sm font-semibold text-white leading-tight line-clamp-1">{$heosPlaybackStatus.artist ?? 'Musik'}</div>
+                          <div class="text-[11px] text-white/70 leading-tight line-clamp-1">{$heosPlaybackStatus.title ?? 'Wiedergabe'}</div>
                         {:else}
                           <div class="text-[11px] text-white/60">Keine Wiedergabe</div>
                         {/if}
@@ -865,11 +885,13 @@
                 {/if}
               </div>
 
-              {#if musicWidgetEnabled && $musicPlayerState.playing && $musicPlayerState.now}
+              {#if musicWidgetEnabled && (($musicPlayerState.playing && $musicPlayerState.now) || $heosPlaybackStatus.isExternal)}
                 <div class="standby-music mt-6 md:hidden">
                   <div class="relative h-24 w-24 overflow-hidden rounded-none shadow-lg shadow-black/30">
                     {#if $musicPlayerState.now?.coverUrl}
                       <img src={$musicPlayerState.now.coverUrl} alt="" class="h-full w-full object-cover" loading="lazy" />
+                    {:else if $heosPlaybackStatus.isExternal && $heosPlaybackStatus.imageUrl}
+                      <img src={$heosPlaybackStatus.imageUrl} alt="" class="h-full w-full object-cover" loading="lazy" />
                     {:else}
                       <div class="h-full w-full bg-white/10 flex items-center justify-center">
                         <svg viewBox="0 0 24 24" class="h-7 w-7 text-white/30" fill="currentColor"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>
@@ -880,6 +902,9 @@
                       {#if $musicPlayerState.now}
                         <div class="text-sm font-semibold text-white leading-tight line-clamp-1">{$musicPlayerState.now.artist}</div>
                         <div class="text-[11px] text-white/70 leading-tight line-clamp-1">{$musicPlayerState.now.title}</div>
+                      {:else if $heosPlaybackStatus.isExternal}
+                        <div class="text-sm font-semibold text-white leading-tight line-clamp-1">{$heosPlaybackStatus.artist ?? 'Musik'}</div>
+                        <div class="text-[11px] text-white/70 leading-tight line-clamp-1">{$heosPlaybackStatus.title ?? 'Wiedergabe'}</div>
                       {:else}
                         <div class="text-[11px] text-white/60">Keine Wiedergabe</div>
                       {/if}
@@ -955,7 +980,7 @@
         <div class="h-screen grid grid-rows-[1fr,minmax(140px,24vh)]" out:fly={{ x: 180, duration: 220 }}>
           <div class="min-h-0 overflow-hidden">
             {#if viewMode === 'month'}
-              <div class="glass border-b border-white/10 h-full overflow-hidden" transition:fade={{ duration: 180 }}>
+              <div class={`${dashboardTextClasses} ${dashboardGlassBlurEnabled ? 'glass-dashboard-blur' : 'glass-dashboard-flat'} border-b border-white/10 h-full overflow-hidden`} transition:fade={{ duration: 180 }}>
                 <CalendarMonth
                   {monthAnchor}
                   selected={selectedDate}
@@ -969,12 +994,12 @@
                 />
               </div>
             {:else}
-              <div class="glass border-b border-white/10 h-full overflow-hidden" transition:fade={{ duration: 180 }}>
+              <div class={`${dashboardTextClasses} ${dashboardGlassBlurEnabled ? 'glass-dashboard-blur' : 'glass-dashboard-flat'} border-b border-white/10 h-full overflow-hidden`} transition:fade={{ duration: 180 }}>
                 <WeekView {selectedDate} {events} {holidays} onSelect={onSelect} {viewMode} onSetViewMode={setViewMode} onEdit={openEditEventModal} />
               </div>
             {/if}
           </div>
-          <div class="border-t border-white/10 glass h-full overflow-hidden">
+          <div class={`${dashboardTextClasses} border-t border-white/10 ${dashboardGlassBlurEnabled ? 'glass-dashboard-blur' : 'glass-dashboard-flat'} h-full overflow-hidden`}>
             <EventsPanel {selectedDate} {events} {holidays} onCreate={openAddEventModal} onEdit={openEditEventModal} />
           </div>
         </div>
@@ -989,12 +1014,14 @@
 
               <div class="text-white"><ForecastWidget /></div>
 
-              {#if musicWidgetEnabled && $musicPlayerState.now}
+              {#if musicWidgetEnabled && ($musicPlayerState.now || $heosPlaybackStatus.isExternal)}
                 <div class="standby-music mt-10 mb-6">
                   <div class="flex items-center gap-5">
                     <div class="relative w-28 h-28 overflow-hidden rounded-lg shadow-2xl shadow-black/50 shrink-0">
                       {#if $musicPlayerState.now?.coverUrl}
                         <img src={$musicPlayerState.now.coverUrl} alt="" class="h-full w-full object-cover" loading="lazy" />
+                      {:else if $heosPlaybackStatus.isExternal && $heosPlaybackStatus.imageUrl}
+                        <img src={$heosPlaybackStatus.imageUrl} alt="" class="h-full w-full object-cover" loading="lazy" />
                       {:else}
                         <div class="h-full w-full bg-white/10 flex items-center justify-center">
                           <svg viewBox="0 0 24 24" class="h-10 w-10 text-white/30" fill="currentColor"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>
@@ -1007,6 +1034,9 @@
                       {#if $musicPlayerState.now}
                         <div class="text-lg font-semibold text-white leading-tight truncate">{$musicPlayerState.now.artist}</div>
                         <div class="text-white/60 text-sm mt-1 leading-snug line-clamp-2">{$musicPlayerState.now.title}</div>
+                      {:else if $heosPlaybackStatus.isExternal}
+                        <div class="text-lg font-semibold text-white leading-tight truncate">{$heosPlaybackStatus.artist ?? 'Musik'}</div>
+                        <div class="text-white/60 text-sm mt-1 leading-snug line-clamp-2">{$heosPlaybackStatus.title ?? 'Wiedergabe'}</div>
                       {:else}
                         <div class="text-white/40 text-sm">Keine Wiedergabe</div>
                       {/if}
@@ -1083,12 +1113,14 @@
                 {/if}
               </div>
 
-              {#if musicWidgetEnabled && $musicPlayerState.now}
+              {#if musicWidgetEnabled && ($musicPlayerState.now || $heosPlaybackStatus.isExternal)}
                 <div class="standby-music mt-6 md:hidden">
                   <div class="flex items-center gap-4">
                     <div class="h-14 w-14 overflow-hidden rounded-none shadow-lg shadow-black/30 shrink-0">
                       {#if $musicPlayerState.now?.coverUrl}
                         <img src={$musicPlayerState.now.coverUrl} alt="" class="h-full w-full object-cover" loading="lazy" />
+                      {:else if $heosPlaybackStatus.isExternal && $heosPlaybackStatus.imageUrl}
+                        <img src={$heosPlaybackStatus.imageUrl} alt="" class="h-full w-full object-cover" loading="lazy" />
                       {:else}
                         <div class="h-full w-full bg-white/10 flex items-center justify-center">
                           <svg viewBox="0 0 24 24" class="h-5 w-5 text-white/30" fill="currentColor"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>
@@ -1099,6 +1131,9 @@
                       {#if $musicPlayerState.now}
                         <div class="text-base font-semibold text-white truncate">{$musicPlayerState.now.artist}</div>
                         <div class="text-white/50 text-sm truncate">{$musicPlayerState.now.title}</div>
+                      {:else if $heosPlaybackStatus.isExternal}
+                        <div class="text-base font-semibold text-white truncate">{$heosPlaybackStatus.artist ?? 'Musik'}</div>
+                        <div class="text-white/50 text-sm truncate">{$heosPlaybackStatus.title ?? 'Wiedergabe'}</div>
                       {:else}
                         <div class="text-white/40 text-sm">Keine Wiedergabe</div>
                       {/if}

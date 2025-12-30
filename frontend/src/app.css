@@ -59,3 +59,21 @@ body {
   background: rgba(0, 0, 0, 0.35);
   backdrop-filter: blur(14px);
 }
+
+/* Dashboard surfaces: default is transparent-only; blur is optional via setting. */
+.glass-dashboard-flat {
+  background: rgba(0, 0, 0, 0.22);
+  backdrop-filter: none;
+}
+
+.glass-dashboard-blur {
+  background: rgba(0, 0, 0, 0.25);
+  backdrop-filter: blur(8px);
+}
+
+/* Backward-compat alias (if referenced elsewhere). */
+.glass-dashboard {
+  background: rgba(0, 0, 0, 0.22);
+  backdrop-filter: none;
+}
+

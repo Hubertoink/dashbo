@@ -71,6 +71,12 @@
   export let edgeHeosHosts: string;
   export let isLocalhostUrl: (value: string) => boolean;
 
+  export let dashboardGlassBlurEnabled: boolean;
+  export let saveDashboardGlassBlurEnabled: () => void | Promise<void>;
+
+  export let dashboardTextStyle: import('$lib/clockStyle').ClockStyle;
+  export let saveDashboardTextStyle: () => void | Promise<void>;
+
   export let heosGroupPlayers: HeosPlayerDto[];
   export let heosGroupSelected: Record<string, boolean>;
   export let heosGroupBusy: boolean;
@@ -168,6 +174,10 @@
           {saveEdgeHeosEnabled}
           bind:edgeHeosHosts
           {isLocalhostUrl}
+          bind:dashboardGlassBlurEnabled
+          {saveDashboardGlassBlurEnabled}
+          bind:dashboardTextStyle
+          {saveDashboardTextStyle}
           {heosGroupPlayers}
           {heosGroupSelected}
           {heosGroupBusy}

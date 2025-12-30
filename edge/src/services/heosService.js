@@ -420,7 +420,12 @@ async function playStream(pid, url, name, opts) {
   };
   if (name) attrs.name = String(name);
 
-  return sendWithHostsFallback('browse', 'play_stream', attrs, { hosts: opts?.hosts });
+  // If multiple HEOS hosts are configured, target the host that actually contains the pid.
+  // This makes play_stream more reliable in setups where each host only reports its local players.
+  const targetHost = await findHostForPid(attrs.pid, opts?.hosts);
+  const hosts = targetHost ? [targetHost] : opts?.hosts;
+
+  return sendWithHostsFallback('browse', 'play_stream', attrs, { hosts });
 }
 
 async function setPlayState(pid, state, opts) {
@@ -448,6 +453,124 @@ async function setVolume(pid, level, opts) {
 
 async function getNowPlayingMedia(pid, opts) {
   return sendWithHostsFallback('player', 'get_now_playing_media', { pid: Number(pid) }, { hosts: opts?.hosts });
+}
+
+function parseHeosPlayState(resp) {
+  const parsed = resp?.heos?.message?.parsed;
+  const raw =
+    parsed?.state ??
+    parsed?.play_state ??
+    parsed?.playState ??
+    parsed?.playstate ??
+    resp?.payload?.state;
+  const s = String(raw || '').trim().toLowerCase();
+  if (s === 'play' || s === 'pause' || s === 'stop') return s;
+  return 'unknown';
+}
+
+function parseNowPlayingPayload(resp) {
+  const payload = resp?.response?.payload ?? resp?.payload;
+  if (!payload || typeof payload !== 'object') {
+    return {
+      title: null,
+      artist: null,
+      album: null,
+      imageUrl: null,
+      source: null,
+      url: null
+    };
+  }
+
+  const titleRaw =
+    payload.song ??
+    payload.title ??
+    payload.station ??
+    payload.station_name ??
+    payload.stationName ??
+    payload.name ??
+    payload.track ??
+    payload.media_name;
+  const artistRaw =
+    payload.artist ??
+    payload.song_artist ??
+    payload.songArtist ??
+    payload.artist_name ??
+    payload.artistName ??
+    payload.media_artist;
+  const albumRaw =
+    payload.album ??
+    payload.album_name ??
+    payload.albumName ??
+    payload.media_album;
+
+  const imageRaw =
+    payload.image_url ??
+    payload.imageUrl ??
+    payload.image ??
+    payload.album_art ??
+    payload.album_art_url ??
+    payload.albumArt ??
+    payload.albumArtUrl ??
+    payload.art ??
+    payload.art_url ??
+    payload.artUrl;
+
+  const sourceRaw =
+    payload.type ??
+    payload.source_id ??
+    payload.sourceId ??
+    payload.source ??
+    payload.source_name ??
+    payload.sourceName ??
+    payload.input ??
+    payload.service;
+
+  const urlRaw = payload.url ?? payload.stream_url ?? payload.streamUrl;
+
+  const title = titleRaw != null ? String(titleRaw).trim() : '';
+  const artist = artistRaw != null ? String(artistRaw).trim() : '';
+  const album = albumRaw != null ? String(albumRaw).trim() : '';
+  const imageUrl = imageRaw != null ? String(imageRaw).trim() : '';
+  const source = sourceRaw != null ? String(sourceRaw).trim() : '';
+  const url = urlRaw != null ? String(urlRaw).trim() : '';
+
+  return {
+    title: title || null,
+    artist: artist || null,
+    album: album || null,
+    imageUrl: imageUrl || null,
+    source: source || null,
+    url: url || null
+  };
+}
+
+async function getPlaybackSummary(pid, opts) {
+  const p = typeof pid === 'number' ? pid : Number(pid);
+  if (!Number.isFinite(p) || p === 0) throw new Error('Invalid pid');
+
+  const [playStateRes, nowPlayingRes] = await Promise.allSettled([
+    getPlayState(p, opts),
+    getNowPlayingMedia(p, opts)
+  ]);
+
+  const playStateResp = playStateRes.status === 'fulfilled' ? playStateRes.value : null;
+  const nowPlayingResp = nowPlayingRes.status === 'fulfilled' ? nowPlayingRes.value : null;
+
+  const state = playStateResp ? parseHeosPlayState(playStateResp) : 'unknown';
+  const isPlaying = state === 'play';
+
+  const media = nowPlayingResp ? parseNowPlayingPayload(nowPlayingResp) : parseNowPlayingPayload(null);
+
+  const hasAnyMeta = Boolean(media?.title || media?.artist || media?.album || media?.source || media?.url);
+  const isActive = state === 'play' || state === 'pause' || (state === 'unknown' && hasAnyMeta);
+
+  return {
+    pid: p,
+    state,
+    isPlaying,
+    isActive,
+    ...media
+  };
 }
 
 async function getGroups(opts) {
@@ -499,6 +622,7 @@ module.exports = {
   getVolume,
   setVolume,
   getNowPlayingMedia,
+  getPlaybackSummary,
   getGroups,
   setGroup,
   unGroup

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { musicPlayerState, togglePlayPause, playNext, playPrev } from '$lib/stores/musicPlayer';
+  import { heosPlaybackStatus } from '$lib/stores/heosPlayback';
   import {
     EDGE_BASE_URL_KEY,
     EDGE_TOKEN_KEY,
@@ -21,6 +22,19 @@
   $: positionSec = $musicPlayerState.positionSec;
   $: durationSec = $musicPlayerState.durationSec;
   $: pct = durationSec > 0 ? Math.min(100, Math.max(0, (positionSec / durationSec) * 100)) : 0;
+
+  $: heosExternal = $heosPlaybackStatus?.isExternal === true;
+  $: heosExternalTitle = $heosPlaybackStatus?.title ? String($heosPlaybackStatus.title) : '';
+  $: heosExternalArtist = $heosPlaybackStatus?.artist ? String($heosPlaybackStatus.artist) : '';
+  $: heosExternalAlbum = $heosPlaybackStatus?.album ? String($heosPlaybackStatus.album) : '';
+  $: heosExternalSource = $heosPlaybackStatus?.source ? String($heosPlaybackStatus.source) : '';
+  $: heosExternalImageUrl = $heosPlaybackStatus?.imageUrl ? String($heosPlaybackStatus.imageUrl) : '';
+  $: heosExternalSourceLabel =
+    heosExternalSource && heosExternalSource.toLowerCase() !== 'station' ? heosExternalSource : '';
+
+  $: displayArtist = now?.artist ? String(now.artist) : heosEnabled && selectedPid && heosExternal && heosExternalArtist ? heosExternalArtist : '';
+  $: displayTitle = now?.title ? String(now.title) : heosEnabled && selectedPid && heosExternal && heosExternalTitle ? heosExternalTitle : '';
+  $: externalSuffix = heosExternal ? ` (${(heosExternalSourceLabel || 'extern').toLowerCase()})` : '';
 
   let heosEnabled = false;
   let edgeBaseUrl = '';
@@ -289,6 +303,9 @@
     {#if now?.coverUrl}
       <img src={now.coverUrl} alt="" class="h-full w-full object-cover" loading="lazy" />
       <div class="absolute inset-0 bg-gradient-to-r from-transparent to-black/70"></div>
+    {:else if heosEnabled && selectedPid && heosExternal && heosExternalImageUrl}
+      <img src={heosExternalImageUrl} alt="" class="h-full w-full object-cover" loading="lazy" />
+      <div class="absolute inset-0 bg-gradient-to-r from-transparent to-black/70"></div>
     {:else}
       <div class="h-full w-full bg-white/5 flex items-center justify-center">
         <svg viewBox="0 0 24 24" class="h-8 w-8 text-white/20" fill="currentColor">
@@ -302,8 +319,8 @@
   <div class="relative h-full flex items-center pl-[36%] pr-3">
     {#if now}
       <div class="flex-1 min-w-0 flex flex-col justify-center gap-1">
-        <div class="text-sm font-semibold truncate leading-tight">{now.title}</div>
-        <div class="text-white/50 text-xs truncate">{now.artist} — {now.album}</div>
+        <div class="text-sm font-semibold truncate leading-tight">{displayArtist ? displayArtist : 'Musik'}</div>
+        <div class="text-white/50 text-xs truncate">{displayTitle ? displayTitle : '—'}</div>
         
         <!-- Progress bar -->
         <div class="flex items-center gap-2 mt-0.5">
@@ -319,7 +336,7 @@
       <div class="flex flex-col items-end gap-1 ml-2">
         {#if heosEnabled}
           {#if selectedPid}
-            <div class="text-[10px] text-white/50 leading-none">HEOS: {selectedName ? selectedName : selectedPid}</div>
+            <div class="text-[10px] text-white/50 leading-none">HEOS: {selectedName ? selectedName : selectedPid}{externalSuffix}</div>
           {/if}
         {/if}
 
@@ -405,18 +422,37 @@
       </div>
     {:else}
       <div class="flex-1">
-        <div class="text-white/70 text-sm font-medium">Musik</div>
-        <div class="text-white/40 text-xs">Keine Wiedergabe</div>
+        <div class="text-white/70 text-sm font-medium">{displayArtist ? displayArtist : 'Musik'}</div>
+        <div class="text-white/40 text-xs">{displayTitle ? displayTitle : 'Keine Wiedergabe'}</div>
+        {#if heosEnabled && selectedPid}
+          <div class="text-[10px] text-white/50 leading-none mt-1">HEOS: {selectedName ? selectedName : selectedPid}{externalSuffix}</div>
+        {/if}
       </div>
-      <a
-        class="h-8 w-8 rounded-lg bg-white/10 hover:bg-white/20 inline-flex items-center justify-center"
-        href="/music"
-        aria-label="Bibliothek"
-      >
-        <svg viewBox="0 0 24 24" class="h-4 w-4" fill="currentColor">
-          <path d="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-1 9h-4v4h-2v-4H9V9h4V5h2v4h4v2z"/>
-        </svg>
-      </a>
+      <div class="flex items-center gap-1">
+        {#if heosEnabled}
+          <button
+            type="button"
+            class="h-8 w-8 rounded-lg bg-white/10 hover:bg-white/20 inline-flex items-center justify-center"
+            on:click={toggleSpeakerPicker}
+            aria-label="HEOS Speaker wählen"
+            title="HEOS Speaker wählen"
+          >
+            <svg viewBox="0 0 24 24" class="h-4 w-4" fill="currentColor">
+              <path d="M4 10v4c0 1.1.9 2 2 2h2l5 4V4L8 8H6c-1.1 0-2 .9-2 2zm13.5 2c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z" />
+            </svg>
+          </button>
+        {/if}
+        <a
+          class="h-8 w-8 rounded-lg bg-white/10 hover:bg-white/20 inline-flex items-center justify-center"
+          href="/music"
+          aria-label="Bibliothek"
+          title="Bibliothek"
+        >
+          <svg viewBox="0 0 24 24" class="h-4 w-4" fill="currentColor">
+            <path d="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-1 9h-4v4h-2v-4H9V9h4V5h2v4h4v2z"/>
+          </svg>
+        </a>
+      </div>
     {/if}
   </div>
 

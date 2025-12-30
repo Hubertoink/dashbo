@@ -9,6 +9,7 @@
   export let saving: boolean = false;
   export let error: string | null = null;
   export let showToggle: boolean = true;
+  export let disableContentWhenOff: boolean = true;
 
   $: effectiveKicker = kicker ?? widgetKey;
 
@@ -79,7 +80,7 @@
   </div>
 
   <!-- Content (slot) -->
-  <div class="p-4 {!enabled ? 'opacity-50 pointer-events-none' : ''}">
+  <div class="p-4 {!enabled && disableContentWhenOff ? 'opacity-50 pointer-events-none' : ''}">
     <slot />
   </div>
 
