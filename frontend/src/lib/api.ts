@@ -43,6 +43,7 @@ export type TodoItemDto = {
   title: string;
   status: string;
   completed: boolean;
+  startAt?: string | null;
   dueAt: string | null;
   bodyPreview: string | null;
   updatedAt: string | null;
@@ -199,8 +200,22 @@ export async function updateTodo(input: {
   taskId: string;
   title?: string;
   completed?: boolean;
+  description?: string | null;
+  startAt?: string | null;
+  dueAt?: string | null;
 }): Promise<{ ok: true }> {
   return api<{ ok: true }>('/todos/update', { method: 'POST', body: JSON.stringify(input) });
+}
+
+export async function createTodo(input: {
+  connectionId?: number;
+  listName?: string;
+  title: string;
+  description?: string | null;
+  startAt?: string | null;
+  dueAt?: string | null;
+}): Promise<{ ok: true }> {
+  return api<{ ok: true }>('/todos/create', { method: 'POST', body: JSON.stringify(input) });
 }
 
 export async function createEvent(input: {

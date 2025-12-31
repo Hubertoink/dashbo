@@ -1,6 +1,7 @@
 <script lang="ts">
-  import { onMount, tick } from 'svelte';
+  import { onMount } from 'svelte';
   import { fetchTodos, updateTodo, type TodoItemDto } from '$lib/api';
+  import TodoModal from '$lib/components/TodoModal.svelte';
 
   export let variant: 'panel' | 'plain' = 'panel';
   export let expanded = false;
@@ -12,9 +13,10 @@
   let error: string | null = null;
 
   const saving = new Set<string>();
-  let editingId: string | null = null;
-  let editingTitle = '';
-  let editInput: HTMLInputElement | null = null;
+
+  let modalOpen = false;
+  let modalMode: 'create' | 'edit' = 'create';
+  let modalItem: TodoItemDto | null = null;
 
   const TODOS_CACHE_KEY = 'dashbo_todos_cache_v1';
   const TODOS_CACHE_TTL_MS = 5 * 60 * 1000;
@@ -82,10 +84,20 @@
     }
   }
 
-  function startEdit(item: TodoItemDto) {
-    editingId = item.taskId;
-    editingTitle = item.title;
-    void tick().then(() => editInput?.focus());
+  function openCreate() {
+    modalMode = 'create';
+    modalItem = null;
+    modalOpen = true;
+  }
+
+  function openEdit(item: TodoItemDto) {
+    modalMode = 'edit';
+    modalItem = item;
+    modalOpen = true;
+  }
+
+  function closeModal() {
+    modalOpen = false;
   }
 
   $: visibleItems = items.filter((item) => {
@@ -100,36 +112,11 @@
   $: containerClass =
     variant === 'plain' ? 'text-white' : 'rounded-lg bg-white/5 p-3 text-white';
 
-  async function commitEdit(item: TodoItemDto) {
-    if (!editingId) return;
-
-    const newTitle = editingTitle.trim();
-    editingId = null;
-
-    if (!newTitle || newTitle === item.title) return;
-
-    const key = `${item.connectionId}:${item.listId}:${item.taskId}`;
-    saving.add(key);
-    // Optimistic update for title
-    items = items.map((i) =>
-      i.taskId === item.taskId && i.listId === item.listId && i.connectionId === item.connectionId
-        ? { ...i, title: newTitle }
-        : i
-    );
-    try {
-      await updateTodo({
-        connectionId: item.connectionId,
-        listId: item.listId,
-        taskId: item.taskId,
-        title: newTitle,
-      });
-      await load(false);
-    } catch (e: any) {
-      error = e?.message || 'Fehler beim Speichern';
-      await load(false);
-    } finally {
-      saving.delete(key);
-    }
+  function formatDue(dueAt: string | null) {
+    if (!dueAt) return '';
+    const d = new Date(dueAt);
+    if (Number.isNaN(d.getTime())) return '';
+    return d.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' });
   }
 
   function colorClass(name: string) {
@@ -211,70 +198,78 @@
   });
 </script>
 
-<!-- Only render when there are visible items (graceful hide when To Do not available) -->
-{#if visibleItems.length > 0}
 <div class="{containerClass} {expanded ? 'flex-1 flex flex-col' : ''}">
   <div class="mb-2 flex items-center justify-between">
     <div class="text-base font-semibold">To Do</div>
-    {#if onToggleExpand}
+    <div class="flex items-center gap-1">
       <button
         type="button"
         class="p-1 rounded hover:bg-white/10 transition-colors"
-        on:click|stopPropagation={onToggleExpand}
-        title={expanded ? 'Verkleinern' : 'Vergrößern'}
+        on:click|stopPropagation={openCreate}
+        title="ToDo hinzufügen"
+        aria-label="ToDo hinzufügen"
       >
-        <svg class="w-4 h-4 text-white/60" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-          {#if expanded}
-            <path stroke-linecap="round" stroke-linejoin="round" d="M4 14h6m0 0v6m0-6L3 21M20 10h-6m0 0V4m0 6l7-7" />
-          {:else}
-            <path stroke-linecap="round" stroke-linejoin="round" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5" />
-          {/if}
+        <svg class="w-4 h-4 text-white/70" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
         </svg>
       </button>
-    {/if}
+
+      {#if onToggleExpand}
+        <button
+          type="button"
+          class="p-1 rounded hover:bg-white/10 transition-colors"
+          on:click|stopPropagation={onToggleExpand}
+          title={expanded ? 'Verkleinern' : 'Vergrößern'}
+        >
+          <svg class="w-4 h-4 text-white/60" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            {#if expanded}
+              <path stroke-linecap="round" stroke-linejoin="round" d="M4 14h6m0 0v6m0-6L3 21M20 10h-6m0 0V4m0 6l7-7" />
+            {:else}
+              <path stroke-linecap="round" stroke-linejoin="round" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5" />
+            {/if}
+          </svg>
+        </button>
+      {/if}
+    </div>
   </div>
     <div class="space-y-2 {expanded ? 'flex-1 overflow-y-auto' : ''}">
-      {#each visibleItems.slice(0, expanded ? 20 : 5) as item (item.taskId)}
-        {@const key = `${item.connectionId}:${item.listId}:${item.taskId}`}
-        <div class="flex items-center gap-2">
-          <button
-            class="h-6 w-6 rounded border border-white/30 flex items-center justify-center"
-            on:click={() => toggleCompleted(item)}
-            disabled={saving.has(key)}
-            aria-label="Toggle completed"
-          >
-            {#if item.completed}
-              <span class="text-sm">✓</span>
-            {/if}
-          </button>
+      {#if visibleItems.length === 0}
+        <div class="text-white/50 text-sm">Keine ToDos</div>
+      {:else}
+        {#each visibleItems.slice(0, expanded ? 20 : 5) as item (item.taskId)}
+          {@const key = `${item.connectionId}:${item.listId}:${item.taskId}`}
+          {@const dueLabel = formatDue(item.dueAt)}
+          <div class="flex items-center gap-2">
+            <button
+              class="h-6 w-6 rounded border border-white/30 flex items-center justify-center"
+              on:click={() => toggleCompleted(item)}
+              disabled={saving.has(key)}
+              aria-label="Toggle completed"
+            >
+              {#if item.completed}
+                <span class="text-sm">✓</span>
+              {/if}
+            </button>
 
-          <div class={`h-2.5 w-2.5 rounded-full ${colorClass(item.color)}`} title={item.connectionLabel}></div>
+            <div class={`h-2.5 w-2.5 rounded-full ${colorClass(item.color)}`} title={item.connectionLabel}></div>
 
-          {#if editingId === item.taskId}
-            <input
-              class="flex-1 rounded bg-white/10 px-2 py-1 text-sm outline-none"
-              bind:value={editingTitle}
-              bind:this={editInput}
-              on:blur={() => commitEdit(item)}
-              on:keydown={(e) => {
-                if (e.key === 'Enter') {
-                  const el = e.currentTarget;
-                  if (el instanceof HTMLInputElement) el.blur();
-                }
-                if (e.key === 'Escape') editingId = null;
-              }}
-            />
-          {:else}
             <button
               class={`flex-1 text-left text-base truncate ${item.completed ? 'line-through opacity-60' : ''}`}
-              on:click={() => startEdit(item)}
+              on:click={() => openEdit(item)}
               title={item.title}
             >
-              {item.title}
+              {item.title}{dueLabel ? ` (${dueLabel})` : ''}
             </button>
-          {/if}
-        </div>
-      {/each}
+          </div>
+        {/each}
+      {/if}
     </div>
 </div>
-{/if}
+
+<TodoModal
+  open={modalOpen}
+  mode={modalMode}
+  item={modalItem}
+  onClose={closeModal}
+  onSaved={() => void load(false)}
+/>

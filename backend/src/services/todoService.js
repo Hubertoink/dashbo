@@ -27,6 +27,19 @@ function parseGraphDateTime(dt) {
   return Number.isNaN(d.getTime()) ? null : d.toISOString();
 }
 
+function graphDateTimeFromIso(iso) {
+  if (!iso) return null;
+  const s = String(iso);
+  const d = new Date(s);
+  if (Number.isNaN(d.getTime())) return null;
+
+  // Graph expects { dateTime, timeZone }. Use UTC to be deterministic.
+  // dateTime should not include a timezone offset when timeZone is provided.
+  const utc = d.toISOString();
+  const dateTime = utc.replace(/Z$/, '');
+  return { dateTime, timeZone: 'UTC' };
+}
+
 function getTodoListName() {
   return (process.env.TODO_LIST_NAME || 'Dashbo').trim() || 'Dashbo';
 }
@@ -159,7 +172,8 @@ async function listTodoTasks({ accessToken, listId }) {
   const qs = new URLSearchParams({
     $top: '50',
     $orderby: 'lastModifiedDateTime desc',
-    $select: 'id,title,status,bodyPreview,dueDateTime,createdDateTime,lastModifiedDateTime,completedDateTime',
+    $select:
+      'id,title,status,bodyPreview,startDateTime,dueDateTime,createdDateTime,lastModifiedDateTime,completedDateTime',
   });
 
   // Same idea: sometimes OData options cause invalidRequest; try without them.
@@ -234,6 +248,7 @@ async function listTodos({ userId, listNames }) {
         const title = t?.title ? String(t.title) : 'Todo';
         const status = normalizeTodoStatus(t?.status);
         const completed = status === 'completed';
+        const startAt = parseGraphDateTime(t?.startDateTime) || null;
         const dueAt = parseGraphDateTime(t?.dueDateTime) || null;
         const bodyPreview = t?.bodyPreview ? String(t.bodyPreview) : null;
         const updatedAt = t?.lastModifiedDateTime ? new Date(String(t.lastModifiedDateTime)).toISOString() : null;
@@ -248,6 +263,7 @@ async function listTodos({ userId, listNames }) {
           title,
           status,
           completed,
+          startAt,
           dueAt,
           bodyPreview,
           updatedAt,
@@ -282,6 +298,102 @@ async function listTodos({ userId, listNames }) {
   return { listName: effectiveListNames.join(', '), items: out };
 }
 
+async function createTodoList({ accessToken, listName }) {
+  const displayName = String(listName || '').trim() || getTodoListName();
+  const { resp, json } = await graphTodoJson({
+    accessToken,
+    path: '/me/todo/lists',
+    method: 'POST',
+    body: { displayName },
+  });
+
+  if (!resp.ok) {
+    const code = json?.error?.code || '';
+    const msg = json?.error?.message || `todo_list_create_failed (${resp.status})`;
+    const err = new Error(String(msg));
+    err.code = String(code);
+    err.status = resp.status;
+    throw err;
+  }
+
+  const id = json?.id ? String(json.id) : null;
+  return id;
+}
+
+async function createTodo({ userId, connectionId, listName, title, description, startAt, dueAt }) {
+  const cfg = getOutlookConfig({ allowMissing: true });
+  if (!cfg) throw new Error('outlook_not_configured');
+
+  const trimmedTitle = String(title || '').trim();
+  if (!trimmedTitle) {
+    const err = new Error('invalid_title');
+    err.status = 400;
+    throw err;
+  }
+
+  const connections = await listOutlookConnections({ userId });
+
+  const effectiveConnectionId =
+    connectionId != null
+      ? Number(connectionId)
+      : connections.length > 0
+        ? Number(connections[0].id)
+        : 0;
+
+  let accessToken = null;
+  if (Number(effectiveConnectionId) > 0) {
+    accessToken = await getValidAccessTokenForConnection({ userId, connectionId: Number(effectiveConnectionId) });
+  } else {
+    accessToken = await getValidAccessToken({ userId });
+  }
+
+  if (!accessToken) {
+    const err = new Error('outlook_not_connected');
+    err.status = 400;
+    throw err;
+  }
+
+  const effectiveListName = String(listName || '').trim() || getTodoListName();
+  let listId = await resolveTodoListId({ accessToken, listName: effectiveListName });
+  if (!listId) {
+    listId = await createTodoList({ accessToken, listName: effectiveListName });
+  }
+
+  if (!listId) {
+    const err = new Error('todo_list_not_found');
+    err.status = 400;
+    throw err;
+  }
+
+  const body = {
+    title: trimmedTitle,
+    ...(description != null
+      ? {
+          body: {
+            content: String(description || ''),
+            contentType: 'text',
+          },
+        }
+      : {}),
+    ...(startAt != null ? { startDateTime: graphDateTimeFromIso(startAt) } : {}),
+    ...(dueAt != null ? { dueDateTime: graphDateTimeFromIso(dueAt) } : {}),
+  };
+
+  const path = `/me/todo/lists/${encodeURIComponent(String(listId))}/tasks`;
+  const { resp, json } = await graphTodoJson({ accessToken, path, method: 'POST', body });
+
+  if (!resp.ok) {
+    const code = json?.error?.code || '';
+    const msg = json?.error?.message || `todo_create_failed (${resp.status})`;
+    const err = new Error(String(msg));
+    err.code = String(code);
+    err.status = resp.status;
+    throw err;
+  }
+
+  return { ok: true };
+}
+
 async function updateTodo({ userId, connectionId, listId, taskId, patch }) {
   const cfg = getOutlookConfig({ allowMissing: true });
   if (!cfg) throw new Error('outlook_not_configured');
@@ -302,6 +414,18 @@ async function updateTodo({ userId, connectionId, listId, taskId, patch }) {
   const body = {};
   if (patch.title != null) body.title = String(patch.title);
   if (patch.status != null) body.status = String(patch.status);
+  if (patch.description != null) {
+    body.body = {
+      content: String(patch.description || ''),
+      contentType: 'text',
+    };
+  }
+  if (patch.startAt !== undefined) {
+    body.startDateTime = patch.startAt ? graphDateTimeFromIso(patch.startAt) : null;
+  }
+  if (patch.dueAt !== undefined) {
+    body.dueDateTime = patch.dueAt ? graphDateTimeFromIso(patch.dueAt) : null;
+  }
 
   const path = `/me/todo/lists/${encodeURIComponent(String(listId))}/tasks/${encodeURIComponent(String(taskId))}`;
   const { resp, json } = await graphTodoJson({ accessToken, path, method: 'PATCH', body });
@@ -320,6 +444,7 @@ async function updateTodo({ userId, connectionId, listId, taskId, patch }) {
 
 module.exports = {
   listTodos,
+  createTodo,
   updateTodo,
   getTodoListName,
 };
