@@ -17,6 +17,32 @@
   type HeosGroupPlayerDto = { name: string; pid: number; role?: 'leader' | 'member' | string };
   type HeosGroupDto = { name: string; gid: number | string; players: HeosGroupPlayerDto[] };
 
+  // Group creation mode
+  let groupingMode = false;
+  let selectedForGroup: Set<number> = new Set();
+  let groupBusy = false;
+  let groupError: string | null = null;
+
+  function updateHeosGroupsLineFromGroups() {
+    heosGroupsLine = groups.length > 0 ? `${groups.length} Gruppen` : 'Keine Gruppen';
+  }
+
+  function sleep(ms: number) {
+    return new Promise<void>((resolve) => setTimeout(resolve, ms));
+  }
+
+  async function refreshGroupsUntilPidGone(pid: number, opts?: { tries?: number; delayMs?: number }) {
+    const tries = Math.max(1, Math.min(10, Number(opts?.tries ?? 4)));
+    const delayMs = Math.max(50, Math.min(2000, Number(opts?.delayMs ?? 350)));
+
+    for (let i = 0; i < tries; i += 1) {
+      await fetchGroups();
+      const stillPresent = groups.some((g) => g.players.some((p) => p.pid === pid));
+      if (!stillPresent) return;
+      if (i < tries - 1) await sleep(delayMs);
+    }
+  }
+
   $: now = $musicPlayerState.now;
   $: playing = $musicPlayerState.playing;
   $: positionSec = $musicPlayerState.positionSec;
@@ -58,6 +84,9 @@
 
   function closeSpeakerModal() {
     speakerOpen = false;
+    groupingMode = false;
+    selectedForGroup = new Set();
+    groupError = null;
   }
 
   function loadHeosConfig() {
@@ -179,13 +208,111 @@
       const r = await edgeFetchJson<any>(base, '/api/heos/groups', edgeToken || undefined, { headers });
       const payload = r?.response?.payload;
       groups = parseHeosGroupsPayload(payload);
-      heosGroupsLine = groups.length > 0 ? `${groups.length} Gruppen` : 'Keine Gruppen';
+      updateHeosGroupsLineFromGroups();
     } catch (err) {
       groupsError = err instanceof Error ? err.message : 'Gruppen konnten nicht geladen werden.';
       groups = [];
+      updateHeosGroupsLineFromGroups();
     } finally {
       groupsBusy = false;
     }
+  }
+
+  async function createGroup(leaderPid: number, memberPids: number[]) {
+    groupError = null;
+    groupBusy = true;
+    try {
+      const base = normalizeEdgeBaseUrl(edgeBaseUrl);
+      if (!base) throw new Error('Edge Base URL fehlt');
+
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (heosHosts.trim()) headers['X-HEOS-HOSTS'] = heosHosts.trim();
+
+      await edgeFetchJson<any>(base, '/api/heos/group', edgeToken || undefined, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ leaderPid, memberPids })
+      });
+      // Reset grouping mode and refresh
+      groupingMode = false;
+      selectedForGroup = new Set();
+      // HEOS grouping state can take a moment to propagate.
+      await fetchGroups();
+      if (groups.length === 0) {
+        await sleep(250);
+        await fetchGroups();
+      }
+      await fetchSpeakers();
+    } catch (err) {
+      groupError = err instanceof Error ? err.message : 'Gruppe konnte nicht erstellt werden.';
+    } finally {
+      groupBusy = false;
+    }
+  }
+
+  async function dissolveGroup(pid: number) {
+    groupError = null;
+    groupBusy = true;
+    try {
+      const base = normalizeEdgeBaseUrl(edgeBaseUrl);
+      if (!base) throw new Error('Edge Base URL fehlt');
+
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (heosHosts.trim()) headers['X-HEOS-HOSTS'] = heosHosts.trim();
+
+      await edgeFetchJson<any>(base, '/api/heos/ungroup', edgeToken || undefined, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ pid })
+      });
+    } catch (err) {
+      // If HEOS is already ungrouped, a subsequent ungroup can return a generic error.
+      // We'll refresh groups anyway and only surface an error if the group still exists.
+      groupError = err instanceof Error ? err.message : 'Gruppe konnte nicht aufgelöst werden.';
+    } finally {
+      // Refresh lists (with a short retry to avoid stale UI due to HEOS propagation delays)
+      await refreshGroupsUntilPidGone(pid);
+      await fetchSpeakers();
+
+      const stillPresent = groups.some((g) => g.players.some((p) => p.pid === pid));
+      if (!stillPresent) {
+        // Clear stale errors if the group is actually gone.
+        groupError = null;
+      }
+      groupBusy = false;
+    }
+  }
+
+  function toggleSpeakerForGroup(pid: number) {
+    if (selectedForGroup.has(pid)) {
+      selectedForGroup.delete(pid);
+    } else {
+      selectedForGroup.add(pid);
+    }
+    selectedForGroup = new Set(selectedForGroup); // trigger reactivity
+  }
+
+  function cancelGrouping() {
+    groupingMode = false;
+    selectedForGroup = new Set();
+    groupError = null;
+  }
+
+  function startGrouping() {
+    groupingMode = true;
+    selectedForGroup = new Set();
+    groupError = null;
+  }
+
+  async function confirmGrouping() {
+    const pids = Array.from(selectedForGroup);
+    if (pids.length < 2) {
+      groupError = 'Mindestens 2 Speaker für eine Gruppe nötig.';
+      return;
+    }
+    // First selected becomes leader
+    const [leader, ...members] = pids;
+    await createGroup(leader, members);
   }
 
   async function fetchVolumeForSelected() {
@@ -467,6 +594,7 @@
         class="w-full max-w-sm rounded-2xl bg-black/85 border border-white/10 backdrop-blur-md p-4"
         on:click|stopPropagation
       >
+        <!-- Header -->
         <div class="flex items-center">
           <div class="font-medium">HEOS Speaker</div>
           <button
@@ -480,12 +608,37 @@
 
         <div class="text-xs text-white/60 mt-1">Wähle, auf welchem Speaker abgespielt wird.</div>
 
-        {#if heosStatusLine}
-          <div class="text-[11px] text-white/50 mt-2">{heosStatusLine}</div>
-        {/if}
+        <!-- Status line with refresh button -->
+        <div class="flex items-center gap-2 mt-2">
+          {#if heosStatusLine}
+            <div class="text-[11px] text-white/50 flex-1">{heosStatusLine}</div>
+          {/if}
+          <button
+            type="button"
+            class="h-6 w-6 rounded-md bg-white/10 hover:bg-white/15 inline-flex items-center justify-center disabled:opacity-50"
+            title="Aktualisieren"
+            aria-label="Aktualisieren"
+            disabled={speakersBusy || groupsBusy || groupBusy}
+            on:click={async () => {
+              await fetchSpeakers({ force: true });
+              await fetchGroups();
+              await fetchVolumeForSelected();
+            }}
+          >
+            <svg viewBox="0 0 24 24" class="h-3.5 w-3.5 {speakersBusy || groupsBusy ? 'animate-spin' : ''}" fill="currentColor">
+              <path d="M17.65 6.35A7.958 7.958 0 0012 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0112 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
+            </svg>
+          </button>
+        </div>
 
+        <!-- Groups line -->
         {#if heosGroupsLine}
           <div class="text-[11px] text-white/50 mt-1">{heosGroupsLine}</div>
+        {/if}
+
+        <!-- Error display -->
+        {#if groupError}
+          <div class="text-xs text-red-300 mt-2">{groupError}</div>
         {/if}
 
         <div class="mt-3">
@@ -495,62 +648,152 @@
             <div class="text-xs text-red-300">{speakersError || groupsError}</div>
           {:else}
             <div class="rounded-xl bg-white/5 border border-white/10 overflow-hidden">
-              <button
-                type="button"
-                class={`w-full px-3 py-2 text-left text-sm hover:bg-white/10 transition ${!selectedPid ? 'bg-white/10' : ''}`}
-                on:click={() => {
-                  selectedPid = '';
-                  persistSelectedPid('');
-                  closeSpeakerModal();
-                }}
-              >
-                Kein Speaker
-              </button>
+              <!-- No speaker option (only in selection mode) -->
+              {#if !groupingMode}
+                <button
+                  type="button"
+                  class={`w-full px-3 py-2 text-left text-sm hover:bg-white/10 transition ${!selectedPid ? 'bg-white/10' : ''}`}
+                  on:click={() => {
+                    selectedPid = '';
+                    persistSelectedPid('');
+                  }}
+                >
+                  Kein Speaker
+                </button>
+              {/if}
 
+              <!-- Groups Section -->
               {#if groups.length > 0}
-                <div class="px-3 py-2 text-[11px] text-white/50 border-t border-white/10">Gruppen</div>
+                <div class="px-3 py-2 text-[11px] text-white/50 border-t border-white/10 flex items-center justify-between">
+                  <span>Gruppen</span>
+                </div>
                 {#each groups as g (String(g.gid))}
-                  <button
-                    type="button"
-                    class={`w-full px-3 py-2 text-left text-sm hover:bg-white/10 transition ${selectedName === g.name ? 'bg-white/10' : ''}`}
-                    on:click={() => {
-                      const leaderPid = getGroupLeaderPid(g);
-                      if (!leaderPid) return;
-                      selectedPid = String(leaderPid);
-                      persistSelectedPid(selectedPid, g.name);
-                      void fetchVolumeForSelected();
-                      closeSpeakerModal();
-                    }}
-                  >
-                    {g.name}
-                  </button>
+                  <div class="border-t border-white/5">
+                    <div class="flex items-center hover:bg-white/10 transition">
+                      <button
+                        type="button"
+                        class={`flex-1 px-3 py-2 text-left text-sm ${selectedName === g.name ? 'bg-white/10' : ''}`}
+                        disabled={groupingMode}
+                        on:click={() => {
+                          if (groupingMode) return;
+                          const leaderPid = getGroupLeaderPid(g);
+                          if (!leaderPid) return;
+                          selectedPid = String(leaderPid);
+                          persistSelectedPid(selectedPid, g.name);
+                          void fetchVolumeForSelected();
+                        }}
+                      >
+                        <div class="flex items-center gap-2">
+                          <svg viewBox="0 0 24 24" class="h-3.5 w-3.5 text-white/40" fill="currentColor">
+                            <path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/>
+                          </svg>
+                          <span>{g.name}</span>
+                        </div>
+                        <div class="text-[10px] text-white/40 mt-0.5 pl-5">
+                          {g.players.map(p => p.name).join(', ')}
+                        </div>
+                      </button>
+                      <!-- Dissolve group button -->
+                      <button
+                        type="button"
+                        class="h-8 w-8 mr-2 rounded-md hover:bg-red-500/20 inline-flex items-center justify-center text-white/40 hover:text-red-400 transition disabled:opacity-50"
+                        title="Gruppe auflösen"
+                        aria-label="Gruppe auflösen"
+                        disabled={groupBusy}
+                        on:click|stopPropagation={async () => {
+                          const leaderPid = getGroupLeaderPid(g);
+                          if (!leaderPid) return;
+
+                          // Optimistic UI update: remove group immediately.
+                          groups = groups.filter((x) => String(x.gid) !== String(g.gid));
+                          updateHeosGroupsLineFromGroups();
+
+                          await dissolveGroup(leaderPid);
+                        }}
+                      >
+                        <svg viewBox="0 0 24 24" class="h-4 w-4" fill="currentColor">
+                          <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
                 {/each}
               {/if}
 
+              <!-- Speakers Section -->
               <div class="max-h-56 overflow-auto">
-                {#if groups.length > 0}
-                  <div class="px-3 py-2 text-[11px] text-white/50 border-t border-white/10">Speaker</div>
-                {/if}
+                <div class="px-3 py-2 text-[11px] text-white/50 border-t border-white/10 flex items-center justify-between">
+                  <span>Speaker</span>
+                  {#if !groupingMode && speakers.length >= 2}
+                    <button
+                      type="button"
+                      class="text-[10px] text-cyan-400 hover:text-cyan-300"
+                      on:click={startGrouping}
+                    >
+                      + Gruppe bilden
+                    </button>
+                  {/if}
+                </div>
                 {#each speakers as s}
-                  <button
-                    type="button"
-                    class={`w-full px-3 py-2 text-left text-sm hover:bg-white/10 transition ${selectedPid === String(s.pid) ? 'bg-white/10' : ''}`}
-                    on:click={() => {
-                      selectedPid = String(s.pid);
-                      persistSelectedPid(selectedPid);
-                      void fetchVolumeForSelected();
-                      closeSpeakerModal();
-                    }}
-                  >
-                    {s.name}
-                  </button>
+                  {#if groupingMode}
+                    <!-- Grouping mode: checkboxes -->
+                    <label
+                      class={`flex items-center gap-2 w-full px-3 py-2 text-left text-sm hover:bg-white/10 transition cursor-pointer ${selectedForGroup.has(s.pid) ? 'bg-white/10' : ''}`}
+                    >
+                      <input
+                        type="checkbox"
+                        class="w-4 h-4 rounded border-white/30 bg-white/10 text-cyan-500 focus:ring-cyan-500/50"
+                        checked={selectedForGroup.has(s.pid)}
+                        on:change={() => toggleSpeakerForGroup(s.pid)}
+                      />
+                      <span>{s.name}</span>
+                    </label>
+                  {:else}
+                    <!-- Normal mode: selection -->
+                    <button
+                      type="button"
+                      class={`w-full px-3 py-2 text-left text-sm hover:bg-white/10 transition ${selectedPid === String(s.pid) ? 'bg-white/10' : ''}`}
+                      on:click={() => {
+                        selectedPid = String(s.pid);
+                        persistSelectedPid(selectedPid);
+                        void fetchVolumeForSelected();
+                      }}
+                    >
+                      {s.name}
+                    </button>
+                  {/if}
                 {/each}
               </div>
             </div>
+
+            <!-- Grouping mode actions -->
+            {#if groupingMode}
+              <div class="flex items-center gap-2 mt-3">
+                <button
+                  type="button"
+                  class="h-8 px-3 rounded-lg bg-white/10 hover:bg-white/15 text-xs font-medium"
+                  on:click={cancelGrouping}
+                >
+                  Abbrechen
+                </button>
+                <button
+                  type="button"
+                  class="h-8 px-3 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-xs font-medium disabled:opacity-50"
+                  disabled={selectedForGroup.size < 2 || groupBusy}
+                  on:click={confirmGrouping}
+                >
+                  {groupBusy ? 'Erstelle...' : `Gruppe erstellen (${selectedForGroup.size})`}
+                </button>
+              </div>
+              <div class="text-[10px] text-white/40 mt-2">
+                Wähle mindestens 2 Speaker. Der erste wird Leader.
+              </div>
+            {/if}
           {/if}
         </div>
 
-        {#if selectedPid}
+        <!-- Volume control (only when not grouping) -->
+        {#if selectedPid && !groupingMode}
           <div class="mt-3">
             <div class="flex items-center justify-between">
               <div class="text-xs text-white/60">Lautstärke</div>
@@ -576,21 +819,6 @@
             />
           </div>
         {/if}
-
-        <div class="flex items-center gap-2 mt-3">
-          <button
-            class="h-9 px-3 rounded-lg bg-white/10 hover:bg-white/15 text-xs font-medium disabled:opacity-50"
-            type="button"
-            on:click={async () => {
-              await fetchSpeakers({ force: true });
-              await fetchGroups();
-              await fetchVolumeForSelected();
-            }}
-            disabled={speakersBusy || groupsBusy}
-          >
-            Aktualisieren
-          </button>
-        </div>
       </div>
     </div>
   </div>

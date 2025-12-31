@@ -92,6 +92,58 @@
   let letter = 'All';
   const letters = ['All', ...'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split(''), '#'];
 
+  let qInput: HTMLInputElement | null = null;
+
+  // View mode: 'albums' or 'artists'
+  type ViewMode = 'albums' | 'artists';
+  let viewMode: ViewMode = 'albums';
+
+  // Derived artist list from albums
+  type ArtistItem = { name: string; albumCount: number; coverAlbumId: string | null };
+  $: artists = deriveArtists(albums);
+
+  function deriveArtists(albumList: AlbumListItem[]): ArtistItem[] {
+    const map = new Map<string, { count: number; coverAlbumId: string | null }>();
+    for (const a of albumList) {
+      const name = (a.artist || 'Unbekannt').trim();
+      const existing = map.get(name);
+      if (existing) {
+        existing.count += 1;
+      } else {
+        map.set(name, { count: 1, coverAlbumId: a.id });
+      }
+    }
+    return Array.from(map.entries())
+      .map(([name, data]) => ({ name, albumCount: data.count, coverAlbumId: data.coverAlbumId }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  // Filter artists by letter
+  $: filteredArtists = artists.filter((a) => {
+    if (letter === 'All') return true;
+    const first = a.name[0]?.toUpperCase() || '#';
+    if (letter === '#') return !/[A-Z]/.test(first);
+    return first === letter;
+  }).filter((a) => {
+    if (!q.trim()) return true;
+    return a.name.toLowerCase().includes(q.trim().toLowerCase());
+  });
+
+  // Filter albums by selected artist (when clicking on an artist)
+  let selectedArtist: string | null = null;
+
+  $: albumsByArtist = selectedArtist
+    ? albums.filter((a) => a.artist === selectedArtist)
+    : [];
+
+  function selectArtist(name: string) {
+    selectedArtist = name;
+  }
+
+  function clearArtistSelection() {
+    selectedArtist = null;
+  }
+
   let selected: AlbumDetails | null = null;
   let modalOpen = false;
   let modalLoading = false;
@@ -470,11 +522,30 @@
     </div>
 
     <div class="flex flex-wrap items-center gap-2">
-      <input
-        class="h-10 w-64 rounded-lg border border-white/10 bg-white/5 px-3 text-sm text-white placeholder:text-white/40 focus:outline-none"
-        placeholder="Suchen (Artist/Album)"
-        bind:value={q}
-      />
+      <div class="relative">
+        <input
+          class="h-10 w-64 rounded-lg border border-white/10 bg-white/5 px-3 pr-10 text-sm text-white placeholder:text-white/40 focus:outline-none"
+          placeholder="Suchen (Artist/Album/Track)"
+          bind:value={q}
+          bind:this={qInput}
+        />
+        {#if q.trim()}
+          <button
+            type="button"
+            class="absolute right-2 top-1/2 -translate-y-1/2 h-7 w-7 rounded-md bg-white/5 hover:bg-white/10 inline-flex items-center justify-center text-white/60 hover:text-white"
+            aria-label="Suche zurücksetzen"
+            title="Suche zurücksetzen"
+            on:click={() => {
+              q = '';
+              qInput?.focus();
+            }}
+          >
+            <svg viewBox="0 0 24 24" class="h-4 w-4" fill="currentColor">
+              <path d="M18.3 5.71a1 1 0 0 0-1.41 0L12 10.59 7.11 5.7A1 1 0 0 0 5.7 7.11L10.59 12 5.7 16.89a1 1 0 1 0 1.41 1.41L12 13.41l4.89 4.89a1 1 0 0 0 1.41-1.41L13.41 12l4.89-4.89a1 1 0 0 0 0-1.4z"/>
+            </svg>
+          </button>
+        {/if}
+      </div>
       <button
         class="h-10 rounded-lg border border-white/10 bg-white/5 px-3 text-sm hover:bg-white/10 disabled:opacity-50"
         on:click={scan}
@@ -487,6 +558,24 @@
         {/if}
       </button>
     </div>
+  </div>
+
+  <!-- View Mode Toggle -->
+  <div class="mt-4 flex items-center gap-2">
+    <button
+      type="button"
+      class={'h-8 px-3 rounded-lg text-xs font-medium transition ' + (viewMode === 'albums' ? 'bg-white/15 text-white' : 'bg-white/5 text-white/60 hover:bg-white/10')}
+      on:click={() => { viewMode = 'albums'; selectedArtist = null; }}
+    >
+      Alben
+    </button>
+    <button
+      type="button"
+      class={'h-8 px-3 rounded-lg text-xs font-medium transition ' + (viewMode === 'artists' ? 'bg-white/15 text-white' : 'bg-white/5 text-white/60 hover:bg-white/10')}
+      on:click={() => { viewMode = 'artists'; selectedArtist = null; }}
+    >
+      Künstler
+    </button>
   </div>
 
   {#if scanMessage}
@@ -541,42 +630,127 @@
     <div>
       {#if loading}
         <div class="text-sm text-white/60">Lade…</div>
-      {:else if albums.length === 0}
-        <div class="text-sm text-white/60">Keine Alben gefunden.</div>
-      {:else}
-        <div class="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
-          {#each albums as a (a.id)}
-            <div class="group text-left relative">
-              <button
-                class="block w-full text-left"
-                type="button"
-                on:click={() => openAlbum(a.id)}
-                aria-label={`Album öffnen: ${a.artist} - ${a.album}`}
-              >
-                <div class="aspect-square overflow-hidden rounded-xl border border-white/10 bg-white/5">
-                  {#if coverUrl(a.id)}
-                    <img src={coverUrl(a.id) ?? ''} alt="" class="h-full w-full object-cover" loading="lazy" />
-                  {/if}
-                </div>
-                <div class="mt-2 min-w-0">
-                  <div class="text-xs text-white/90 line-clamp-1">{a.album}</div>
-                  <div class="text-[11px] text-white/60 line-clamp-1">{a.artist}</div>
-                </div>
-              </button>
+      {:else if viewMode === 'albums'}
+        <!-- Album View -->
+        {#if albums.length === 0}
+          <div class="text-sm text-white/60">Keine Alben gefunden.</div>
+        {:else}
+          <div class="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
+            {#each albums as a (a.id)}
+              <div class="group text-left relative">
+                <button
+                  class="block w-full text-left"
+                  type="button"
+                  on:click={() => openAlbum(a.id)}
+                  aria-label={`Album öffnen: ${a.artist} - ${a.album}`}
+                >
+                  <div class="aspect-square overflow-hidden rounded-xl border border-white/10 bg-white/5 transition-all duration-200 ease-out group-hover:scale-105 group-hover:shadow-xl group-hover:shadow-white/10 group-hover:border-white/25">
+                    {#if coverUrl(a.id)}
+                      <img src={coverUrl(a.id) ?? ''} alt="" class="h-full w-full object-cover transition-transform duration-200 group-hover:scale-[1.02]" loading="lazy" />
+                    {/if}
+                  </div>
+                  <div class="mt-2 min-w-0">
+                    <div class="text-xs text-white/90 line-clamp-1">{a.album}</div>
+                    <div class="text-[11px] text-white/60 line-clamp-1">{a.artist}</div>
+                  </div>
+                </button>
 
-              <button
-                type="button"
-                class="absolute top-2 right-2 h-8 w-8 rounded-lg bg-black/50 hover:bg-black/60 border border-white/10 text-sm font-semibold text-white disabled:opacity-50"
-                title="Zur Playlist hinzufügen"
-                aria-label="Zur Playlist hinzufügen"
-                disabled={playlistBusy}
-                on:click={() => addAlbumToPlaylist(a.id)}
-              >
-                +
-              </button>
+                <button
+                  type="button"
+                  class="absolute top-2 right-2 h-8 w-8 rounded-lg bg-black/50 hover:bg-black/60 border border-white/10 text-sm font-semibold text-white disabled:opacity-50 opacity-0 group-hover:opacity-100 transition-opacity duration-150"
+                  title="Zur Playlist hinzufügen"
+                  aria-label="Zur Playlist hinzufügen"
+                  disabled={playlistBusy}
+                  on:click|stopPropagation={() => addAlbumToPlaylist(a.id)}
+                >
+                  +
+                </button>
+              </div>
+            {/each}
+          </div>
+        {/if}
+      {:else}
+        <!-- Artist View -->
+        {#if selectedArtist}
+          <!-- Show albums by selected artist -->
+          <div class="mb-4">
+            <button
+              type="button"
+              class="text-sm text-white/60 hover:text-white flex items-center gap-1"
+              on:click={clearArtistSelection}
+            >
+              <svg viewBox="0 0 24 24" class="h-4 w-4" fill="currentColor">
+                <path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/>
+              </svg>
+              Zurück zu Künstler
+            </button>
+            <h2 class="mt-2 text-lg font-semibold">{selectedArtist}</h2>
+            <div class="text-xs text-white/50">{albumsByArtist.length} Alben</div>
+          </div>
+          <div class="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
+            {#each albumsByArtist as a (a.id)}
+              <div class="group text-left relative">
+                <button
+                  class="block w-full text-left"
+                  type="button"
+                  on:click={() => openAlbum(a.id)}
+                  aria-label={`Album öffnen: ${a.album}`}
+                >
+                  <div class="aspect-square overflow-hidden rounded-xl border border-white/10 bg-white/5 transition-all duration-200 ease-out group-hover:scale-105 group-hover:shadow-xl group-hover:shadow-white/10 group-hover:border-white/25">
+                    {#if coverUrl(a.id)}
+                      <img src={coverUrl(a.id) ?? ''} alt="" class="h-full w-full object-cover transition-transform duration-200 group-hover:scale-[1.02]" loading="lazy" />
+                    {/if}
+                  </div>
+                  <div class="mt-2 min-w-0">
+                    <div class="text-xs text-white/90 line-clamp-1">{a.album}</div>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  class="absolute top-2 right-2 h-8 w-8 rounded-lg bg-black/50 hover:bg-black/60 border border-white/10 text-sm font-semibold text-white disabled:opacity-50 opacity-0 group-hover:opacity-100 transition-opacity duration-150"
+                  title="Zur Playlist hinzufügen"
+                  aria-label="Zur Playlist hinzufügen"
+                  disabled={playlistBusy}
+                  on:click|stopPropagation={() => addAlbumToPlaylist(a.id)}
+                >
+                  +
+                </button>
+              </div>
+            {/each}
+          </div>
+        {:else}
+          <!-- Artist list -->
+          {#if filteredArtists.length === 0}
+            <div class="text-sm text-white/60">Keine Künstler gefunden.</div>
+          {:else}
+            <div class="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
+              {#each filteredArtists as artist (artist.name)}
+                <button
+                  type="button"
+                  class="group text-left"
+                  on:click={() => selectArtist(artist.name)}
+                >
+                  <div class="aspect-square overflow-hidden rounded-xl border border-white/10 bg-white/5 transition-all duration-200 ease-out group-hover:scale-105 group-hover:shadow-xl group-hover:shadow-white/10 group-hover:border-white/25 relative">
+                    {#if artist.coverAlbumId && coverUrl(artist.coverAlbumId)}
+                      <img src={coverUrl(artist.coverAlbumId) ?? ''} alt="" class="h-full w-full object-cover transition-transform duration-200 group-hover:scale-[1.02]" loading="lazy" />
+                      <div class="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent"></div>
+                    {/if}
+                    <div class="absolute bottom-0 left-0 right-0 p-2">
+                      <svg viewBox="0 0 24 24" class="h-5 w-5 text-white/60" fill="currentColor">
+                        <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+                      </svg>
+                    </div>
+                  </div>
+                  <div class="mt-2 min-w-0">
+                    <div class="text-xs text-white/90 line-clamp-1">{artist.name}</div>
+                    <div class="text-[11px] text-white/60">{artist.albumCount} {artist.albumCount === 1 ? 'Album' : 'Alben'}</div>
+                  </div>
+                </button>
+              {/each}
             </div>
-          {/each}
-        </div>
+          {/if}
+        {/if}
       {/if}
     </div>
 

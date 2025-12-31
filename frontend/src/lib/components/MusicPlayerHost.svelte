@@ -146,6 +146,7 @@
 
     const hay = `${title} ${artist} ${album} ${source}`.toLowerCase();
     if (hay.includes(HEOS_DASHBO_MARKER.toLowerCase())) return true;
+    if (url.includes('/api/music/heos/stream')) return true;
     if (url.includes('/api/music/tracks/')) return true;
     return false;
   }
@@ -159,6 +160,8 @@
   function summaryMatchesDashboTrack(summary: any, track: NowPlayingTrack): boolean {
     if (!summary || !track) return false;
     const url = typeof summary?.url === 'string' ? summary.url : '';
+    // New stable HEOS stream endpoint does not include trackId; matching via URL is best-effort.
+    if (url.includes('/api/music/heos/stream')) return true;
     if (track.trackId && url.includes(`/api/music/tracks/${encodeURIComponent(track.trackId)}`)) return true;
     if (track.trackId && url.includes(`/api/music/tracks/${track.trackId}`)) return true;
 
@@ -343,6 +346,31 @@
     }
   }
 
+  function buildHeosStableStreamUrl(pid: number): string {
+    const edgeBaseUrl = getEdgeBaseUrlFromStorage();
+    const token = getEdgeTokenFromStorage();
+    if (!edgeBaseUrl) throw new Error('Edge Base URL fehlt');
+    if (!pid) throw new Error('HEOS pid fehlt');
+
+    // HEOS cannot send Authorization headers reliably; use query token like the track stream endpoint.
+    const qToken = token ? `&token=${encodeURIComponent(token)}` : '';
+    return `${edgeBaseUrl}/api/music/heos/stream?pid=${encodeURIComponent(String(pid))}${qToken}`;
+  }
+
+  async function setHeosTargetTrack(pid: number, trackId: string) {
+    const edgeBaseUrl = getEdgeBaseUrlFromStorage();
+    const edgeToken = getEdgeTokenFromStorage();
+    if (!edgeBaseUrl) throw new Error('Edge Base URL fehlt');
+    if (!pid) throw new Error('HEOS pid fehlt');
+    if (!trackId) throw new Error('Track fehlt');
+
+    await edgeFetchJson(edgeBaseUrl, '/api/music/heos/target', edgeToken || undefined, {
+      method: 'POST',
+      headers: buildHeosHeaders(),
+      body: JSON.stringify({ pid, trackId })
+    });
+  }
+
   async function forceHeosPlayStreamWithRetry(pid: number, url: string, name: string) {
     try {
       await forceHeosPlayStream(pid, url, name);
@@ -406,8 +434,10 @@
 
     try {
       if (heosEnabled && heosPid && edgeBaseUrl) {
-        const url = buildEdgeStreamUrl(track.trackId);
-        await forceHeosPlayStreamWithRetry(heosPid, url, `${HEOS_DASHBO_MARKER} ${track.artist} - ${track.title}`);
+        await setHeosTargetTrack(heosPid, track.trackId);
+        const url = buildHeosStableStreamUrl(heosPid);
+        // Keep the name stable to avoid accumulating many different URL stream entries in the HEOS app.
+        await forceHeosPlayStreamWithRetry(heosPid, url, `${HEOS_DASHBO_MARKER} Stream`);
         heosActive = true;
         heosPlaying = true;
         startHeosPolling(heosPid, knownDuration);
@@ -458,8 +488,9 @@
       // If HEOS is selected but not active yet, start stream for the current track.
       if (!heosActive) {
         try {
-          const url = buildEdgeStreamUrl(track.trackId);
-          await forceHeosPlayStreamWithRetry(heosPid, url, `${HEOS_DASHBO_MARKER} ${track.artist} - ${track.title}`);
+          await setHeosTargetTrack(heosPid, track.trackId);
+          const url = buildHeosStableStreamUrl(heosPid);
+          await forceHeosPlayStreamWithRetry(heosPid, url, `${HEOS_DASHBO_MARKER} Stream`);
           heosActive = true;
           heosPlaying = true;
           startHeosPolling(heosPid, typeof track.durationSec === 'number' && Number.isFinite(track.durationSec) ? track.durationSec : 0);

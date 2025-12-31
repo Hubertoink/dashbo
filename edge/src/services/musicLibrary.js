@@ -437,6 +437,22 @@ class MusicLibrary {
     const query = String(q || '').trim().toLowerCase();
     const lk = String(letter || '').trim().toUpperCase();
 
+    // When searching, also include albums where any track title/path matches.
+    // Compute a set once per call to avoid O(albums * tracks).
+    const albumIdsMatchingTracks = new Set();
+    if (query) {
+      for (const t of this._tracks.values()) {
+        const name = String(t.name || '').toLowerCase();
+        const rel = String(t.relPath || '').toLowerCase();
+        const title = String(t.title || '').toLowerCase();
+        const artist = String(t.artist || '').toLowerCase();
+        const album = String(t.album || '').toLowerCase();
+        if (name.includes(query) || rel.includes(query) || title.includes(query) || artist.includes(query) || album.includes(query)) {
+          if (t.albumId) albumIdsMatchingTracks.add(String(t.albumId));
+        }
+      }
+    }
+
     const items = Array.from(this._albums.values())
       .filter((a) => {
         if (lk && lk !== 'ALL') {
@@ -451,7 +467,7 @@ class MusicLibrary {
         if (!query) return true;
         const name = String(a.album || '').toLowerCase();
         const artist = String(a.artist || '').toLowerCase();
-        return name.includes(query) || artist.includes(query);
+        return name.includes(query) || artist.includes(query) || albumIdsMatchingTracks.has(String(a.id));
       })
       .sort((a, b) => {
         const aa = `${String(a.artist)}\n${String(a.album)}`;

@@ -8,6 +8,71 @@ const { getMusicLibrary } = require('../services/musicLibrary');
 
 const musicRouter = express.Router();
 
+// In-memory mapping for stable HEOS stream URLs.
+// Key: heos pid -> { trackId, updatedAt }
+const heosPidToTrack = new Map();
+
+function getAudioMimeByExt(ext) {
+  const e = String(ext || '').toLowerCase();
+  return e === '.mp3'
+    ? 'audio/mpeg'
+    : e === '.m4a'
+      ? 'audio/mp4'
+      : e === '.aac'
+        ? 'audio/aac'
+        : e === '.flac'
+          ? 'audio/flac'
+          : e === '.ogg'
+            ? 'audio/ogg'
+            : e === '.opus'
+              ? 'audio/opus'
+              : e === '.wav'
+                ? 'audio/wav'
+                : 'application/octet-stream';
+}
+
+async function streamTrackAbsPath(abs, req, res) {
+  if (!abs) return res.status(404).json({ error: 'not_found' });
+
+  let stat;
+  try {
+    stat = await fs.promises.stat(abs);
+  } catch {
+    return res.status(404).json({ error: 'not_found' });
+  }
+
+  const size = stat.size;
+  const ext = path.extname(abs).toLowerCase();
+  const mime = getAudioMimeByExt(ext);
+
+  res.setHeader('Accept-Ranges', 'bytes');
+  res.setHeader('Content-Type', mime);
+
+  const range = String(req.headers.range || '');
+  const m = range.match(/bytes=(\d+)-(\d+)?/);
+  if (m) {
+    const start = Number(m[1]);
+    const end = m[2] ? Number(m[2]) : size - 1;
+    if (!Number.isFinite(start) || !Number.isFinite(end) || start < 0 || end < start || start >= size) {
+      res.status(416).setHeader('Content-Range', `bytes */${size}`).end();
+      return;
+    }
+    const cappedEnd = Math.min(end, size - 1);
+    res.status(206);
+    res.setHeader('Content-Range', `bytes ${start}-${cappedEnd}/${size}`);
+    res.setHeader('Content-Length', String(cappedEnd - start + 1));
+    fs.createReadStream(abs, { start, end: cappedEnd })
+      .on('error', () => res.status(500).end())
+      .pipe(res);
+    return;
+  }
+
+  res.setHeader('Content-Length', String(size));
+  fs.createReadStream(abs)
+    .on('error', () => res.status(500).end())
+    .pipe(res);
+}
+
 musicRouter.get('/status', (req, res) => {
   res.json(getMusicLibrary().getStatus());
 });
@@ -69,60 +134,33 @@ musicRouter.get('/albums/:albumId/cover', (req, res) => {
 musicRouter.get('/tracks/:trackId/stream', async (req, res) => {
   const trackId = String(req.params.trackId || '');
   const abs = getMusicLibrary().resolveTrackAbsPath(trackId);
-  if (!abs) return res.status(404).json({ error: 'not_found' });
+  await streamTrackAbsPath(abs, req, res);
+});
 
-  let stat;
-  try {
-    stat = await fs.promises.stat(abs);
-  } catch {
-    return res.status(404).json({ error: 'not_found' });
-  }
+// Stable HEOS streaming: set which track a given HEOS pid should stream.
+musicRouter.post('/heos/target', (req, res) => {
+  const pid = Number(req?.body?.pid);
+  const trackId = String(req?.body?.trackId || '').trim();
+  if (!Number.isFinite(pid) || pid === 0) return res.status(400).json({ ok: false, error: 'pid_required' });
+  if (!trackId) return res.status(400).json({ ok: false, error: 'trackId_required' });
 
-  const size = stat.size;
-  const ext = path.extname(abs).toLowerCase();
-  const mime =
-    ext === '.mp3'
-      ? 'audio/mpeg'
-      : ext === '.m4a'
-        ? 'audio/mp4'
-        : ext === '.aac'
-          ? 'audio/aac'
-          : ext === '.flac'
-            ? 'audio/flac'
-            : ext === '.ogg'
-              ? 'audio/ogg'
-              : ext === '.opus'
-                ? 'audio/opus'
-                : ext === '.wav'
-                  ? 'audio/wav'
-                  : 'application/octet-stream';
+  const abs = getMusicLibrary().resolveTrackAbsPath(trackId);
+  if (!abs) return res.status(404).json({ ok: false, error: 'not_found' });
 
-  res.setHeader('Accept-Ranges', 'bytes');
-  res.setHeader('Content-Type', mime);
+  heosPidToTrack.set(pid, { trackId, updatedAt: Date.now() });
+  res.json({ ok: true, pid, trackId });
+});
 
-  const range = String(req.headers.range || '');
-  const m = range.match(/bytes=(\d+)-(\d+)?/);
-  if (m) {
-    const start = Number(m[1]);
-    const end = m[2] ? Number(m[2]) : size - 1;
-    if (!Number.isFinite(start) || !Number.isFinite(end) || start < 0 || end < start || start >= size) {
-      res.status(416).setHeader('Content-Range', `bytes */${size}`).end();
-      return;
-    }
-    const cappedEnd = Math.min(end, size - 1);
-    res.status(206);
-    res.setHeader('Content-Range', `bytes ${start}-${cappedEnd}/${size}`);
-    res.setHeader('Content-Length', String(cappedEnd - start + 1));
-    fs.createReadStream(abs, { start, end: cappedEnd })
-      .on('error', () => res.status(500).end())
-      .pipe(res);
-    return;
-  }
+// Stable HEOS stream URL endpoint: HEOS will always request this URL for the selected pid.
+musicRouter.get('/heos/stream', async (req, res) => {
+  const pid = Number(req?.query?.pid);
+  if (!Number.isFinite(pid) || pid === 0) return res.status(400).json({ error: 'pid_required' });
 
-  res.setHeader('Content-Length', String(size));
-  fs.createReadStream(abs)
-    .on('error', () => res.status(500).end())
-    .pipe(res);
+  const entry = heosPidToTrack.get(pid);
+  if (!entry || !entry.trackId) return res.status(409).json({ error: 'no_target', pid });
+
+  const abs = getMusicLibrary().resolveTrackAbsPath(entry.trackId);
+  await streamTrackAbsPath(abs, req, res);
 });
 
 // debug endpoint: return parsed metadata via both parsers for a track
