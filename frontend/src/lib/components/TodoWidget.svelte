@@ -8,6 +8,7 @@
   export let onToggleExpand: (() => void) | null = null;
 
   let listName = 'Dashbo';
+  let listNames: string[] = [];
   let items: TodoItemDto[] = [];
   let loading = true;
   let error: string | null = null;
@@ -17,6 +18,7 @@
   let modalOpen = false;
   let modalMode: 'create' | 'edit' = 'create';
   let modalItem: TodoItemDto | null = null;
+  let modalListName = '';
 
   const TODOS_CACHE_KEY = 'dashbo_todos_cache_v1';
   const TODOS_CACHE_TTL_MS = 5 * 60 * 1000;
@@ -29,6 +31,7 @@
     try {
       const r = await fetchTodos();
       listName = r.listName;
+      listNames = Array.isArray(r.listNames) ? r.listNames : [];
       items = r.items;
 
       if (typeof localStorage !== 'undefined') {
@@ -87,12 +90,14 @@
   function openCreate() {
     modalMode = 'create';
     modalItem = null;
+    modalListName = (listNames && listNames.length > 0 ? listNames[0] : listName) || '';
     modalOpen = true;
   }
 
   function openEdit(item: TodoItemDto) {
     modalMode = 'edit';
     modalItem = item;
+    modalListName = '';
     modalOpen = true;
   }
 
@@ -270,6 +275,9 @@
   open={modalOpen}
   mode={modalMode}
   item={modalItem}
+  listNames={listNames}
+  selectedListName={modalListName}
+  onChangeListName={(v) => (modalListName = v)}
   onClose={closeModal}
   onSaved={() => void load(false)}
 />

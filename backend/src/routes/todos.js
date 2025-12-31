@@ -32,7 +32,7 @@ todosRouter.get('/', requireAuth, async (req, res) => {
 
   try {
     const r = await listTodos({ userId, listNames: configuredListNames });
-    res.json(r);
+    res.json({ ...r, listNames: configuredListNames });
   } catch (e) {
     const status = Number(e?.status || 500);
     const code = String(e?.code || 'todo_error');
@@ -142,11 +142,31 @@ todosRouter.post('/create', requireAuth, async (req, res) => {
   const parsed = schema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: 'invalid_body' });
 
+  let configuredListNames = null;
+  try {
+    const raw = await getUserSetting({ userId, key: 'todo.listNames' });
+    if (raw && String(raw).trim()) {
+      const parsedSetting = JSON.parse(String(raw));
+      if (Array.isArray(parsedSetting)) {
+        configuredListNames = parsedSetting
+          .map((v) => String(v || '').trim())
+          .filter(Boolean)
+          .slice(0, 20);
+      }
+    }
+  } catch {
+    // ignore
+  }
+
+  if (!configuredListNames || configuredListNames.length === 0) {
+    configuredListNames = [getTodoListName()];
+  }
+
   try {
     const r = await createTodo({
       userId,
       connectionId: parsed.data.connectionId,
-      listName: parsed.data.listName || getTodoListName(),
+      listName: parsed.data.listName || configuredListNames[0] || getTodoListName(),
       title: parsed.data.title,
       description: parsed.data.description,
       startAt: parsed.data.startAt,

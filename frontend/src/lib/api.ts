@@ -52,6 +52,7 @@ export type TodoItemDto = {
 
 export type TodosResponseDto = {
   listName: string;
+  listNames?: string[];
   items: TodoItemDto[];
 };
 

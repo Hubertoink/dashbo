@@ -8,6 +8,10 @@
   export let mode: 'create' | 'edit' = 'create';
   export let item: TodoItemDto | null = null;
 
+  export let listNames: string[] = [];
+  export let selectedListName: string = '';
+  export let onChangeListName: (value: string) => void = () => {};
+
   let title = '';
   let description = '';
   let dateStr = '';
@@ -60,7 +64,7 @@
     } else {
       title = '';
       description = '';
-      dateStr = '';
+      dateStr = yyyymmddLocalFromIso(new Date().toISOString());
       dueDateStr = '';
     }
 
@@ -94,6 +98,7 @@
         });
       } else {
         await createTodo({
+          ...(selectedListName && selectedListName.trim() ? { listName: selectedListName.trim() } : {}),
           title: title.trim(),
           description: desc,
           startAt,
@@ -122,6 +127,24 @@
       <div class="font-semibold text-lg mb-1">{mode === 'edit' ? 'ToDo bearbeiten' : 'ToDo erstellen'}</div>
 
       <div class="space-y-3 mt-4">
+        {#if mode === 'create' && Array.isArray(listNames) && listNames.length > 1}
+          <div>
+            <div class="text-[11px] uppercase tracking-widest text-white/45 mb-1">Liste</div>
+            <select
+              class="w-full h-10 px-3 rounded-lg bg-white/10 border-0 text-sm"
+              value={selectedListName}
+              on:change={(e) => {
+                const el = e.currentTarget;
+                if (el instanceof HTMLSelectElement) onChangeListName(el.value);
+              }}
+            >
+              {#each listNames as ln}
+                <option value={ln}>{ln}</option>
+              {/each}
+            </select>
+          </div>
+        {/if}
+
         <div>
           <div class="text-[11px] uppercase tracking-widest text-white/45 mb-1">Name</div>
           <input
