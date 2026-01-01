@@ -348,9 +348,10 @@
           <div class="text-white/70">
             1) Docker Desktop starten
             <br />2) Musik in deiner Bibliothek ablegen (z.B. <span class="font-medium">C:\\Users\\huber\\Musik</span>)
-            <br />3) Edge starten: <span class="font-medium">docker compose -f docker-compose.win-edge.yml pull</span>
-            <br />4) Danach: <span class="font-medium">docker compose -f docker-compose.win-edge.yml up -d</span>
-            <br />4) Hier in den Einstellungen die Edge Base URL + Token eintragen
+            <br />3) Oben auf <span class="font-medium">YML herunterladen</span> klicken (Datei: <span class="font-medium">docker-compose.win-edge.generated.yml</span>)
+            <br />4) Image holen: <span class="font-medium">docker compose -f docker-compose.win-edge.generated.yml pull</span>
+            <br />5) Starten: <span class="font-medium">docker compose -f docker-compose.win-edge.generated.yml up -d</span>
+            <br />6) Hier in den Einstellungen die Edge Base URL + Token eintragen
           </div>
         </div>
 
@@ -358,9 +359,10 @@
           <div class="font-medium mb-1">Raspberry Pi</div>
           <div class="text-white/70">
             1) SSD nach <span class="font-medium">/mnt/music</span> mounten
-            <br />2) Edge starten: <span class="font-medium">docker compose -f docker-compose.pi-edge.yml pull</span>
-            <br />3) Danach: <span class="font-medium">docker compose -f docker-compose.pi-edge.yml up -d</span>
-            <br />3) Edge Base URL + Token im Browser-Gerät speichern
+            <br />2) Oben auf <span class="font-medium">YML herunterladen</span> klicken (Datei: <span class="font-medium">docker-compose.pi-edge.generated.yml</span>)
+            <br />3) Image holen: <span class="font-medium">docker compose -f docker-compose.pi-edge.generated.yml pull</span>
+            <br />4) Starten: <span class="font-medium">docker compose -f docker-compose.pi-edge.generated.yml up -d</span>
+            <br />5) Edge Base URL + Token im Browser-Gerät speichern
           </div>
         </div>
 
