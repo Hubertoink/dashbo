@@ -111,7 +111,7 @@
   $: modalConnections = Array.from(
     new Map(
       items
-        .map((i) => ({ id: i.connectionId, label: i.connectionLabel || 'Outlook' }))
+        .map((i) => ({ id: i.connectionId, label: i.connectionLabel || 'Outlook', color: i.color }))
         .map((c) => [String(c.id), c])
     ).values()
   ).sort((a, b) => a.label.localeCompare(b.label));
@@ -184,6 +184,30 @@
         return 'bg-stone-500';
       default:
         return 'bg-cyan-500';
+    }
+  }
+
+  function connectionColorClass(name: string) {
+    const n = String(name || '').toLowerCase();
+    switch (n) {
+      case 'cyan':
+        return 'bg-cyan-700';
+      case 'fuchsia':
+        return 'bg-fuchsia-700';
+      case 'emerald':
+        return 'bg-emerald-700';
+      case 'amber':
+        return 'bg-amber-700';
+      case 'rose':
+        return 'bg-rose-700';
+      case 'violet':
+        return 'bg-violet-700';
+      case 'sky':
+        return 'bg-sky-700';
+      case 'lime':
+        return 'bg-lime-700';
+      default:
+        return colorClass(name);
     }
   }
 
@@ -267,7 +291,10 @@
               {/if}
             </button>
 
-            <div class={`h-2.5 w-2.5 rounded-full ${colorClass(item.color)}`} title={item.connectionLabel}></div>
+            <div
+              class={`h-2.5 w-2.5 rounded-full ${connectionColorClass(item.color)}`}
+              title={item.connectionLabel}
+            ></div>
 
             <button
               class={`flex-1 text-left text-base truncate ${item.completed ? 'line-through opacity-60' : ''}`}

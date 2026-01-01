@@ -12,7 +12,7 @@
   export let selectedListName: string = '';
   export let onChangeListName: (value: string) => void = () => {};
 
-  export let connections: Array<{ id: number; label: string }> = [];
+  export let connections: Array<{ id: number; label: string; color?: string }> = [];
   export let selectedConnectionId: number | null = null;
   export let onChangeConnectionId: (value: number | null) => void = () => {};
 
@@ -25,6 +25,33 @@
 
   let prevOpen = false;
   let prefilledKey: string | null = null;
+
+  function connectionColorClass(name: string | null | undefined) {
+    const n = String(name || '').toLowerCase();
+    switch (n) {
+      case 'cyan':
+        return 'bg-cyan-700';
+      case 'fuchsia':
+        return 'bg-fuchsia-700';
+      case 'emerald':
+        return 'bg-emerald-700';
+      case 'amber':
+        return 'bg-amber-700';
+      case 'rose':
+        return 'bg-rose-700';
+      case 'violet':
+        return 'bg-violet-700';
+      case 'sky':
+        return 'bg-sky-700';
+      case 'lime':
+        return 'bg-lime-700';
+      default:
+        return 'bg-white/30';
+    }
+  }
+
+  $: selectedConnection =
+    selectedConnectionId != null ? connections.find((c) => c.id === selectedConnectionId) : null;
 
   function yyyymmddLocalFromIso(iso: string | null | undefined): string {
     if (!iso) return '';
@@ -136,8 +163,13 @@
           <div>
             <div class="text-[11px] uppercase tracking-widest text-white/45 mb-1">Konto</div>
             <div class="relative">
+              <span
+                class={`pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-2.5 w-2.5 rounded-full ${connectionColorClass(
+                  selectedConnection?.color
+                )}`}
+              ></span>
               <select
-                class="w-full h-10 px-3 pr-10 rounded-lg bg-white/10 border border-white/10 text-sm text-white/90 appearance-none focus:outline-none focus:ring-2 focus:ring-white/10"
+                class="w-full h-10 pl-8 pr-10 rounded-lg bg-white/10 border border-white/10 text-sm text-white/90 appearance-none focus:outline-none focus:ring-2 focus:ring-white/10"
                 value={selectedConnectionId ?? ''}
                 on:change={(e) => {
                   const el = e.currentTarget;

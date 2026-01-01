@@ -17,6 +17,19 @@
   export let doOutlookDisconnect: () => void | Promise<void>;
   export let doOutlookDisconnectConnection: (id: number) => void | Promise<void>;
   export let doOutlookSetConnectionColor: (id: number, c: TagColorKey) => void | Promise<void>;
+
+  // Use a more "serious" palette for Outlook connections so it reads differently
+  // from tag/person colors.
+  const outlookColorBg: Record<TagColorKey, string> = {
+    fuchsia: 'bg-fuchsia-700',
+    cyan: 'bg-cyan-700',
+    emerald: 'bg-emerald-700',
+    amber: 'bg-amber-700',
+    rose: 'bg-rose-700',
+    violet: 'bg-violet-700',
+    sky: 'bg-sky-700',
+    lime: 'bg-lime-700'
+  };
 </script>
 
 <!-- Outlook (privat, nur anzeigen) -->
@@ -78,7 +91,7 @@
                   disabled={outlookBusy}
                   on:click|stopPropagation={() => (outlookColorMenuFor = outlookColorMenuFor === c.id ? null : c.id)}
                 >
-                  <span class={`w-3 h-3 rounded-full ${colorBg[c.color as TagColorKey]}`}></span>
+                  <span class={`w-3 h-3 rounded-full ${outlookColorBg[c.color as TagColorKey] ?? 'bg-white/30'}`}></span>
                   <span class="text-white/70">Farbe</span>
                   <span class="text-white/50">▼</span>
                 </button>
@@ -90,7 +103,7 @@
                         class="w-full px-3 py-2 flex items-center gap-2 text-sm hover:bg-white/10"
                         on:click={() => doOutlookSetConnectionColor(c.id, col as TagColorKey)}
                       >
-                        <span class={`w-3 h-3 rounded-full ${colorBg[col]}`}></span>
+                        <span class={`w-3 h-3 rounded-full ${outlookColorBg[col] ?? 'bg-white/30'}`}></span>
                         <span class="capitalize">{col}</span>
                       </button>
                     {/each}
