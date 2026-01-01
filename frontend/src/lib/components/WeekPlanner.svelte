@@ -33,6 +33,9 @@
 
   function handleEventCreated() {
     onEventsChanged();
+    if (outlookConnected && todoEnabled) {
+      void loadTodos();
+    }
   }
 
   function handleEventDeleted() {
@@ -49,9 +52,10 @@
   let todoModalConnectionId: number | null = null;
   let todoPrefillDueAt: string | null = null;
 
-  function isoStartOfDayLocal(d: Date): string {
+  // Use local noon to avoid timezone offsets pushing the ISO date to the previous/next day.
+  function isoNoonLocal(d: Date): string {
     const x = new Date(d);
-    x.setHours(0, 0, 0, 0);
+    x.setHours(12, 0, 0, 0);
     return x.toISOString();
   }
 
@@ -106,7 +110,7 @@
   function openTodoCreate(dueDate: Date) {
     todoModalListName = (todoListNames && todoListNames.length > 0 ? todoListNames[0] : todoListName) || '';
     todoModalConnectionId = todoItems.length > 0 ? todoItems[0]!.connectionId : null;
-    todoPrefillDueAt = isoStartOfDayLocal(dueDate);
+    todoPrefillDueAt = isoNoonLocal(dueDate);
     todoModalOpen = true;
   }
 

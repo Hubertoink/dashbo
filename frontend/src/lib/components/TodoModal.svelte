@@ -73,7 +73,8 @@
     if (!y || !mo || !da) return null;
     const d = new Date();
     d.setFullYear(y, mo - 1, da);
-    d.setHours(0, 0, 0, 0);
+    // Use local noon to avoid timezone offsets pushing the ISO date to the previous/next day.
+    d.setHours(12, 0, 0, 0);
     return d.toISOString();
   }
 

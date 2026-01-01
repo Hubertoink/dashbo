@@ -191,9 +191,10 @@
     }
   }
 
-  function isoStartOfDayLocal(d: Date): string {
+  // Use local noon to avoid timezone offsets pushing the ISO date to the previous/next day.
+  function isoNoonLocal(d: Date): string {
     const x = new Date(d);
-    x.setHours(0, 0, 0, 0);
+    x.setHours(12, 0, 0, 0);
     return x.toISOString();
   }
 
@@ -260,7 +261,7 @@
         todoSaving = true;
         todoError = null;
 
-        const dueAt = isoStartOfDayLocal(prefilledDate);
+        const dueAt = isoNoonLocal(prefilledDate);
         const listName = todoSelectedListName || (todoListNames && todoListNames.length > 0 ? todoListNames[0] : todoListName) || '';
         const connectionId = todoSelectedConnectionId;
 
