@@ -19,6 +19,7 @@
   let modalMode: 'create' | 'edit' = 'create';
   let modalItem: TodoItemDto | null = null;
   let modalListName = '';
+  let modalConnectionId: number | null = null;
 
   const TODOS_CACHE_KEY = 'dashbo_todos_cache_v1';
   const TODOS_CACHE_TTL_MS = 5 * 60 * 1000;
@@ -91,6 +92,7 @@
     modalMode = 'create';
     modalItem = null;
     modalListName = (listNames && listNames.length > 0 ? listNames[0] : listName) || '';
+    modalConnectionId = visibleItems.length > 0 ? visibleItems[0]!.connectionId : null;
     modalOpen = true;
   }
 
@@ -98,12 +100,21 @@
     modalMode = 'edit';
     modalItem = item;
     modalListName = '';
+    modalConnectionId = null;
     modalOpen = true;
   }
 
   function closeModal() {
     modalOpen = false;
   }
+
+  $: modalConnections = Array.from(
+    new Map(
+      items
+        .map((i) => ({ id: i.connectionId, label: i.connectionLabel || 'Outlook' }))
+        .map((c) => [String(c.id), c])
+    ).values()
+  ).sort((a, b) => a.label.localeCompare(b.label));
 
   $: visibleItems = items.filter((item) => {
     if (!item.completed) return true;
@@ -278,6 +289,9 @@
   listNames={listNames}
   selectedListName={modalListName}
   onChangeListName={(v) => (modalListName = v)}
+  connections={modalConnections}
+  selectedConnectionId={modalConnectionId}
+  onChangeConnectionId={(v) => (modalConnectionId = v)}
   onClose={closeModal}
   onSaved={() => void load(false)}
 />

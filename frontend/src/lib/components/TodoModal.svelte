@@ -12,6 +12,10 @@
   export let selectedListName: string = '';
   export let onChangeListName: (value: string) => void = () => {};
 
+  export let connections: Array<{ id: number; label: string }> = [];
+  export let selectedConnectionId: number | null = null;
+  export let onChangeConnectionId: (value: number | null) => void = () => {};
+
   let title = '';
   let description = '';
   let dateStr = '';
@@ -98,6 +102,7 @@
         });
       } else {
         await createTodo({
+          ...(selectedConnectionId != null ? { connectionId: selectedConnectionId } : {}),
           ...(selectedListName && selectedListName.trim() ? { listName: selectedListName.trim() } : {}),
           title: title.trim(),
           description: desc,
@@ -127,21 +132,67 @@
       <div class="font-semibold text-lg mb-1">{mode === 'edit' ? 'ToDo bearbeiten' : 'ToDo erstellen'}</div>
 
       <div class="space-y-3 mt-4">
+        {#if mode === 'create' && Array.isArray(connections) && connections.length > 1}
+          <div>
+            <div class="text-[11px] uppercase tracking-widest text-white/45 mb-1">Konto</div>
+            <div class="relative">
+              <select
+                class="w-full h-10 px-3 pr-10 rounded-lg bg-white/10 border border-white/10 text-sm text-white/90 appearance-none focus:outline-none focus:ring-2 focus:ring-white/10"
+                value={selectedConnectionId ?? ''}
+                on:change={(e) => {
+                  const el = e.currentTarget;
+                  if (!(el instanceof HTMLSelectElement)) return;
+                  const v = el.value;
+                  onChangeConnectionId(v ? Number(v) : null);
+                }}
+              >
+                {#each connections as c}
+                  <option class="bg-zinc-900 text-white" value={String(c.id)}>{c.label}</option>
+                {/each}
+              </select>
+              <svg
+                class="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-white/50"
+                viewBox="0 0 20 20"
+                fill="currentColor"
+              >
+                <path
+                  fill-rule="evenodd"
+                  d="M5.23 7.21a.75.75 0 011.06.02L10 10.94l3.71-3.71a.75.75 0 111.06 1.06l-4.24 4.24a.75.75 0 01-1.06 0L5.21 8.29a.75.75 0 01.02-1.08z"
+                  clip-rule="evenodd"
+                />
+              </svg>
+            </div>
+          </div>
+        {/if}
+
         {#if mode === 'create' && Array.isArray(listNames) && listNames.length > 1}
           <div>
             <div class="text-[11px] uppercase tracking-widest text-white/45 mb-1">Liste</div>
-            <select
-              class="w-full h-10 px-3 rounded-lg bg-white/10 border-0 text-sm"
-              value={selectedListName}
-              on:change={(e) => {
-                const el = e.currentTarget;
-                if (el instanceof HTMLSelectElement) onChangeListName(el.value);
-              }}
-            >
-              {#each listNames as ln}
-                <option value={ln}>{ln}</option>
-              {/each}
-            </select>
+            <div class="relative">
+              <select
+                class="w-full h-10 px-3 pr-10 rounded-lg bg-white/10 border border-white/10 text-sm text-white/90 appearance-none focus:outline-none focus:ring-2 focus:ring-white/10"
+                value={selectedListName}
+                on:change={(e) => {
+                  const el = e.currentTarget;
+                  if (el instanceof HTMLSelectElement) onChangeListName(el.value);
+                }}
+              >
+                {#each listNames as ln}
+                  <option class="bg-zinc-900 text-white" value={ln}>{ln}</option>
+                {/each}
+              </select>
+              <svg
+                class="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-white/50"
+                viewBox="0 0 20 20"
+                fill="currentColor"
+              >
+                <path
+                  fill-rule="evenodd"
+                  d="M5.23 7.21a.75.75 0 011.06.02L10 10.94l3.71-3.71a.75.75 0 111.06 1.06l-4.24 4.24a.75.75 0 01-1.06 0L5.21 8.29a.75.75 0 01.02-1.08z"
+                  clip-rule="evenodd"
+                />
+              </svg>
+            </div>
           </div>
         {/if}
 
