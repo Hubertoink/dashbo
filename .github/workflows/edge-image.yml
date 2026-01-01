@@ -41,8 +41,10 @@ jobs:
 
       - name: Read edge version
         id: edge_version
+        shell: bash
         run: |
-          echo "version=$(node -p \"require('./edge/package.json').version\")" >> $GITHUB_OUTPUT
+          EDGE_VERSION=$(node -p "require('./edge/package.json').version")
+          echo "version=$EDGE_VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Docker metadata
         id: meta
