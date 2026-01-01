@@ -30,6 +30,10 @@
     sky: 'bg-sky-700',
     lime: 'bg-lime-700'
   };
+
+  function outlookDotClass(c: TagColorKey) {
+    return outlookColorBg[c] ?? colorBg[c] ?? 'bg-white/30';
+  }
 </script>
 
 <!-- Outlook (privat, nur anzeigen) -->
@@ -91,7 +95,7 @@
                   disabled={outlookBusy}
                   on:click|stopPropagation={() => (outlookColorMenuFor = outlookColorMenuFor === c.id ? null : c.id)}
                 >
-                  <span class={`w-3 h-3 rounded-full ${outlookColorBg[c.color as TagColorKey] ?? 'bg-white/30'}`}></span>
+                  <span class={`w-3 h-3 rounded-full ${outlookDotClass(c.color as TagColorKey)}`}></span>
                   <span class="text-white/70">Farbe</span>
                   <span class="text-white/50">▼</span>
                 </button>
@@ -103,7 +107,7 @@
                         class="w-full px-3 py-2 flex items-center gap-2 text-sm hover:bg-white/10"
                         on:click={() => doOutlookSetConnectionColor(c.id, col as TagColorKey)}
                       >
-                        <span class={`w-3 h-3 rounded-full ${outlookColorBg[col] ?? 'bg-white/30'}`}></span>
+                        <span class={`w-3 h-3 rounded-full ${outlookDotClass(col)}`}></span>
                         <span class="capitalize">{col}</span>
                       </button>
                     {/each}
