@@ -58,8 +58,17 @@
   $: heosExternalSourceLabel =
     heosExternalSource && heosExternalSource.toLowerCase() !== 'station' ? heosExternalSource : '';
 
-  $: displayArtist = now?.artist ? String(now.artist) : heosEnabled && selectedPid && heosExternal && heosExternalArtist ? heosExternalArtist : '';
-  $: displayTitle = now?.title ? String(now.title) : heosEnabled && selectedPid && heosExternal && heosExternalTitle ? heosExternalTitle : '';
+  $: heosExternalActive = Boolean(heosEnabled && selectedPid && heosExternal);
+  $: displayArtist = now?.artist
+    ? String(now.artist)
+    : heosExternalActive
+      ? heosExternalArtist || heosExternalSourceLabel || 'Externe Wiedergabe'
+      : '';
+  $: displayTitle = now?.title
+    ? String(now.title)
+    : heosExternalActive
+      ? heosExternalTitle || heosExternalAlbum || (heosExternalSourceLabel ? 'Wiedergabe aktiv' : '')
+      : '';
   $: externalSuffix = heosExternal ? ` (${(heosExternalSourceLabel || 'extern').toLowerCase()})` : '';
 
   let heosEnabled = false;
@@ -551,6 +560,9 @@
       <div class="flex-1">
         <div class="text-white/70 text-sm font-medium">{displayArtist ? displayArtist : 'Musik'}</div>
         <div class="text-white/40 text-xs">{displayTitle ? displayTitle : 'Keine Wiedergabe'}</div>
+        {#if heosEnabled && selectedPid && $heosPlaybackStatus?.error}
+          <div class="text-[10px] text-red-300 leading-none mt-1 truncate">HEOS Fehler: {$heosPlaybackStatus.error}</div>
+        {/if}
         {#if heosEnabled && selectedPid}
           <div class="text-[10px] text-white/50 leading-none mt-1">HEOS: {selectedName ? selectedName : selectedPid}{externalSuffix}</div>
         {/if}

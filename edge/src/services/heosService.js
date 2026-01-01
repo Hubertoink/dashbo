@@ -483,25 +483,43 @@ function parseNowPlayingPayload(resp) {
 
   const titleRaw =
     payload.song ??
+    payload.song_name ??
+    payload.songName ??
     payload.title ??
+    payload.track_name ??
+    payload.trackName ??
     payload.station ??
     payload.station_name ??
     payload.stationName ??
     payload.name ??
     payload.track ??
-    payload.media_name;
+    payload.media_name ??
+    payload.mediaName ??
+    payload.media_title ??
+    payload.mediaTitle ??
+    payload.current_song ??
+    payload.currentSong;
   const artistRaw =
     payload.artist ??
     payload.song_artist ??
     payload.songArtist ??
     payload.artist_name ??
     payload.artistName ??
-    payload.media_artist;
+    payload.media_artist ??
+    payload.mediaArtist ??
+    payload.current_artist ??
+    payload.currentArtist ??
+    payload.performer ??
+    payload.creator;
   const albumRaw =
     payload.album ??
     payload.album_name ??
     payload.albumName ??
-    payload.media_album;
+    payload.media_album ??
+    payload.mediaAlbum ??
+    payload.current_album ??
+    payload.currentAlbum ??
+    payload.collection;
 
   const imageRaw =
     payload.image_url ??
@@ -522,6 +540,11 @@ function parseNowPlayingPayload(resp) {
     payload.source ??
     payload.source_name ??
     payload.sourceName ??
+    payload.service_name ??
+    payload.serviceName ??
+    payload.provider ??
+    payload.provider_name ??
+    payload.providerName ??
     payload.input ??
     payload.service;
 
