@@ -2,7 +2,7 @@
   import type { EventDto, HolidayDto, TagColorKey, TodoItemDto } from '$lib/api';
   import { deleteEvent } from '$lib/api';
   import { formatGermanDayLabel } from '$lib/date';
-  import { fade, fly, scale } from 'svelte/transition';
+  import { fade, scale } from 'svelte/transition';
 
   export let day: Date;
   export let isToday = false;
@@ -15,12 +15,8 @@
   export let onEventDeleted: () => void = () => {};
   export let onToggleTodo: (t: TodoItemDto) => void = () => {};
 
-  // Long-press state
-  let longPressTimer: ReturnType<typeof setTimeout> | null = null;
   let deleteConfirmEvent: EventDto | null = null;
   let deleting = false;
-
-  const LONG_PRESS_DURATION = 500; // ms
 
   function haptic(pattern: number | number[] = 10) {
     if ('vibrate' in navigator) {
@@ -28,46 +24,9 @@
     }
   }
 
-  function startLongPress(event: EventDto) {
-    longPressTimer = setTimeout(() => {
-      haptic([30, 20, 30]); // Double vibration for long-press
-      deleteConfirmEvent = event;
-      longPressTimer = null;
-    }, LONG_PRESS_DURATION);
-  }
-
-  function cancelLongPress() {
-    if (longPressTimer) {
-      clearTimeout(longPressTimer);
-      longPressTimer = null;
-    }
-  }
-
-  function handleEventPointerDown(e: PointerEvent, event: EventDto) {
-    // Only trigger long-press on touch or primary mouse button
-    if (e.pointerType === 'touch') {
-      // Prevent touch callout/context menu on long-press
-      e.preventDefault();
-      startLongPress(event);
-      return;
-    }
-
-    if (e.button === 0) {
-      startLongPress(event);
-    }
-  }
-
-  function handleEventPointerUp(e: PointerEvent, event: EventDto) {
-    if (longPressTimer) {
-      // Short press - open edit modal
-      cancelLongPress();
-      onEditEvent(event);
-    }
-    // If timer already fired, deleteConfirmEvent is set, so don't open edit
-  }
-
-  function handleEventPointerLeave() {
-    cancelLongPress();
+  function requestDelete(event: EventDto) {
+    haptic([20, 30]);
+    deleteConfirmEvent = event;
   }
 
   async function confirmDelete() {
@@ -142,6 +101,15 @@
       ? 'border-white/30 bg-white/10 ring-2 ring-white/20'
       : 'border-white/10 bg-black/20 hover:bg-black/30'
   }`}
+  on:click={onAddEvent}
+  on:keydown={(e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      onAddEvent();
+    }
+  }}
+  role="button"
+  tabindex="0"
 >
   <!-- Day Header -->
   <div class="px-3 py-2 border-b border-white/10">
@@ -162,57 +130,75 @@
       {@const ps = e.persons && e.persons.length > 0 ? e.persons : e.person ? [e.person] : []}
       {@const p0 = ps[0]}
       {@const tagColor = e.tag?.color}
-      <button
-        type="button"
-        class="w-full text-left rounded-xl px-2.5 py-2 bg-white/5 hover:bg-white/10 active:bg-white/15 active:scale-[0.98] transition group touch-manipulation select-none"
-        style="-webkit-touch-callout: none;"
-        on:pointerdown={(ev) => handleEventPointerDown(ev, e)}
-        on:pointerup={(ev) => handleEventPointerUp(ev, e)}
-        on:pointerleave={handleEventPointerLeave}
-        on:pointercancel={handleEventPointerLeave}
-        on:contextmenu|preventDefault={() => {}}
-      >
-        <div class="flex gap-2 items-start">
-          <!-- Color dot -->
-          <div
-            class={`mt-1 h-2.5 w-2.5 rounded-full shrink-0 ${
-              tagColor
-                ? isHexColor(tagColor)
-                  ? ''
-                  : dotBg[tagColor as TagColorKey] ?? 'bg-white/40'
-                : p0
-                  ? dotBg[p0.color as TagColorKey] ?? 'bg-white/40'
-                  : 'bg-white/40'
-            }`}
-            style={tagColor && isHexColor(tagColor) ? `background-color: ${tagColor}` : ''}
-          ></div>
+      <div class="relative">
+        <button
+          type="button"
+          class="w-full text-left rounded-xl px-2.5 py-2 pr-10 bg-white/5 hover:bg-white/10 active:bg-white/15 active:scale-[0.98] transition group touch-manipulation select-none"
+          style="-webkit-touch-callout: none;"
+          on:click|stopPropagation={() => onEditEvent(e)}
+        >
+          <div class="flex gap-2 items-start">
+            <!-- Color dot -->
+            <div
+              class={`mt-1 h-2.5 w-2.5 rounded-full shrink-0 ${
+                tagColor
+                  ? isHexColor(tagColor)
+                    ? ''
+                    : dotBg[tagColor as TagColorKey] ?? 'bg-white/40'
+                  : p0
+                    ? dotBg[p0.color as TagColorKey] ?? 'bg-white/40'
+                    : 'bg-white/40'
+              }`}
+              style={tagColor && isHexColor(tagColor) ? `background-color: ${tagColor}` : ''}
+            ></div>
 
-          <div class="min-w-0 flex-1">
-            <div class="text-sm font-medium leading-tight truncate group-hover:text-white transition">
-              {e.title}
-            </div>
-            <div class="text-xs text-white/60 leading-tight mt-0.5">
-              {#if e.allDay}
-                Ganztägig
-              {:else}
-                {fmtTimeRange(e.startAt, e.endAt)}
-              {/if}
-              {#if e.location}
-                <span class="text-white/40"> · {e.location}</span>
-              {/if}
-            </div>
-            {#if ps.length > 0}
-              <div class="text-xs mt-0.5">
-                {#each ps as p, i (p.id)}
-                  <span class={`${textFg[p.color] ?? 'text-white/70'} font-medium`}>
-                    {p.name}{#if i < ps.length - 1}, {/if}
-                  </span>
-                {/each}
+            <div class="min-w-0 flex-1">
+              <div class="text-sm font-medium leading-tight truncate group-hover:text-white transition">
+                {e.title}
               </div>
-            {/if}
+              <div class="text-xs text-white/60 leading-tight mt-0.5">
+                {#if e.allDay}
+                  Ganztägig
+                {:else}
+                  {fmtTimeRange(e.startAt, e.endAt)}
+                {/if}
+                {#if e.location}
+                  <span class="text-white/40"> · {e.location}</span>
+                {/if}
+              </div>
+              {#if ps.length > 0}
+                <div class="text-xs mt-0.5">
+                  {#each ps as p, i (p.id)}
+                    {@const pc = p.color as string}
+                    <span
+                      class={`${!isHexColor(pc) ? (textFg[pc as TagColorKey] ?? 'text-white/70') : 'text-white/70'} font-medium`}
+                      style={isHexColor(pc) ? `color: ${pc}` : ''}
+                    >
+                      {p.name}{#if i < ps.length - 1}, {/if}
+                    </span>
+                  {/each}
+                </div>
+              {/if}
+            </div>
           </div>
-        </div>
-      </button>
+        </button>
+
+        <button
+          type="button"
+          class="absolute top-1.5 right-1.5 h-8 w-8 rounded-lg bg-white/5 hover:bg-white/10 active:bg-white/15 transition grid place-items-center text-white/60 hover:text-rose-300"
+          aria-label="Termin löschen"
+          title="Löschen"
+          on:click|stopPropagation={() => requestDelete(e)}
+        >
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+            />
+          </svg>
+        </button>
+      </div>
     {/each}
 
     {#if events.length === 0 && holidays.length === 0}
@@ -230,7 +216,7 @@
         <button
           type="button"
           class="w-full flex items-center gap-2 px-1 py-1 text-xs text-left rounded-lg hover:bg-white/5 active:bg-white/10 transition"
-          on:click={() => onToggleTodo(t)}
+          on:click|stopPropagation={() => onToggleTodo(t)}
         >
           <span class={`w-3 h-3 rounded border ${t.completed ? 'bg-emerald-500/50 border-emerald-400' : 'border-white/30'}`}></span>
           <span class={`truncate ${t.completed ? 'line-through text-white/40' : 'text-white/80'}`}>{t.title}</span>
@@ -241,18 +227,6 @@
       {/if}
     </div>
   {/if}
-
-  <!-- Add Button -->
-  <div class="px-2 py-2 border-t border-white/10">
-    <button
-      type="button"
-      class="w-full h-10 rounded-xl bg-white/5 hover:bg-white/10 active:bg-white/15 active:scale-[0.98] transition flex items-center justify-center gap-2 text-white/60 hover:text-white/80"
-      on:click={onAddEvent}
-    >
-      <span class="text-xl leading-none">+</span>
-      <span class="text-sm">Hinzufügen</span>
-    </button>
-  </div>
 </div>
 
 <!-- Delete Confirmation Modal -->

@@ -40,6 +40,9 @@
   let todoSelectedListName = '';
   let todoAccountMenuOpen = false;
 
+  $: selectedTodoConnection =
+    todoSelectedConnectionId != null ? outlookConnections.find((c) => c.id === todoSelectedConnectionId) ?? null : null;
+
   let tags: TagDto[] = [];
   let persons: PersonDto[] = [];
   let dataLoaded = false;
@@ -199,6 +202,30 @@
       .split(/\r?\n/)
       .map((l) => l.trim())
       .filter((l) => l.length > 0);
+  }
+
+  function connectionColorClass(name: string | null | undefined) {
+    const n = String(name || '').toLowerCase();
+    switch (n) {
+      case 'cyan':
+        return 'bg-cyan-700';
+      case 'fuchsia':
+        return 'bg-fuchsia-700';
+      case 'emerald':
+        return 'bg-emerald-700';
+      case 'amber':
+        return 'bg-amber-700';
+      case 'rose':
+        return 'bg-rose-700';
+      case 'violet':
+        return 'bg-violet-700';
+      case 'sky':
+        return 'bg-sky-700';
+      case 'lime':
+        return 'bg-lime-700';
+      default:
+        return 'bg-white/30';
+    }
   }
 
   function connectionLabel(c: OutlookConnectionDto): string {
@@ -444,11 +471,13 @@
                     class="w-full h-10 px-3 rounded-lg bg-white/10 border border-white/10 text-sm text-white/90 flex items-center gap-2 focus:outline-none focus:ring-2 focus:ring-white/10"
                     on:click={() => (todoAccountMenuOpen = !todoAccountMenuOpen)}
                   >
-                    <span class="flex-1 text-left truncate">
-                      {#if todoSelectedConnectionId != null}
-                        {connectionLabel(outlookConnections.find((c) => c.id === todoSelectedConnectionId) ?? outlookConnections[0]!)}
-                      {:else}
-                        Konto wählen
+                    <span
+                      class={`h-2.5 w-2.5 rounded-full flex-shrink-0 ${connectionColorClass(selectedTodoConnection?.color)}`}
+                    ></span>
+                    <span class="flex-1 text-left min-w-0">
+                      <span class="block truncate">{selectedTodoConnection ? connectionLabel(selectedTodoConnection) : 'Konto wählen'}</span>
+                      {#if selectedTodoConnection?.email}
+                        <span class="block truncate text-xs text-white/50">{selectedTodoConnection.email}</span>
                       {/if}
                     </span>
                     <svg
@@ -475,7 +504,13 @@
                             todoAccountMenuOpen = false;
                           }}
                         >
-                          <span class="truncate">{connectionLabel(c)}</span>
+                          <span class={`h-2.5 w-2.5 rounded-full flex-shrink-0 ${connectionColorClass(c.color)}`}></span>
+                          <span class="flex-1 text-left min-w-0">
+                            <span class="block truncate">{connectionLabel(c)}</span>
+                            {#if c.email}
+                              <span class="block truncate text-xs text-white/50">{c.email}</span>
+                            {/if}
+                          </span>
                         </button>
                       {/each}
                     </div>

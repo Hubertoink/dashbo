@@ -352,7 +352,7 @@
   {:else}
     <!-- Footer hint -->
     <div class="px-6 py-3 border-t border-white/10 text-center text-sm text-white/50" in:fade={{ duration: 200, delay: 200 }}>
-      Tippe auf + um einen Termin hinzuzufügen · Halte gedrückt zum Löschen · Wische für Wochenwechsel
+      Tippe in einen Tag um einen Termin hinzuzufügen · Tippe auf einen Termin zum Bearbeiten · Wische für Wochenwechsel
     </div>
   {/if}
 </div>
