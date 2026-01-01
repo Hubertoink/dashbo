@@ -9,7 +9,8 @@
 #    $env:EDGE_TOKEN = ( -join ((48..57)+(97..102) | Get-Random -Count 64 | ForEach-Object {[char]$_}) )
 #    (or choose your own strong token)
 # 2) Run:
-#    docker compose -f docker-compose.win-edge.yml up -d --build
+#    docker compose -f docker-compose.win-edge.yml pull
+#    docker compose -f docker-compose.win-edge.yml up -d
 #
 # Note:
 # - DashbO UI is served from https://dashbohub.de. Browsers will block HTTP calls to your Edge (Mixed Content).
@@ -17,8 +18,8 @@
 
 services:
   dashbo-edge:
-    build:
-      context: ./edge
+    # Prebuilt image (recommended). Override via EDGE_IMAGE env.
+    image: ${EDGE_IMAGE:-ghcr.io/Hubertoink/dashbo-edge:latest}
     container_name: dashbo-edge
     restart: unless-stopped
     environment:
@@ -35,7 +36,7 @@ services:
       # HEOS discovery/config:
       # - Prefer explicit IPs on Windows Docker (SSDP multicast is often blocked).
       # - Option A: set HEOS_HOST (single IP) or HEOS_HOSTS (comma-separated IPs)
-      # - Option B: set HEOS_SCAN_CIDR to enable TCP scan fallback (port 1255), e.g. 192.168.178.0/24
+      # - Option B: set HEOS_SCAN_CIDR to enable TC P scan fallback (port 1255), e.g. 192.168.178.0/24
       HEOS_HOST: ${HEOS_HOST:-}
       HEOS_HOSTS: ${HEOS_HOSTS:-}
       HEOS_SCAN_CIDR: ${HEOS_SCAN_CIDR:-}

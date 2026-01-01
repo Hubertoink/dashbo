@@ -2,7 +2,12 @@ export type EdgeHealthDto = {
   ok: boolean;
   service?: string;
   time?: string;
+  apiVersion?: number;
+  version?: string | null;
+  buildSha?: string | null;
 };
+
+export const MIN_EDGE_API_VERSION = 1;
 
 export const EDGE_BASE_URL_KEY = 'dashbo_edge_base_url';
 export const EDGE_TOKEN_KEY = 'dashbo_edge_token';

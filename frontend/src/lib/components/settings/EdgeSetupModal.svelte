@@ -32,6 +32,7 @@
   let musicDir = 'C:/Users/<you>/Music';
   let edgeAllowedOrigins = 'https://dashbohub.de,http://localhost:8080,http://127.0.0.1:8080,http://localhost:5173';
   let edgePublicBaseUrl = 'http://192.168.178.27:8787';
+  let edgeImage = 'ghcr.io/Hubertoink/dashbo-edge:latest';
   let heosHosts = '';
   let heosScanCidr = '';
 
@@ -63,6 +64,7 @@
     const allowed = (edgeAllowedOrigins || '').trim();
     const publicBase = (edgePublicBaseUrl || '').trim();
     const music = normalizeHostPath(musicDir);
+    const image = (edgeImage || '').trim();
 
     const envLines: string[] = [
       `      PORT: 8787`,
@@ -82,8 +84,7 @@
     return [
       `services:`,
       `  dashbo-edge:`,
-      `    build:`,
-      `      context: ./edge`,
+      `    image: ${quote(image)}`,
       `    container_name: dashbo-edge`,
       `    restart: unless-stopped`,
       `    environment:`,
@@ -113,7 +114,7 @@
   }
 
   let canDownload = false;
-  $: canDownload = (edgeToken || '').trim().length > 0 && (musicDir || '').trim().length > 0;
+  $: canDownload = (edgeToken || '').trim().length > 0 && (musicDir || '').trim().length > 0 && (edgeImage || '').trim().length > 0;
 </script>
 
 <!-- Edge Setup Modal -->
@@ -181,6 +182,25 @@
                 class="mt-1 w-full h-9 rounded-lg bg-zinc-950/40 border border-white/10 px-3 text-sm"
                 bind:value={edgeToken}
                 placeholder="z.B. 1000 (nur zum Testen)"
+              />
+            </label>
+
+            <label class="text-white/70 text-xs">
+              <span class="inline-flex items-center gap-2">
+                Docker Image (EDGE_IMAGE)
+                <span class="relative group inline-flex">
+                  <span class="h-5 w-5 rounded-full bg-white/10 border border-white/10 inline-flex items-center justify-center text-[11px] text-white/80">i</span>
+                  <span
+                    class="pointer-events-none absolute left-1/2 -translate-x-1/2 top-7 w-72 rounded-lg border border-white/10 bg-zinc-950/90 px-3 py-2 text-xs text-white/80 opacity-0 group-hover:opacity-100 transition-opacity"
+                  >
+                    Prebuilt Edge Image (z.B. ghcr.io/&lt;owner&gt;/dashbo-edge:latest). Damit sind Updates nur noch: docker compose pull ; docker compose up -d.
+                  </span>
+                </span>
+              </span>
+              <input
+                class="mt-1 w-full h-9 rounded-lg bg-zinc-950/40 border border-white/10 px-3 text-sm"
+                bind:value={edgeImage}
+                placeholder="ghcr.io/<owner>/dashbo-edge:latest"
               />
             </label>
 
@@ -328,7 +348,8 @@
           <div class="text-white/70">
             1) Docker Desktop starten
             <br />2) Musik in deiner Bibliothek ablegen (z.B. <span class="font-medium">C:\\Users\\huber\\Musik</span>)
-            <br />3) Edge starten: <span class="font-medium">docker compose -f docker-compose.win-edge.yml up -d --build</span>
+            <br />3) Edge starten: <span class="font-medium">docker compose -f docker-compose.win-edge.yml pull</span>
+            <br />4) Danach: <span class="font-medium">docker compose -f docker-compose.win-edge.yml up -d</span>
             <br />4) Hier in den Einstellungen die Edge Base URL + Token eintragen
           </div>
         </div>
@@ -337,7 +358,8 @@
           <div class="font-medium mb-1">Raspberry Pi</div>
           <div class="text-white/70">
             1) SSD nach <span class="font-medium">/mnt/music</span> mounten
-            <br />2) Edge starten: <span class="font-medium">docker compose -f docker-compose.pi-edge.yml up -d --build</span>
+            <br />2) Edge starten: <span class="font-medium">docker compose -f docker-compose.pi-edge.yml pull</span>
+            <br />3) Danach: <span class="font-medium">docker compose -f docker-compose.pi-edge.yml up -d</span>
             <br />3) Edge Base URL + Token im Browser-Gerät speichern
           </div>
         </div>

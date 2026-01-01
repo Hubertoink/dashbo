@@ -5,6 +5,18 @@ const { requireEdgeAuth } = require('./middleware/edgeAuth');
 const { musicRouter } = require('./routes/music');
 const { heosRouter } = require('./routes/heos');
 
+const EDGE_API_VERSION = 1;
+let edgeVersion = null;
+try {
+  // eslint-disable-next-line global-require
+  const pkg = require('../package.json');
+  edgeVersion = typeof pkg?.version === 'string' ? pkg.version : null;
+} catch {
+  edgeVersion = null;
+}
+edgeVersion = String(process.env.EDGE_VERSION || edgeVersion || '').trim() || null;
+const edgeBuildSha = String(process.env.EDGE_BUILD_SHA || process.env.GITHUB_SHA || '').trim() || null;
+
 const app = express();
 
 const PORT = Number(process.env.PORT || 8787);
@@ -53,7 +65,14 @@ app.use(
 app.use(express.json({ limit: '1mb' }));
 
 app.get('/health', (req, res) => {
-  res.json({ ok: true, service: 'dashbo-edge', time: new Date().toISOString() });
+  res.json({
+    ok: true,
+    service: 'dashbo-edge',
+    time: new Date().toISOString(),
+    apiVersion: EDGE_API_VERSION,
+    version: edgeVersion,
+    buildSha: edgeBuildSha,
+  });
 });
 
 // All API routes require the shared Edge token.

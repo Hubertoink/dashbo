@@ -51,6 +51,7 @@
     EDGE_HEOS_ENABLED_KEY,
     EDGE_HEOS_HOSTS_KEY,
     edgeHealth,
+    MIN_EDGE_API_VERSION,
     normalizeEdgeBaseUrl,
     edgeFetchJson
   } from '$lib/edge';
@@ -586,8 +587,26 @@
     try {
       const health = await edgeHealth(edgeBaseUrl, edgeToken || undefined);
       edgeTestOk = Boolean(health?.ok);
-      edgeTestMessage = health?.ok ? `OK: ${health.service ?? 'edge'}` : 'Antwort ungültig.';
-      if (health?.ok) showToast('Pi Edge erreichbar');
+      if (health?.ok) {
+        const v = typeof health?.version === 'string' && health.version.trim() ? health.version.trim() : null;
+        const sha = typeof health?.buildSha === 'string' && health.buildSha.trim() ? health.buildSha.trim() : null;
+        const apiV = typeof health?.apiVersion === 'number' ? health.apiVersion : null;
+
+        const parts = [health.service ?? 'edge'];
+        if (v) parts.push(`v${v}`);
+        if (sha) parts.push(sha.slice(0, 7));
+        if (apiV !== null) parts.push(`api ${apiV}`);
+        edgeTestMessage = `OK: ${parts.join(' · ')}`;
+
+        if (apiV !== null && apiV < MIN_EDGE_API_VERSION) {
+          edgeTestOk = false;
+          edgeTestMessage = `Edge ist zu alt (api ${apiV} < ${MIN_EDGE_API_VERSION}). Bitte Edge updaten: docker compose pull ; docker compose up -d`;
+        } else {
+          showToast('Pi Edge erreichbar');
+        }
+      } else {
+        edgeTestMessage = 'Antwort ungültig.';
+      }
     } catch (err) {
       edgeTestOk = false;
       edgeTestMessage = err instanceof Error ? err.message : 'Verbindung fehlgeschlagen.';

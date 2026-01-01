@@ -3,15 +3,17 @@
 # Usage (on Pi):
 # 1) Ensure music SSD is mounted at /mnt/music
 # 2) Create a strong token: openssl rand -hex 32
-# 3) Run: docker compose -f docker-compose.pi-edge.yml up -d --build
+# 3) Run:
+#    docker compose -f docker-compose.pi-edge.yml pull
+#    docker compose -f docker-compose.pi-edge.yml up -d
 #
 # Note: For browser access from https://dashbohub.de you will typically need HTTPS on this edge.
 # This compose starts plain HTTP for M0. Add a local HTTPS reverse proxy (Caddy/Nginx) in M0.5.
 
 services:
   dashbo-edge:
-    build:
-      context: ./edge
+    # Prebuilt image (recommended). Override via EDGE_IMAGE env.
+    image: ${EDGE_IMAGE:-ghcr.io/Hubertoink/dashbo-edge:latest}
     container_name: dashbo-edge
     restart: unless-stopped
     environment:
