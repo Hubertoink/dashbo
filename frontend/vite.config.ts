@@ -8,6 +8,15 @@ export default defineConfig({
     SvelteKitPWA({
       registerType: 'autoUpdate',
       includeAssets: ['background.jpg', 'icon.svg', 'maskable-icon.svg', 'favicon.ico'],
+      kit: {
+        includeVersionFile: true
+      },
+      workbox: {
+        // Keep default glob patterns (incl. images) and just raise the size limit
+        // so large background images don't break the build.
+        maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,
+        navigateFallback: '/'
+      },
       manifest: {
         name: 'Dashbo',
         short_name: 'Dashbo',

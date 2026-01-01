@@ -123,19 +123,42 @@
     title="Dashboard"
     icon="▦"
     kicker="dashboard"
-    enabled={dashboardGlassBlurEnabled}
+    enabled={true}
     widgetKey="dashboard"
     saving={false}
     error={null}
+    showToggle={false}
     disableContentWhenOff={false}
-    on:toggle={() => {
-      dashboardGlassBlurEnabled = !dashboardGlassBlurEnabled;
-      void saveDashboardGlassBlurEnabled();
-    }}
     on:hover={(e) => (highlightWidget = e.detail.key)}
   >
     <div class="space-y-4">
-      <div class="text-xs text-white/50">Optionaler Glas-Effekt im Kalender/Tag-View. Aus = nur transparent.</div>
+      <div class="flex items-center justify-between gap-4">
+        <div class="min-w-0">
+          <div class="text-sm text-white/80">Glas-Effekt</div>
+          <div class="text-xs text-white/50">Optionaler Glas-Effekt im Kalender/Tag-View. Aus = nur transparent.</div>
+        </div>
+
+        <button
+          type="button"
+          class="relative h-6 w-11 rounded-full transition-colors duration-200 {dashboardGlassBlurEnabled
+            ? 'bg-cyan-500/60'
+            : 'bg-white/20'} disabled:opacity-50"
+          on:click={() => {
+            if (!authed) return;
+            dashboardGlassBlurEnabled = !dashboardGlassBlurEnabled;
+            void saveDashboardGlassBlurEnabled();
+          }}
+          disabled={!authed}
+          aria-pressed={dashboardGlassBlurEnabled}
+          aria-label="Glas-Effekt {dashboardGlassBlurEnabled ? 'deaktivieren' : 'aktivieren'}"
+        >
+          <span
+            class="absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform duration-200 {dashboardGlassBlurEnabled
+              ? 'translate-x-5'
+              : 'translate-x-0'}"
+          ></span>
+        </button>
+      </div>
 
       <div>
         <div class="text-sm text-white/80">Schriftstil</div>
