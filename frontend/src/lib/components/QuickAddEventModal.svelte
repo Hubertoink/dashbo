@@ -30,20 +30,46 @@
     lime: 'bg-lime-400'
   };
 
-  const personBg: Record<TagColorKey, string> = {
-    fuchsia: 'bg-fuchsia-500/20 border-fuchsia-400 text-fuchsia-300',
-    cyan: 'bg-cyan-400/20 border-cyan-400 text-cyan-300',
-    emerald: 'bg-emerald-400/20 border-emerald-400 text-emerald-300',
-    amber: 'bg-amber-400/20 border-amber-400 text-amber-200',
-    rose: 'bg-rose-400/20 border-rose-400 text-rose-300',
-    violet: 'bg-violet-400/20 border-violet-400 text-violet-300',
-    sky: 'bg-sky-400/20 border-sky-400 text-sky-300',
-    lime: 'bg-lime-400/20 border-lime-400 text-lime-300'
+  const personOutline: Record<TagColorKey, string> = {
+    fuchsia: 'border-fuchsia-400/40 text-fuchsia-200/90',
+    cyan: 'border-cyan-400/40 text-cyan-200/90',
+    emerald: 'border-emerald-400/40 text-emerald-200/90',
+    amber: 'border-amber-400/40 text-amber-200/90',
+    rose: 'border-rose-400/40 text-rose-200/90',
+    violet: 'border-violet-400/40 text-violet-200/90',
+    sky: 'border-sky-400/40 text-sky-200/90',
+    lime: 'border-lime-400/40 text-lime-200/90'
+  };
+
+  const personSelected: Record<TagColorKey, string> = {
+    fuchsia: 'bg-fuchsia-500/15 border-fuchsia-400/70 text-fuchsia-200',
+    cyan: 'bg-cyan-400/15 border-cyan-400/70 text-cyan-200',
+    emerald: 'bg-emerald-400/15 border-emerald-400/70 text-emerald-200',
+    amber: 'bg-amber-400/15 border-amber-400/70 text-amber-200',
+    rose: 'bg-rose-400/15 border-rose-400/70 text-rose-200',
+    violet: 'bg-violet-400/15 border-violet-400/70 text-violet-200',
+    sky: 'bg-sky-400/15 border-sky-400/70 text-sky-200',
+    lime: 'bg-lime-400/15 border-lime-400/70 text-lime-200'
   };
 
   const hexRe = /^#[0-9a-fA-F]{6}$/;
   function isHexColor(value: unknown): value is string {
     return typeof value === 'string' && hexRe.test(value);
+  }
+
+  function hexToRgba(hex: string, alpha: number): string {
+    const r = Number.parseInt(hex.slice(1, 3), 16);
+    const g = Number.parseInt(hex.slice(3, 5), 16);
+    const b = Number.parseInt(hex.slice(5, 7), 16);
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+  }
+
+  function personChipStyle(color: string, selected: boolean): string {
+    if (!isHexColor(color)) return '';
+    const border = hexToRgba(color, selected ? 0.7 : 0.4);
+    const bg = selected ? hexToRgba(color, 0.16) : 'rgba(0,0,0,0)';
+    const fg = hexToRgba(color, selected ? 1 : 0.92);
+    return `border-color: ${border}; background-color: ${bg}; color: ${fg};`;
   }
 
   async function loadData() {
@@ -248,15 +274,26 @@
             <div class="flex flex-wrap gap-2">
               {#each persons as p (p.id)}
                 {@const selected = personIds.includes(p.id)}
+                {@const c = p.color as string}
                 <button
                   type="button"
-                  class={`px-3 py-1.5 rounded-full text-sm font-medium border transition active:scale-95 ${
-                    selected
-                      ? personBg[p.color as TagColorKey] ?? 'bg-white/20 border-white/40 text-white'
-                      : 'bg-white/5 border-white/10 text-white/60 hover:bg-white/10'
+                  class={`px-3 py-1.5 rounded-full text-sm font-medium border transition active:scale-95 inline-flex items-center gap-2 ${
+                    isHexColor(c)
+                      ? (selected ? 'bg-white/5' : 'bg-white/5 hover:bg-white/10')
+                      : selected
+                        ? (personSelected[c as TagColorKey] ?? 'bg-white/15 border-white/20 text-white')
+                        : (personOutline[c as TagColorKey] ?? 'border-white/15 text-white/70')
                   }`}
+                  style={personChipStyle(c, selected)}
                   on:click={() => togglePerson(p.id)}
                 >
+                  <span
+                    class={`w-2.5 h-2.5 rounded-full ${
+                      isHexColor(c) ? '' : tagBg[c as TagColorKey] ?? 'bg-white/40'
+                    }`}
+                    style={isHexColor(c) ? `background-color: ${c}` : ''}
+                    aria-hidden="true"
+                  ></span>
                   {p.name}
                 </button>
               {/each}

@@ -45,7 +45,14 @@
 
   function handleEventPointerDown(e: PointerEvent, event: EventDto) {
     // Only trigger long-press on touch or primary mouse button
-    if (e.pointerType === 'touch' || e.button === 0) {
+    if (e.pointerType === 'touch') {
+      // Prevent touch callout/context menu on long-press
+      e.preventDefault();
+      startLongPress(event);
+      return;
+    }
+
+    if (e.button === 0) {
       startLongPress(event);
     }
   }
@@ -158,6 +165,7 @@
       <button
         type="button"
         class="w-full text-left rounded-xl px-2.5 py-2 bg-white/5 hover:bg-white/10 active:bg-white/15 active:scale-[0.98] transition group touch-manipulation select-none"
+        style="-webkit-touch-callout: none;"
         on:pointerdown={(ev) => handleEventPointerDown(ev, e)}
         on:pointerup={(ev) => handleEventPointerUp(ev, e)}
         on:pointerleave={handleEventPointerLeave}
