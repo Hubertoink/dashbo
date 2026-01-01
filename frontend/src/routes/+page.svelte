@@ -998,26 +998,20 @@
       {:else if !upcomingMode}
         <div class="h-screen grid grid-rows-[1fr,minmax(140px,24vh)]" out:fly={{ x: 180, duration: 220 }}>
           <div class="min-h-0 overflow-hidden">
-            {#if viewMode === 'month'}
-              <div class={`${dashboardTextClasses} ${dashboardGlassBlurEnabled ? 'glass-dashboard-blur' : 'glass-dashboard-flat'} border-b border-white/10 h-full overflow-hidden`} transition:fade={{ duration: 180 }}>
-                <CalendarMonth
-                  {monthAnchor}
-                  selected={selectedDate}
-                  onSelect={onSelect}
-                  {events}
-                  {holidays}
-                  {viewMode}
-                  onSetViewMode={setViewMode}
-                  {upcomingMode}
-                  onToggleUpcoming={toggleUpcomingMode}
-                  onOpenPlanner={openPlanner}
-                />
-              </div>
-            {:else}
-              <div class={`${dashboardTextClasses} ${dashboardGlassBlurEnabled ? 'glass-dashboard-blur' : 'glass-dashboard-flat'} border-b border-white/10 h-full overflow-hidden`} transition:fade={{ duration: 180 }}>
-                <WeekView {selectedDate} {events} {holidays} onSelect={onSelect} {viewMode} onSetViewMode={setViewMode} onEdit={openEditEventModal} />
-              </div>
-            {/if}
+            <div class={`${dashboardTextClasses} ${dashboardGlassBlurEnabled ? 'glass-dashboard-blur' : 'glass-dashboard-flat'} border-b border-white/10 h-full overflow-hidden`} transition:fade={{ duration: 180 }}>
+              <CalendarMonth
+                {monthAnchor}
+                selected={selectedDate}
+                onSelect={onSelect}
+                {events}
+                {holidays}
+                {viewMode}
+                onSetViewMode={setViewMode}
+                {upcomingMode}
+                onToggleUpcoming={toggleUpcomingMode}
+                onOpenPlanner={openPlanner}
+              />
+            </div>
           </div>
           <div class={`${dashboardTextClasses} border-t border-white/10 ${dashboardGlassBlurEnabled ? 'glass-dashboard-blur' : 'glass-dashboard-flat'} h-full overflow-hidden`}>
             <EventsPanel {selectedDate} {events} {holidays} onCreate={openAddEventModal} onEdit={openEditEventModal} />

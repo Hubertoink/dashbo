@@ -150,14 +150,28 @@
   })();
 </script>
 
+<!-- Backdrop -->
 <div
-  class="fixed inset-0 z-40 flex flex-col bg-black/60 backdrop-blur-xl"
+  class="fixed inset-0 z-40 bg-black/40"
+  in:fade={{ duration: 200 }}
+  out:fade={{ duration: 150 }}
+  on:click={onBack}
+  on:keydown={(e) => e.key === 'Escape' && onBack()}
+  role="button"
+  tabindex="-1"
+></div>
+
+<!-- Planner Panel -->
+<div
+  class="fixed inset-0 z-50 flex flex-col bg-black/70 backdrop-blur-2xl"
+  in:fly={{ y: 40, duration: 280, opacity: 0 }}
+  out:fly={{ y: 30, duration: 180, opacity: 0 }}
   on:touchstart={handleTouchStart}
   on:touchmove={handleTouchMove}
   on:touchend={handleTouchEnd}
 >
   <!-- Header -->
-  <div class="flex items-center justify-between px-6 py-4 border-b border-white/10">
+  <div class="flex items-center justify-between px-6 py-4 border-b border-white/10" in:fade={{ duration: 200, delay: 80 }}>
     <button
       type="button"
       class="h-11 w-11 rounded-xl bg-white/10 hover:bg-white/15 active:scale-95 transition grid place-items-center text-lg"
@@ -204,29 +218,31 @@
   </div>
 
   <!-- Week Grid -->
-  <div class="flex-1 min-h-0 p-4 overflow-hidden">
+  <div class="flex-1 min-h-0 p-4 overflow-hidden" in:fade={{ duration: 200, delay: 100 }}>
     <div class="h-full grid grid-cols-7 gap-3">
-      {#each days as day (dateKey(day))}
+      {#each days as day, i (dateKey(day))}
         {@const isToday = sameDay(day, new Date())}
         {@const dayEvents = eventsByDay.get(dateKey(day)) ?? []}
         {@const dayHolidays = holidaysByDay.get(dateKey(day)) ?? []}
         {@const dayTodos = todosByDay.get(dateKey(day)) ?? []}
-        <WeekPlannerDay
-          {day}
-          {isToday}
-          events={dayEvents}
-          holidays={dayHolidays}
-          todos={dayTodos}
-          {outlookConnected}
-          onAddEvent={() => onAddEvent(day)}
-          onEditEvent={onEditEvent}
-        />
+        <div in:fly={{ y: 20, duration: 220, delay: 120 + i * 30 }}>
+          <WeekPlannerDay
+            {day}
+            {isToday}
+            events={dayEvents}
+            holidays={dayHolidays}
+            todos={dayTodos}
+            {outlookConnected}
+            onAddEvent={() => onAddEvent(day)}
+            onEditEvent={onEditEvent}
+          />
+        </div>
       {/each}
     </div>
   </div>
 
   <!-- Footer hint -->
-  <div class="px-6 py-3 border-t border-white/10 text-center text-sm text-white/50">
+  <div class="px-6 py-3 border-t border-white/10 text-center text-sm text-white/50" in:fade={{ duration: 200, delay: 300 }}>
     Tippe auf + um einen Termin hinzuzufügen · Wische für Wochenwechsel
   </div>
 </div>
