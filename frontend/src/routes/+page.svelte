@@ -10,6 +10,7 @@
   import MusicWidget from '$lib/components/MusicWidget.svelte';
   import CalendarMonth from '$lib/components/CalendarMonth.svelte';
   import WeekView from '$lib/components/WeekView.svelte';
+  import WeekPlanner from '$lib/components/WeekPlanner.svelte';
   import EventsPanel from '$lib/components/EventsPanel.svelte';
   import AddEventModal from '$lib/components/AddEventModal.svelte';
   import {
@@ -174,6 +175,8 @@
 
   let showAddEventModal = false;
   let eventToEdit: EventDto | null = null;
+  let plannerOpen = false;
+  let plannerPrefilledDate: Date | null = null;
 
   $: bgOverlay =
     tone === 'dark'
@@ -181,6 +184,22 @@
       : 'linear-gradient(to right, rgba(0,0,0,0.55), rgba(0,0,0,0.78))';
 
   function openAddEventModal() {
+    eventToEdit = null;
+    showAddEventModal = true;
+  }
+
+  function openPlanner() {
+    plannerOpen = true;
+  }
+
+  function closePlanner() {
+    plannerOpen = false;
+    plannerPrefilledDate = null;
+  }
+
+  function openAddEventFromPlanner(d: Date) {
+    plannerPrefilledDate = d;
+    selectedDate = d;
     eventToEdit = null;
     showAddEventModal = true;
   }
@@ -991,6 +1010,7 @@
                   onSetViewMode={setViewMode}
                   {upcomingMode}
                   onToggleUpcoming={toggleUpcomingMode}
+                  onOpenPlanner={openPlanner}
                 />
               </div>
             {:else}
@@ -1210,6 +1230,21 @@
   </div>
 
   <AddEventModal open={showAddEventModal} {selectedDate} {eventToEdit} onClose={closeAddEventModal} onCreated={loadEvents} />
+
+  <!-- Week Planner Overlay -->
+  {#if plannerOpen}
+    <WeekPlanner
+      {selectedDate}
+      {events}
+      {holidays}
+      todos={[]}
+      {outlookConnected}
+      onSelect={onSelect}
+      onAddEvent={openAddEventFromPlanner}
+      onEditEvent={openEditEventModal}
+      onBack={closePlanner}
+    />
+  {/if}
 
   <!-- Mobile fallback: show widgets above -->
   {#if !upcomingMode}

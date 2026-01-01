@@ -12,6 +12,7 @@
   export let onSetViewMode: (m: 'month' | 'week') => void;
   export let upcomingMode: boolean = false;
   export let onToggleUpcoming: () => void;
+  export let onOpenPlanner: (() => void) | null = null;
 
   const dotBg: Record<TagColorKey, string> = {
     fuchsia: 'bg-fuchsia-500',
@@ -285,6 +286,18 @@
           >
             <span class="text-xl leading-none">|</span>
           </button>
+
+          {#if onOpenPlanner}
+            <button
+              type="button"
+              class="h-9 px-3 rounded-xl bg-white/5 text-white/60 hover:bg-white/10 hover:text-white/80 transition-all duration-150 flex items-center gap-1.5 text-sm font-medium"
+              aria-label="Wochenplaner"
+              on:click={onOpenPlanner}
+            >
+              <span class="text-base leading-none">📅</span>
+              <span class="hidden lg:inline">Planer</span>
+            </button>
+          {/if}
         </div>
       </div>
     </div>
