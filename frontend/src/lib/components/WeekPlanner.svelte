@@ -4,6 +4,7 @@
   import { onDestroy } from 'svelte';
   import { fade, fly } from 'svelte/transition';
   import WeekPlannerDay from './WeekPlannerDay.svelte';
+  import QuickAddEventModal from './QuickAddEventModal.svelte';
 
   export let selectedDate: Date;
   export let events: EventDto[] = [];
@@ -11,9 +12,30 @@
   export let todos: TodoItemDto[] = [];
   export let outlookConnected = false;
   export let onSelect: (d: Date) => void;
-  export let onAddEvent: (d: Date) => void;
   export let onEditEvent: (e: EventDto) => void;
   export let onBack: () => void;
+  export let onEventsChanged: () => void = () => {};
+
+  // Quick Add Modal state
+  let quickAddOpen = false;
+  let quickAddDate = new Date();
+
+  function openQuickAdd(day: Date) {
+    quickAddDate = day;
+    quickAddOpen = true;
+  }
+
+  function closeQuickAdd() {
+    quickAddOpen = false;
+  }
+
+  function handleEventCreated() {
+    onEventsChanged();
+  }
+
+  function handleEventDeleted() {
+    onEventsChanged();
+  }
 
   let touchStartX = 0;
   let touchEndX = 0;
@@ -233,8 +255,9 @@
             holidays={dayHolidays}
             todos={dayTodos}
             {outlookConnected}
-            onAddEvent={() => onAddEvent(day)}
+            onAddEvent={() => openQuickAdd(day)}
             onEditEvent={onEditEvent}
+            onEventDeleted={handleEventDeleted}
           />
         </div>
       {/each}
@@ -243,6 +266,14 @@
 
   <!-- Footer hint -->
   <div class="px-6 py-3 border-t border-white/10 text-center text-sm text-white/50" in:fade={{ duration: 200, delay: 300 }}>
-    Tippe auf + um einen Termin hinzuzufügen · Wische für Wochenwechsel
+    Tippe auf + um einen Termin hinzuzufügen · Halte gedrückt zum Löschen · Wische für Wochenwechsel
   </div>
 </div>
+
+<!-- Quick Add Event Modal -->
+<QuickAddEventModal
+  open={quickAddOpen}
+  prefilledDate={quickAddDate}
+  onClose={closeQuickAdd}
+  onCreated={handleEventCreated}
+/>

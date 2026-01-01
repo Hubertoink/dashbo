@@ -1,7 +1,8 @@
 <script lang="ts">
   import type { EventDto, HolidayDto, TagColorKey, TodoItemDto } from '$lib/api';
+  import { deleteEvent } from '$lib/api';
   import { formatGermanDayLabel } from '$lib/date';
-  import { fade, fly } from 'svelte/transition';
+  import { fade, fly, scale } from 'svelte/transition';
 
   export let day: Date;
   export let isToday = false;
@@ -11,6 +12,77 @@
   export let outlookConnected = false;
   export let onAddEvent: () => void;
   export let onEditEvent: (e: EventDto) => void;
+  export let onEventDeleted: () => void = () => {};
+
+  // Long-press state
+  let longPressTimer: ReturnType<typeof setTimeout> | null = null;
+  let deleteConfirmEvent: EventDto | null = null;
+  let deleting = false;
+
+  const LONG_PRESS_DURATION = 500; // ms
+
+  function haptic(pattern: number | number[] = 10) {
+    if ('vibrate' in navigator) {
+      navigator.vibrate(pattern);
+    }
+  }
+
+  function startLongPress(event: EventDto) {
+    longPressTimer = setTimeout(() => {
+      haptic([30, 20, 30]); // Double vibration for long-press
+      deleteConfirmEvent = event;
+      longPressTimer = null;
+    }, LONG_PRESS_DURATION);
+  }
+
+  function cancelLongPress() {
+    if (longPressTimer) {
+      clearTimeout(longPressTimer);
+      longPressTimer = null;
+    }
+  }
+
+  function handleEventPointerDown(e: PointerEvent, event: EventDto) {
+    // Only trigger long-press on touch or primary mouse button
+    if (e.pointerType === 'touch' || e.button === 0) {
+      startLongPress(event);
+    }
+  }
+
+  function handleEventPointerUp(e: PointerEvent, event: EventDto) {
+    if (longPressTimer) {
+      // Short press - open edit modal
+      cancelLongPress();
+      onEditEvent(event);
+    }
+    // If timer already fired, deleteConfirmEvent is set, so don't open edit
+  }
+
+  function handleEventPointerLeave() {
+    cancelLongPress();
+  }
+
+  async function confirmDelete() {
+    if (!deleteConfirmEvent || deleting) return;
+    deleting = true;
+    haptic(15);
+
+    try {
+      await deleteEvent(deleteConfirmEvent.id);
+      haptic([10, 50, 10]);
+      deleteConfirmEvent = null;
+      onEventDeleted();
+    } catch (err) {
+      console.error('Delete event failed:', err);
+      haptic([50, 30, 50, 30, 50]);
+    } finally {
+      deleting = false;
+    }
+  }
+
+  function cancelDelete() {
+    deleteConfirmEvent = null;
+  }
 
   const dotBg: Record<TagColorKey, string> = {
     fuchsia: 'bg-fuchsia-500',
@@ -84,8 +156,12 @@
       {@const tagColor = e.tag?.color}
       <button
         type="button"
-        class="w-full text-left rounded-xl px-2.5 py-2 bg-white/5 hover:bg-white/10 active:bg-white/15 active:scale-[0.98] transition group"
-        on:click={() => onEditEvent(e)}
+        class="w-full text-left rounded-xl px-2.5 py-2 bg-white/5 hover:bg-white/10 active:bg-white/15 active:scale-[0.98] transition group touch-manipulation select-none"
+        on:pointerdown={(ev) => handleEventPointerDown(ev, e)}
+        on:pointerup={(ev) => handleEventPointerUp(ev, e)}
+        on:pointerleave={handleEventPointerLeave}
+        on:pointercancel={handleEventPointerLeave}
+        on:contextmenu|preventDefault={() => {}}
       >
         <div class="flex gap-2 items-start">
           <!-- Color dot -->
@@ -165,3 +241,53 @@
     </button>
   </div>
 </div>
+
+<!-- Delete Confirmation Modal -->
+{#if deleteConfirmEvent}
+  <!-- svelte-ignore a11y_click_events_have_key_events a11y_interactive_supports_focus -->
+  <div
+    class="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm"
+    transition:fade={{ duration: 150 }}
+    on:click|self={cancelDelete}
+    role="dialog"
+    aria-modal="true"
+  >
+    <div
+      class="mx-4 max-w-sm w-full bg-neutral-900/95 backdrop-blur-xl border border-white/10 rounded-2xl overflow-hidden"
+      in:scale={{ start: 0.9, duration: 200 }}
+      out:scale={{ start: 0.9, duration: 150 }}
+    >
+      <div class="p-5 text-center">
+        <div class="w-14 h-14 mx-auto mb-4 rounded-full bg-rose-500/20 flex items-center justify-center">
+          <svg class="w-7 h-7 text-rose-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+          </svg>
+        </div>
+        <h3 class="text-lg font-semibold mb-1">Termin löschen?</h3>
+        <p class="text-sm text-white/60 mb-1 truncate px-2">„{deleteConfirmEvent.title}"</p>
+        <p class="text-xs text-white/40">Diese Aktion kann nicht rückgängig gemacht werden.</p>
+      </div>
+      <div class="flex border-t border-white/10">
+        <button
+          type="button"
+          class="flex-1 py-3 text-center font-medium text-white/70 hover:bg-white/5 active:bg-white/10 transition"
+          on:click={cancelDelete}
+        >
+          Abbrechen
+        </button>
+        <button
+          type="button"
+          class="flex-1 py-3 text-center font-semibold text-rose-400 hover:bg-rose-500/10 active:bg-rose-500/20 transition border-l border-white/10"
+          on:click={confirmDelete}
+          disabled={deleting}
+        >
+          {#if deleting}
+            Löschen…
+          {:else}
+            Löschen
+          {/if}
+        </button>
+      </div>
+    </div>
+  </div>
+{/if}

@@ -176,7 +176,6 @@
   let showAddEventModal = false;
   let eventToEdit: EventDto | null = null;
   let plannerOpen = false;
-  let plannerPrefilledDate: Date | null = null;
 
   $: bgOverlay =
     tone === 'dark'
@@ -194,14 +193,6 @@
 
   function closePlanner() {
     plannerOpen = false;
-    plannerPrefilledDate = null;
-  }
-
-  function openAddEventFromPlanner(d: Date) {
-    plannerPrefilledDate = d;
-    selectedDate = d;
-    eventToEdit = null;
-    showAddEventModal = true;
   }
 
   function openEditEventModal(e: EventDto) {
@@ -1234,9 +1225,9 @@
       todos={[]}
       {outlookConnected}
       onSelect={onSelect}
-      onAddEvent={openAddEventFromPlanner}
       onEditEvent={openEditEventModal}
       onBack={closePlanner}
+      onEventsChanged={loadEvents}
     />
   {/if}
 
