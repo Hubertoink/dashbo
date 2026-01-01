@@ -361,6 +361,8 @@
 <QuickAddEventModal
   open={quickAddOpen}
   prefilledDate={quickAddDate}
+  {outlookConnected}
+  {todoEnabled}
   onClose={closeQuickAdd}
   onCreated={handleEventCreated}
 />
