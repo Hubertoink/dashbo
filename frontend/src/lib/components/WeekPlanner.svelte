@@ -1,16 +1,18 @@
 <script lang="ts">
-  import type { EventDto, HolidayDto, TagColorKey, TodoItemDto } from '$lib/api';
-  import { formatGermanDayLabel, formatGermanShortDate, sameDay } from '$lib/date';
+  import { fetchTodos, updateTodo, type EventDto, type HolidayDto, type TodoItemDto } from '$lib/api';
+  import { formatGermanShortDate, sameDay } from '$lib/date';
   import { onDestroy } from 'svelte';
   import { fade, fly } from 'svelte/transition';
   import WeekPlannerDay from './WeekPlannerDay.svelte';
   import QuickAddEventModal from './QuickAddEventModal.svelte';
+  import TodoModal from './TodoModal.svelte';
+  import WeekPlannerTodoBar from './WeekPlannerTodoBar.svelte';
 
   export let selectedDate: Date;
   export let events: EventDto[] = [];
   export let holidays: HolidayDto[] = [];
-  export let todos: TodoItemDto[] = [];
   export let outlookConnected = false;
+  export let todoEnabled = true;
   export let onSelect: (d: Date) => void;
   export let onEditEvent: (e: EventDto) => void;
   export let onBack: () => void;
@@ -35,6 +37,81 @@
 
   function handleEventDeleted() {
     onEventsChanged();
+  }
+
+  // ToDos (Outlook)
+  let todoLoaded = false;
+  let todoItems: TodoItemDto[] = [];
+  let todoListName = 'Dashbo';
+  let todoListNames: string[] = [];
+  let todoModalOpen = false;
+  let todoModalListName = '';
+  let todoModalConnectionId: number | null = null;
+  let todoPrefillDueAt: string | null = null;
+
+  function isoStartOfDayLocal(d: Date): string {
+    const x = new Date(d);
+    x.setHours(0, 0, 0, 0);
+    return x.toISOString();
+  }
+
+  async function loadTodos() {
+    if (!outlookConnected || !todoEnabled) return;
+    try {
+      const r = await fetchTodos();
+      todoListName = r.listName;
+      todoListNames = Array.isArray(r.listNames) ? r.listNames : [];
+      todoItems = Array.isArray(r.items) ? r.items : [];
+    } catch {
+      todoItems = [];
+    } finally {
+      todoLoaded = true;
+    }
+  }
+
+  $: if (outlookConnected && todoEnabled && !todoLoaded) {
+    void loadTodos();
+  }
+
+  async function toggleTodo(item: TodoItemDto) {
+    const newCompleted = !item.completed;
+    // optimistic
+    todoItems = todoItems
+      .map((i) =>
+        i.taskId === item.taskId && i.listId === item.listId && i.connectionId === item.connectionId
+          ? { ...i, completed: newCompleted, status: newCompleted ? 'completed' : 'notStarted' }
+          : i
+      )
+      .sort((a, b) => {
+        if (a.completed !== b.completed) return a.completed ? 1 : -1;
+        const ad = a.dueAt ? new Date(a.dueAt).getTime() : Number.POSITIVE_INFINITY;
+        const bd = b.dueAt ? new Date(b.dueAt).getTime() : Number.POSITIVE_INFINITY;
+        if (ad !== bd) return ad - bd;
+        return a.title.localeCompare(b.title);
+      });
+
+    try {
+      await updateTodo({
+        connectionId: item.connectionId,
+        listId: item.listId,
+        taskId: item.taskId,
+        completed: newCompleted
+      });
+      await loadTodos();
+    } catch {
+      await loadTodos();
+    }
+  }
+
+  function openTodoCreate(dueDate: Date) {
+    todoModalListName = (todoListNames && todoListNames.length > 0 ? todoListNames[0] : todoListName) || '';
+    todoModalConnectionId = todoItems.length > 0 ? todoItems[0]!.connectionId : null;
+    todoPrefillDueAt = isoStartOfDayLocal(dueDate);
+    todoModalOpen = true;
+  }
+
+  function closeTodoModal() {
+    todoModalOpen = false;
   }
 
   let touchStartX = 0;
@@ -160,7 +237,7 @@
 
   $: todosByDay = (() => {
     const m = new Map<string, TodoItemDto[]>();
-    for (const t of todos) {
+    for (const t of todoItems) {
       if (!t.dueAt) continue;
       const d = startOfLocalDay(new Date(t.dueAt));
       const k = dateKey(d);
@@ -258,16 +335,26 @@
             onAddEvent={() => openQuickAdd(day)}
             onEditEvent={onEditEvent}
             onEventDeleted={handleEventDeleted}
+            onToggleTodo={toggleTodo}
           />
         </div>
       {/each}
     </div>
   </div>
 
-  <!-- Footer hint -->
-  <div class="px-6 py-3 border-t border-white/10 text-center text-sm text-white/50" in:fade={{ duration: 200, delay: 300 }}>
-    Tippe auf + um einen Termin hinzuzufügen · Halte gedrückt zum Löschen · Wische für Wochenwechsel
-  </div>
+  {#if outlookConnected && todoEnabled}
+    <WeekPlannerTodoBar
+      items={todoItems.filter((t) => !t.completed)}
+      {selectedDate}
+      onToggleTodo={toggleTodo}
+      onAddTodo={openTodoCreate}
+    />
+  {:else}
+    <!-- Footer hint -->
+    <div class="px-6 py-3 border-t border-white/10 text-center text-sm text-white/50" in:fade={{ duration: 200, delay: 200 }}>
+      Tippe auf + um einen Termin hinzuzufügen · Halte gedrückt zum Löschen · Wische für Wochenwechsel
+    </div>
+  {/if}
 </div>
 
 <!-- Quick Add Event Modal -->
@@ -276,4 +363,25 @@
   prefilledDate={quickAddDate}
   onClose={closeQuickAdd}
   onCreated={handleEventCreated}
+/>
+
+<TodoModal
+  open={todoModalOpen}
+  onClose={closeTodoModal}
+  onSaved={() => loadTodos()}
+  mode="create"
+  item={null}
+  listNames={todoListNames && todoListNames.length > 0 ? todoListNames : [todoListName]}
+  selectedListName={todoModalListName}
+  onChangeListName={(v) => (todoModalListName = v)}
+  connections={Array.from(
+    new Map(
+      todoItems
+        .map((i) => ({ id: i.connectionId, label: i.connectionLabel || 'Outlook', color: i.color }))
+        .map((c) => [String(c.id), c])
+    ).values()
+  ).sort((a, b) => a.label.localeCompare(b.label))}
+  selectedConnectionId={todoModalConnectionId}
+  onChangeConnectionId={(v) => (todoModalConnectionId = v)}
+  prefillDueAt={todoPrefillDueAt}
 />

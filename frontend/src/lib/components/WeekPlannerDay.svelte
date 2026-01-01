@@ -13,6 +13,7 @@
   export let onAddEvent: () => void;
   export let onEditEvent: (e: EventDto) => void;
   export let onEventDeleted: () => void = () => {};
+  export let onToggleTodo: (t: TodoItemDto) => void = () => {};
 
   // Long-press state
   let longPressTimer: ReturnType<typeof setTimeout> | null = null;
@@ -218,10 +219,14 @@
     <div class="px-2 py-2 border-t border-white/10">
       <div class="text-xs text-white/50 mb-1 px-1">ToDos</div>
       {#each todos.slice(0, 3) as t (t.taskId)}
-        <div class="flex items-center gap-2 px-1 py-1 text-xs">
+        <button
+          type="button"
+          class="w-full flex items-center gap-2 px-1 py-1 text-xs text-left rounded-lg hover:bg-white/5 active:bg-white/10 transition"
+          on:click={() => onToggleTodo(t)}
+        >
           <span class={`w-3 h-3 rounded border ${t.completed ? 'bg-emerald-500/50 border-emerald-400' : 'border-white/30'}`}></span>
           <span class={`truncate ${t.completed ? 'line-through text-white/40' : 'text-white/80'}`}>{t.title}</span>
-        </div>
+        </button>
       {/each}
       {#if todos.length > 3}
         <div class="text-xs text-white/40 px-1">+{todos.length - 3} weitere</div>

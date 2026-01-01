@@ -16,6 +16,9 @@
   export let selectedConnectionId: number | null = null;
   export let onChangeConnectionId: (value: number | null) => void = () => {};
 
+  // Optional prefill for create mode
+  export let prefillDueAt: string | null = null;
+
   let title = '';
   let description = '';
   let dateStr = '';
@@ -98,7 +101,7 @@
       title = '';
       description = '';
       dateStr = yyyymmddLocalFromIso(new Date().toISOString());
-      dueDateStr = '';
+      dueDateStr = yyyymmddLocalFromIso(prefillDueAt);
     }
 
     prevOpen = true;

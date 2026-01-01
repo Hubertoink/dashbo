@@ -1222,8 +1222,8 @@
       {selectedDate}
       {events}
       {holidays}
-      todos={[]}
       {outlookConnected}
+      {todoEnabled}
       onSelect={onSelect}
       onEditEvent={openEditEventModal}
       onBack={closePlanner}
