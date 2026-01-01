@@ -784,7 +784,7 @@
           <div class="h-full flex" on:click|stopPropagation={exitStandby}>
             <div class="hidden md:flex w-[34%] min-w-[280px] flex-col justify-between p-10 h-full">
               {#if todoEnabled && outlookConnected}
-                <div class="text-white"><TodoWidget /></div>
+                <div class="text-white"><TodoWidget showAddButton={false} /></div>
               {/if}
 
               <div class="text-white"><ForecastWidget /></div>

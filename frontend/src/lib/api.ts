@@ -74,6 +74,21 @@ export type NewsResponseDto = {
   error?: string;
 };
 
+export type SpotifyNowPlayingDto = {
+  enabled: boolean;
+  active: boolean;
+  isPlaying?: boolean;
+  title?: string | null;
+  artist?: string | null;
+  album?: string | null;
+  imageUrl?: string | null;
+  source?: string | null;
+  deviceName?: string | null;
+  deviceType?: string | null;
+  progressMs?: number | null;
+  error?: string;
+};
+
 export type TagColorKey = 'fuchsia' | 'cyan' | 'emerald' | 'amber' | 'rose' | 'violet' | 'sky' | 'lime';
 
 // Either one of the predefined palette keys or a custom hex color (#RRGGBB)
@@ -193,6 +208,10 @@ export async function disconnectOutlookConnection(id: number): Promise<{ ok: tru
 
 export async function fetchTodos(): Promise<TodosResponseDto> {
   return api<TodosResponseDto>('/todos');
+}
+
+export async function fetchSpotifyNowPlaying(): Promise<SpotifyNowPlayingDto> {
+  return api<SpotifyNowPlayingDto>('/spotify/now-playing');
 }
 
 export async function updateTodo(input: {

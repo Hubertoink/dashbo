@@ -86,6 +86,19 @@ In `/settings` kann jeder User seinen Outlook‑Kalender verbinden (OAuth). Daf�
    - `OUTLOOK_CLIENT_SECRET`
    - `OUTLOOK_REDIRECT_URI`
 
+### Spotify (optional, Now Playing)
+
+Wenn du möchtest, dass das Musik‑Widget auch Spotify‑Wiedergabe (z.B. am PC) anzeigen kann, kann das Backend optional den aktuellen Spotify‑Player‑Status abfragen.
+
+- Spotify Developer App anlegen und einen `refresh_token` erzeugen (Authorization Code Flow).
+- Empfohlene Scopes: `user-read-currently-playing`, `user-read-playback-state`
+- ENV:
+   - `SPOTIFY_CLIENT_ID`
+   - `SPOTIFY_CLIENT_SECRET`
+   - `SPOTIFY_REFRESH_TOKEN`
+
+Endpoint (auth‑geschützt): `GET /api/spotify/now-playing`
+
 ### Refresh‑Intervall
 
 - `DASHBO_DATA_REFRESH_MS` (Default `60000`) steuert, wie oft das Dashboard Daten nachlädt.

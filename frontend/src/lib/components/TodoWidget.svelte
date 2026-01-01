@@ -6,6 +6,7 @@
   export let variant: 'panel' | 'plain' = 'panel';
   export let expanded = false;
   export let onToggleExpand: (() => void) | null = null;
+  export let showAddButton = true;
 
   let listName = 'Dashbo';
   let listNames: string[] = [];
@@ -242,17 +243,19 @@
   <div class="mb-2 flex items-center justify-between">
     <div class="text-base font-semibold">To Do</div>
     <div class="flex items-center gap-1">
-      <button
-        type="button"
-        class="p-1 rounded hover:bg-white/10 transition-colors"
-        on:click|stopPropagation={openCreate}
-        title="ToDo hinzufügen"
-        aria-label="ToDo hinzufügen"
-      >
-        <svg class="w-4 h-4 text-white/70" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
-        </svg>
-      </button>
+      {#if showAddButton}
+        <button
+          type="button"
+          class="p-1 rounded hover:bg-white/10 transition-colors"
+          on:click|stopPropagation={openCreate}
+          title="ToDo hinzufügen"
+          aria-label="ToDo hinzufügen"
+        >
+          <svg class="w-4 h-4 text-white/70" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
+          </svg>
+        </button>
+      {/if}
 
       {#if onToggleExpand}
         <button

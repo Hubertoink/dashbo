@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onDestroy, onMount } from 'svelte';
+  import { fetchSpotifyNowPlaying } from '$lib/api';
   import {
     musicPlayerCommand,
     setNowPlaying,
@@ -18,6 +19,7 @@
   } from '$lib/edge';
 
   import { resetHeosPlaybackStatus, setHeosPlaybackStatus } from '$lib/stores/heosPlayback';
+  import { resetSpotifyPlaybackStatus, setSpotifyPlaybackStatus } from '$lib/stores/spotifyPlayback';
 
   let audioEl: HTMLAudioElement | null = null;
 
@@ -30,6 +32,7 @@
   const HEOS_DASHBO_MARKER = 'DashbO |';
 
   let heosStatusPollTimer: ReturnType<typeof setInterval> | null = null;
+  let spotifyStatusPollTimer: ReturnType<typeof setInterval> | null = null;
 
   let heosPollTimer: ReturnType<typeof setInterval> | null = null;
   let heosPosSec = 0;
@@ -135,6 +138,56 @@
       clearInterval(heosStatusPollTimer);
       heosStatusPollTimer = null;
     }
+  }
+
+  function stopSpotifyStatusPolling() {
+    if (spotifyStatusPollTimer) {
+      clearInterval(spotifyStatusPollTimer);
+      spotifyStatusPollTimer = null;
+    }
+  }
+
+  function startSpotifyStatusPolling() {
+    stopSpotifyStatusPolling();
+
+    const tick = async () => {
+      try {
+        const r = await fetchSpotifyNowPlaying();
+        const enabled = Boolean(r?.enabled);
+        const active = Boolean(r?.active);
+
+        if (!enabled) {
+          resetSpotifyPlaybackStatus({ enabled: false, active: false, isPlaying: false });
+          return;
+        }
+
+        setSpotifyPlaybackStatus({
+          enabled: true,
+          active,
+          isPlaying: Boolean(r?.isPlaying),
+          title: typeof r?.title === 'string' ? r.title : null,
+          artist: typeof r?.artist === 'string' ? r.artist : null,
+          album: typeof r?.album === 'string' ? r.album : null,
+          imageUrl: typeof r?.imageUrl === 'string' ? r.imageUrl : null,
+          source: typeof r?.source === 'string' ? r.source : 'Spotify',
+          deviceName: typeof r?.deviceName === 'string' ? r.deviceName : null,
+          deviceType: typeof r?.deviceType === 'string' ? r.deviceType : null,
+          updatedAt: Date.now(),
+          error: typeof r?.error === 'string' ? r.error : null
+        });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err || 'spotify_status_failed');
+        // If user is logged out, api() throws 401; keep it quiet.
+        if (String(msg).includes('API 401')) {
+          resetSpotifyPlaybackStatus({ enabled: false, active: false, isPlaying: false, error: null });
+          return;
+        }
+        setSpotifyPlaybackStatus({ enabled: true, active: false, isPlaying: false, updatedAt: Date.now(), error: msg });
+      }
+    };
+
+    void tick();
+    spotifyStatusPollTimer = setInterval(() => void tick(), 5000);
   }
 
   function looksLikeDashboPlayback(summary: any): boolean {
@@ -617,11 +670,13 @@
   onDestroy(() => {
     stopHeosPolling();
     stopHeosStatusPolling();
+    stopSpotifyStatusPolling();
     unsub();
   });
 
   onMount(() => {
     startHeosStatusPolling();
+    startSpotifyStatusPolling();
   });
 </script>
 

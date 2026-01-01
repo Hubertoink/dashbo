@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { musicPlayerState, togglePlayPause, playNext, playPrev } from '$lib/stores/musicPlayer';
   import { heosPlaybackStatus } from '$lib/stores/heosPlayback';
+  import { spotifyPlaybackStatus } from '$lib/stores/spotifyPlayback';
   import {
     EDGE_BASE_URL_KEY,
     EDGE_TOKEN_KEY,
@@ -58,18 +59,33 @@
   $: heosExternalSourceLabel =
     heosExternalSource && heosExternalSource.toLowerCase() !== 'station' ? heosExternalSource : '';
 
+  $: spotifyActive = Boolean($spotifyPlaybackStatus?.enabled && $spotifyPlaybackStatus?.active);
+  $: spotifyTitle = $spotifyPlaybackStatus?.title ? String($spotifyPlaybackStatus.title) : '';
+  $: spotifyArtist = $spotifyPlaybackStatus?.artist ? String($spotifyPlaybackStatus.artist) : '';
+  $: spotifyAlbum = $spotifyPlaybackStatus?.album ? String($spotifyPlaybackStatus.album) : '';
+  $: spotifyImageUrl = $spotifyPlaybackStatus?.imageUrl ? String($spotifyPlaybackStatus.imageUrl) : '';
+  $: spotifySourceLabel = $spotifyPlaybackStatus?.source ? String($spotifyPlaybackStatus.source) : 'Spotify';
+
   $: heosExternalActive = Boolean(heosEnabled && selectedPid && heosExternal);
   $: displayArtist = now?.artist
     ? String(now.artist)
     : heosExternalActive
       ? heosExternalArtist || heosExternalSourceLabel || 'Externe Wiedergabe'
-      : '';
+      : spotifyActive
+        ? spotifyArtist || spotifySourceLabel
+        : '';
   $: displayTitle = now?.title
     ? String(now.title)
     : heosExternalActive
       ? heosExternalTitle || heosExternalAlbum || (heosExternalSourceLabel ? 'Wiedergabe aktiv' : '')
+      : spotifyActive
+        ? spotifyTitle || spotifyAlbum || 'Wiedergabe aktiv'
+        : '';
+  $: externalSuffix = heosExternal
+    ? ` (${(heosExternalSourceLabel || 'extern').toLowerCase()})`
+    : spotifyActive
+      ? ` (${spotifySourceLabel.toLowerCase()})`
       : '';
-  $: externalSuffix = heosExternal ? ` (${(heosExternalSourceLabel || 'extern').toLowerCase()})` : '';
 
   let heosEnabled = false;
   let edgeBaseUrl = '';
@@ -441,6 +457,9 @@
       <div class="absolute inset-0 bg-gradient-to-r from-transparent to-black/70"></div>
     {:else if heosEnabled && selectedPid && heosExternal && heosExternalImageUrl}
       <img src={heosExternalImageUrl} alt="" class="h-full w-full object-cover" loading="lazy" />
+      <div class="absolute inset-0 bg-gradient-to-r from-transparent to-black/70"></div>
+    {:else if spotifyActive && spotifyImageUrl}
+      <img src={spotifyImageUrl} alt="" class="h-full w-full object-cover" loading="lazy" />
       <div class="absolute inset-0 bg-gradient-to-r from-transparent to-black/70"></div>
     {:else}
       <div class="h-full w-full bg-white/5 flex items-center justify-center">
