@@ -27,6 +27,21 @@
   type Target = 'windows' | 'pi';
   let target: Target = 'windows';
 
+  let tooltipText: string | null = null;
+  let tooltipLeft = 0;
+  let tooltipTop = 0;
+
+  function showTooltip(anchorEl: HTMLElement, text: string) {
+    const rect = anchorEl.getBoundingClientRect();
+    tooltipText = text;
+    tooltipLeft = Math.round(rect.left + rect.width / 2);
+    tooltipTop = Math.round(rect.bottom + 10);
+  }
+
+  function hideTooltip() {
+    tooltipText = null;
+  }
+
   let edgePort = '8787';
   let edgeToken = '1000';
   let musicDir = 'C:/Users/<you>/Music';
@@ -126,6 +141,14 @@
   >
     <div class="absolute inset-0 bg-black/70"></div>
     <div class="relative bg-zinc-900 rounded-2xl p-6 w-full max-w-3xl border border-white/10 max-h-[85vh] flex flex-col">
+      {#if tooltipText}
+        <div
+          class="fixed z-[60] -translate-x-1/2 rounded-lg border border-white/10 bg-zinc-950/95 px-3 py-2 text-xs text-white/80 max-w-[18rem] shadow-lg"
+          style={`left:${tooltipLeft}px;top:${tooltipTop}px;`}
+        >
+          {tooltipText}
+        </div>
+      {/if}
       <div class="flex items-start justify-between gap-4 mb-3">
         <div>
           <div class="font-semibold text-lg">Pi/PC Edge Setup</div>
@@ -139,7 +162,7 @@
         </button>
       </div>
 
-      <div class="text-sm text-white/80 space-y-3 overflow-y-auto pr-1 max-h-[calc(85vh-88px)]">
+      <div class="text-sm text-white/80 space-y-3 overflow-y-auto pr-1 max-h-[calc(85vh-88px)]" on:scroll={hideTooltip}>
         <div class="rounded-xl border border-white/10 bg-white/5 p-3">
           <div class="font-medium mb-2">YML herunterladen</div>
 
@@ -147,13 +170,12 @@
             <label class="text-white/70 text-xs">
               <span class="inline-flex items-center gap-2">
                 Ziel
-                <span class="relative group inline-flex">
-                  <span class="h-5 w-5 rounded-full bg-white/10 border border-white/10 inline-flex items-center justify-center text-[11px] text-white/80">i</span>
-                  <span
-                    class="pointer-events-none absolute left-1/2 -translate-x-1/2 top-7 w-72 rounded-lg border border-white/10 bg-zinc-950/90 px-3 py-2 text-xs text-white/80 opacity-0 group-hover:opacity-100 transition-opacity"
-                  >
-                    Windows erzeugt eine Compose-Datei mit Windows-Musikpfad. Pi nutzt standardmäßig /mnt/music.
-                  </span>
+                <span
+                  class="h-5 w-5 rounded-full bg-white/10 border border-white/10 inline-flex items-center justify-center text-[11px] text-white/80"
+                  on:mouseenter={(e) => showTooltip(e.currentTarget as HTMLElement, 'Windows erzeugt eine Compose-Datei mit Windows-Musikpfad. Pi nutzt standardmäßig /mnt/music.')}
+                  on:mouseleave={hideTooltip}
+                >
+                  i
                 </span>
               </span>
               <select
@@ -169,13 +191,12 @@
             <label class="text-white/70 text-xs">
               <span class="inline-flex items-center gap-2">
                 Token (EDGE_TOKEN)
-                <span class="relative group inline-flex">
-                  <span class="h-5 w-5 rounded-full bg-white/10 border border-white/10 inline-flex items-center justify-center text-[11px] text-white/80">i</span>
-                  <span
-                    class="pointer-events-none absolute left-1/2 -translate-x-1/2 top-7 w-72 rounded-lg border border-white/10 bg-zinc-950/90 px-3 py-2 text-xs text-white/80 opacity-0 group-hover:opacity-100 transition-opacity"
-                  >
-                    Muss mit dem Token übereinstimmen, den du im Dashboard unter Edge-Zugangsdaten speicherst.
-                  </span>
+                <span
+                  class="h-5 w-5 rounded-full bg-white/10 border border-white/10 inline-flex items-center justify-center text-[11px] text-white/80"
+                  on:mouseenter={(e) => showTooltip(e.currentTarget as HTMLElement, 'Muss mit dem Token übereinstimmen, den du im Dashboard unter Edge-Zugangsdaten speicherst.')}
+                  on:mouseleave={hideTooltip}
+                >
+                  i
                 </span>
               </span>
               <input
@@ -188,13 +209,16 @@
             <label class="text-white/70 text-xs">
               <span class="inline-flex items-center gap-2">
                 Docker Image (EDGE_IMAGE)
-                <span class="relative group inline-flex">
-                  <span class="h-5 w-5 rounded-full bg-white/10 border border-white/10 inline-flex items-center justify-center text-[11px] text-white/80">i</span>
-                  <span
-                    class="pointer-events-none absolute left-1/2 -translate-x-1/2 top-7 w-72 rounded-lg border border-white/10 bg-zinc-950/90 px-3 py-2 text-xs text-white/80 opacity-0 group-hover:opacity-100 transition-opacity"
-                  >
-                    Prebuilt Edge Image (z.B. ghcr.io/&lt;owner&gt;/dashbo-edge:latest). Damit sind Updates nur noch: docker compose pull ; docker compose up -d.
-                  </span>
+                <span
+                  class="h-5 w-5 rounded-full bg-white/10 border border-white/10 inline-flex items-center justify-center text-[11px] text-white/80"
+                  on:mouseenter={(e) =>
+                    showTooltip(
+                      e.currentTarget as HTMLElement,
+                      'Prebuilt Edge Image (z.B. ghcr.io/<owner>/dashbo-edge:latest). Updates sind dann nur noch: docker compose pull ; docker compose up -d.'
+                    )}
+                  on:mouseleave={hideTooltip}
+                >
+                  i
                 </span>
               </span>
               <input
@@ -207,13 +231,12 @@
             <label class="text-white/70 text-xs">
               <span class="inline-flex items-center gap-2">
                 Musikordner (Host) (MUSIC_DIR)
-                <span class="relative group inline-flex">
-                  <span class="h-5 w-5 rounded-full bg-white/10 border border-white/10 inline-flex items-center justify-center text-[11px] text-white/80">i</span>
-                  <span
-                    class="pointer-events-none absolute left-1/2 -translate-x-1/2 top-7 w-72 rounded-lg border border-white/10 bg-zinc-950/90 px-3 py-2 text-xs text-white/80 opacity-0 group-hover:opacity-100 transition-opacity"
-                  >
-                    Pfad auf deinem Host-System, der als /mnt/music in den Container gemountet wird.
-                  </span>
+                <span
+                  class="h-5 w-5 rounded-full bg-white/10 border border-white/10 inline-flex items-center justify-center text-[11px] text-white/80"
+                  on:mouseenter={(e) => showTooltip(e.currentTarget as HTMLElement, 'Pfad auf deinem Host-System, der als /mnt/music in den Container gemountet wird.')}
+                  on:mouseleave={hideTooltip}
+                >
+                  i
                 </span>
               </span>
               <input
@@ -227,13 +250,12 @@
               <label class="text-white/70 text-xs">
                 <span class="inline-flex items-center gap-2">
                   Port (EDGE_PORT)
-                  <span class="relative group inline-flex">
-                    <span class="h-5 w-5 rounded-full bg-white/10 border border-white/10 inline-flex items-center justify-center text-[11px] text-white/80">i</span>
-                    <span
-                      class="pointer-events-none absolute left-1/2 -translate-x-1/2 top-7 w-72 rounded-lg border border-white/10 bg-zinc-950/90 px-3 py-2 text-xs text-white/80 opacity-0 group-hover:opacity-100 transition-opacity"
-                    >
-                      Host-Port, unter dem der Edge erreichbar ist (Container bleibt 8787).
-                    </span>
+                  <span
+                    class="h-5 w-5 rounded-full bg-white/10 border border-white/10 inline-flex items-center justify-center text-[11px] text-white/80"
+                    on:mouseenter={(e) => showTooltip(e.currentTarget as HTMLElement, 'Host-Port, unter dem der Edge erreichbar ist (Container bleibt 8787).')}
+                    on:mouseleave={hideTooltip}
+                  >
+                    i
                   </span>
                 </span>
                 <input
@@ -246,13 +268,16 @@
               <label class="text-white/70 text-xs">
                 <span class="inline-flex items-center gap-2">
                   Public Base URL (EDGE_PUBLIC_BASE_URL)
-                  <span class="relative group inline-flex">
-                    <span class="h-5 w-5 rounded-full bg-white/10 border border-white/10 inline-flex items-center justify-center text-[11px] text-white/80">i</span>
-                    <span
-                      class="pointer-events-none absolute left-1/2 -translate-x-1/2 top-7 w-72 rounded-lg border border-white/10 bg-zinc-950/90 px-3 py-2 text-xs text-white/80 opacity-0 group-hover:opacity-100 transition-opacity"
-                    >
-                        Das ist die öffentliche/LAN-URL deines Edge (für HEOS-Streams), nicht die Docker-interne Container-URL. Typisch: http://192.168.x.x:8787.
-                    </span>
+                  <span
+                    class="h-5 w-5 rounded-full bg-white/10 border border-white/10 inline-flex items-center justify-center text-[11px] text-white/80"
+                    on:mouseenter={(e) =>
+                      showTooltip(
+                        e.currentTarget as HTMLElement,
+                        'Das ist die öffentliche/LAN-URL deines Edge (für HEOS-Streams), nicht die Docker-interne Container-URL. Typisch: http://192.168.x.x:8787.'
+                      )}
+                    on:mouseleave={hideTooltip}
+                  >
+                    i
                   </span>
                 </span>
                 <input
@@ -266,13 +291,12 @@
             <label class="text-white/70 text-xs">
               <span class="inline-flex items-center gap-2">
                 Allowed Origins (EDGE_ALLOWED_ORIGINS)
-                <span class="relative group inline-flex">
-                  <span class="h-5 w-5 rounded-full bg-white/10 border border-white/10 inline-flex items-center justify-center text-[11px] text-white/80">i</span>
-                  <span
-                    class="pointer-events-none absolute left-1/2 -translate-x-1/2 top-7 w-72 rounded-lg border border-white/10 bg-zinc-950/90 px-3 py-2 text-xs text-white/80 opacity-0 group-hover:opacity-100 transition-opacity"
-                  >
-                    Komma-separierte URLs, von denen der Browser den Edge aufrufen darf (CORS).
-                  </span>
+                <span
+                  class="h-5 w-5 rounded-full bg-white/10 border border-white/10 inline-flex items-center justify-center text-[11px] text-white/80"
+                  on:mouseenter={(e) => showTooltip(e.currentTarget as HTMLElement, 'Komma-separierte URLs, von denen der Browser den Edge aufrufen darf (CORS).')}
+                  on:mouseleave={hideTooltip}
+                >
+                  i
                 </span>
               </span>
               <input
@@ -285,13 +309,16 @@
               <label class="text-white/70 text-xs">
                 <span class="inline-flex items-center gap-2">
                   HEOS Hosts (optional)
-                  <span class="relative group inline-flex">
-                    <span class="h-5 w-5 rounded-full bg-white/10 border border-white/10 inline-flex items-center justify-center text-[11px] text-white/80">i</span>
-                    <span
-                      class="pointer-events-none absolute left-1/2 -translate-x-1/2 top-7 w-72 rounded-lg border border-white/10 bg-zinc-950/90 px-3 py-2 text-xs text-white/80 opacity-0 group-hover:opacity-100 transition-opacity"
-                    >
-                      Optional: Komma-separierte IPs deiner HEOS-Geräte. Hilft, wenn automatische Discovery (SSDP) nicht klappt.
-                    </span>
+                  <span
+                    class="h-5 w-5 rounded-full bg-white/10 border border-white/10 inline-flex items-center justify-center text-[11px] text-white/80"
+                    on:mouseenter={(e) =>
+                      showTooltip(
+                        e.currentTarget as HTMLElement,
+                        'Optional: Komma-separierte IPs deiner HEOS-Geräte. Hilft, wenn automatische Discovery (SSDP) nicht klappt.'
+                      )}
+                    on:mouseleave={hideTooltip}
+                  >
+                    i
                   </span>
                 </span>
                 <input
@@ -303,13 +330,16 @@
               <label class="text-white/70 text-xs">
                 <span class="inline-flex items-center gap-2">
                   HEOS Scan CIDR (optional)
-                  <span class="relative group inline-flex">
-                    <span class="h-5 w-5 rounded-full bg-white/10 border border-white/10 inline-flex items-center justify-center text-[11px] text-white/80">i</span>
-                    <span
-                      class="pointer-events-none absolute left-1/2 -translate-x-1/2 top-7 w-72 rounded-lg border border-white/10 bg-zinc-950/90 px-3 py-2 text-xs text-white/80 opacity-0 group-hover:opacity-100 transition-opacity"
-                    >
-                      Optional: Netzbereich für TCP-Scan-Fallback (Port 1255), z.B. 192.168.178.0/24.
-                    </span>
+                  <span
+                    class="h-5 w-5 rounded-full bg-white/10 border border-white/10 inline-flex items-center justify-center text-[11px] text-white/80"
+                    on:mouseenter={(e) =>
+                      showTooltip(
+                        e.currentTarget as HTMLElement,
+                        'Optional: Netzbereich für TCP-Scan-Fallback (Port 1255), z.B. 192.168.178.0/24.'
+                      )}
+                    on:mouseleave={hideTooltip}
+                  >
+                    i
                   </span>
                 </span>
                 <input
@@ -322,7 +352,7 @@
 
             <div class="flex items-center justify-between gap-3 mt-1">
               <div class="text-xs text-white/50">
-                Hinweis: Wenn DashbO unter https läuft, braucht der Edge typischerweise HTTPS (Mixed Content).
+                Hinweis: Wenn DashbO unter https läuft, braucht der Edge typischerweise HTTPS (Mixed Content). Update prüfen: <span class="font-medium">docker compose pull</span> (bei neuer Version wird ein neueres Image geladen).
               </div>
               <button
                 class="h-9 px-3 rounded-lg text-sm bg-white/10 hover:bg-white/15 disabled:opacity-50 disabled:hover:bg-white/10"
@@ -369,7 +399,14 @@
         <div class="text-white/60 text-xs">
           Hinweis: Die Edge-Zugangsdaten und der Player-Widget Toggle werden nur lokal im Browser gespeichert (localStorage).
         </div>
-      </div>
-    </div>
-  </div>
-{/if}
+                  <span
+                    class="h-5 w-5 rounded-full bg-white/10 border border-white/10 inline-flex items-center justify-center text-[11px] text-white/80"
+                    on:mouseenter={(e) =>
+                      showTooltip(
+                        e.currentTarget as HTMLElement,
+                        'Das ist die öffentliche/LAN-URL deines Edge (für HEOS-Streams), nicht die Docker-interne Container-URL. Typisch: http://192.168.x.x:8787.'
+                      )}
+                    on:mouseleave={hideTooltip}
+                  >
+                    i
+                  </span>
