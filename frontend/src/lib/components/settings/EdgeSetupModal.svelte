@@ -399,14 +399,7 @@
         <div class="text-white/60 text-xs">
           Hinweis: Die Edge-Zugangsdaten und der Player-Widget Toggle werden nur lokal im Browser gespeichert (localStorage).
         </div>
-                  <span
-                    class="h-5 w-5 rounded-full bg-white/10 border border-white/10 inline-flex items-center justify-center text-[11px] text-white/80"
-                    on:mouseenter={(e) =>
-                      showTooltip(
-                        e.currentTarget as HTMLElement,
-                        'Das ist die öffentliche/LAN-URL deines Edge (für HEOS-Streams), nicht die Docker-interne Container-URL. Typisch: http://192.168.x.x:8787.'
-                      )}
-                    on:mouseleave={hideTooltip}
-                  >
-                    i
-                  </span>
+      </div>
+    </div>
+  </div>
+{/if}
