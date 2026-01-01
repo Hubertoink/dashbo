@@ -1009,7 +1009,7 @@
             <!-- Left: todo + forecast + clock -->
             <div class="hidden md:flex w-[34%] min-w-[280px] flex-col p-10 h-full">
               {#if todoEnabled && outlookConnected}
-                <div class="mt-6 pb-8 text-white"><TodoWidget variant="plain" /></div>
+                <div class="mt-6 pb-8 text-white"><TodoWidget variant="plain" showAddButton={false} /></div>
               {/if}
 
               <div class="text-white"><ForecastWidget /></div>
