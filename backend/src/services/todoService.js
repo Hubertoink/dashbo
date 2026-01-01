@@ -221,6 +221,16 @@ async function listTodos({ userId, listNames }) {
   // Use multi connections when available; legacy token otherwise.
   const connections = await listOutlookConnections({ userId });
 
+  function formatConnectionLabel(c) {
+    const displayName = c?.displayName ? String(c.displayName) : '';
+    const email = c?.email ? String(c.email) : '';
+    const base = (displayName || email || 'Outlook').trim() || 'Outlook';
+    if (displayName && email && !base.toLowerCase().includes(email.toLowerCase())) {
+      return `${displayName} (${email})`;
+    }
+    return base;
+  }
+
   const out = [];
 
   async function fetchFor({ connectionId, label, color, accessToken }) {
@@ -277,7 +287,7 @@ async function listTodos({ userId, listNames }) {
     for (const c of connections) {
       const accessToken = await getValidAccessTokenForConnection({ userId, connectionId: c.id });
       if (!accessToken) continue;
-      await fetchFor({ connectionId: c.id, label: c.displayName || c.email || 'Outlook', color: c.color, accessToken });
+      await fetchFor({ connectionId: c.id, label: formatConnectionLabel(c), color: c.color, accessToken });
     }
   } else {
     const accessToken = await getValidAccessToken({ userId });
