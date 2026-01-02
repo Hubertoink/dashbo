@@ -118,10 +118,6 @@
     todoModalOpen = false;
   }
 
-  let touchStartX = 0;
-  let touchEndX = 0;
-  let swiping = false;
-
   function mondayStart(d: Date) {
     const x = new Date(d);
     x.setHours(0, 0, 0, 0);
@@ -168,30 +164,6 @@
     const next = new Date(selectedDate);
     next.setDate(selectedDate.getDate() + delta * 7);
     onSelect(next);
-  }
-
-  function handleTouchStart(e: TouchEvent) {
-    touchStartX = e.touches[0]?.clientX ?? 0;
-    swiping = true;
-  }
-
-  function handleTouchMove(e: TouchEvent) {
-    if (!swiping) return;
-    touchEndX = e.touches[0]?.clientX ?? 0;
-  }
-
-  function handleTouchEnd() {
-    if (!swiping) return;
-    swiping = false;
-    const diff = touchStartX - touchEndX;
-    const threshold = 80;
-    if (Math.abs(diff) > threshold) {
-      if (diff > 0) {
-        shiftWeek(1);
-      } else {
-        shiftWeek(-1);
-      }
-    }
   }
 
   $: weekStart = mondayStart(selectedDate);
@@ -269,9 +241,6 @@
   class="fixed inset-0 z-50 flex flex-col bg-black/70 backdrop-blur-2xl"
   in:fly={{ y: 40, duration: 280, opacity: 0 }}
   out:fly={{ y: 30, duration: 180, opacity: 0 }}
-  on:touchstart={handleTouchStart}
-  on:touchmove={handleTouchMove}
-  on:touchend={handleTouchEnd}
 >
   <!-- Header -->
   <div class="flex items-center justify-between px-6 py-4 border-b border-white/10" in:fade={{ duration: 200, delay: 80 }}>

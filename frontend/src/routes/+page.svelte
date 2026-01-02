@@ -998,8 +998,6 @@
                 {holidays}
                 {viewMode}
                 onSetViewMode={setViewMode}
-                {upcomingMode}
-                onToggleUpcoming={toggleUpcomingMode}
                 onOpenPlanner={openPlanner}
               />
             </div>
