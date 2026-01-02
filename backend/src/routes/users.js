@@ -6,12 +6,23 @@ const { listUsers, createUser, deleteUser, resetPassword } = require('../service
 
 const usersRouter = express.Router();
 
-const createSchema = z.object({
-  email: z.string().email(),
-  name: z.string().min(1).max(200),
-  password: z.string().min(6).max(200),
-  isAdmin: z.boolean().optional(),
-});
+const createSchema = z
+  .object({
+    email: z.string().email(),
+    name: z.string().min(1).max(200),
+    password: z.string().min(6).max(200),
+    // Support multiple field names for backwards compatibility between frontend/backend versions
+    // (e.g. older clients may send `admin` or `is_admin`).
+    isAdmin: z.boolean().optional(),
+    admin: z.boolean().optional(),
+    is_admin: z.boolean().optional(),
+  })
+  .transform((data) => ({
+    email: data.email,
+    name: data.name,
+    password: data.password,
+    isAdmin: data.isAdmin ?? data.admin ?? data.is_admin,
+  }));
 
 usersRouter.get('/', requireAuth, requireAdmin, async (_req, res) => {
   const users = await listUsers();

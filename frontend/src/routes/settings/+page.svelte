@@ -1013,8 +1013,8 @@
       newUserPassword = '';
       newUserIsAdmin = false;
       await refreshUsers();
-    } catch {
-      userError = 'User konnte nicht angelegt werden.';
+    } catch (err) {
+      userError = err instanceof Error ? err.message : 'User konnte nicht angelegt werden.';
     }
   }
 
