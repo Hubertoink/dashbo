@@ -74,6 +74,17 @@
     return typeof value === 'string' && hexRe.test(value);
   }
 
+  const textFg: Record<TagColorKey, string> = {
+    fuchsia: 'text-fuchsia-300',
+    cyan: 'text-cyan-300',
+    emerald: 'text-emerald-300',
+    amber: 'text-amber-200',
+    rose: 'text-rose-300',
+    violet: 'text-violet-300',
+    sky: 'text-sky-300',
+    lime: 'text-lime-300'
+  };
+
   $: newTagId = newTagIdStr ? Number(newTagIdStr) : null;
   $: selectedTag = newTagId != null ? tags.find((t) => t.id === newTagId) : undefined;
 
@@ -262,6 +273,51 @@
       for (const k of eventDayKeys(e)) m.set(k, true);
     }
     monthHasEvents = m;
+  }
+
+  let monthEventsByDay = new Map<string, EventDto[]>();
+  $: {
+    const m = new Map<string, EventDto[]>();
+    for (const e of monthEvents) {
+      for (const k of eventDayKeys(e)) {
+        const arr = m.get(k) ?? [];
+        arr.push(e);
+        m.set(k, arr);
+      }
+    }
+    for (const arr of m.values()) {
+      arr.sort((a, b) => {
+        if (a.allDay && !b.allDay) return -1;
+        if (!a.allDay && b.allDay) return 1;
+        return new Date(a.startAt).getTime() - new Date(b.startAt).getTime();
+      });
+    }
+    monthEventsByDay = m;
+  }
+
+  function eventPersons(e: EventDto): Array<{ id: number; name: string; color: string }> {
+    if (e.persons && e.persons.length > 0) return e.persons as any;
+    if (e.person) return [e.person as any];
+    return [];
+  }
+
+  function eventDot(e: EventDto): { cls: string; style: string } {
+    const tagColor = e.tag?.color;
+    const ps = eventPersons(e);
+    const p0 = ps[0];
+    const pc = p0?.color;
+
+    if (tagColor) {
+      if (isHexColor(tagColor)) return { cls: 'bg-transparent', style: `background-color: ${tagColor}` };
+      return { cls: tagBg[tagColor as TagColorKey] ?? 'bg-white/25', style: '' };
+    }
+
+    if (pc) {
+      if (isHexColor(pc)) return { cls: 'bg-transparent', style: `background-color: ${pc}` };
+      return { cls: tagBg[pc as TagColorKey] ?? 'bg-white/25', style: '' };
+    }
+
+    return { cls: 'bg-white/25', style: '' };
   }
 
   function isInMonth(d: Date, anchor: Date): boolean {
@@ -725,22 +781,43 @@
               {:else}
                 <div class="mt-2 space-y-2">
                   {#each g.items as e (eventKey(e))}
+                    {@const ps = eventPersons(e)}
+                    {@const dot = eventDot(e)}
                     <button
                       type="button"
                       class="w-full text-left rounded-lg hover:bg-white/5 px-2 py-2 -mx-2"
                       on:click={() => (openEvent = e)}
                     >
                       <div class="flex items-start justify-between gap-3">
-                      <div class="min-w-0">
-                        <div class="text-sm font-medium truncate">{e.title}</div>
-                        <div class="text-xs text-white/55 truncate">
-                          {#if e.allDay}
-                            Ganztägig
-                          {:else}
-                            {formatTime(new Date(e.startAt))}{e.endAt ? ` – ${formatTime(new Date(e.endAt))}` : ''}
-                          {/if}
-                          {#if e.location}
-                            · {e.location}
+                      <div class="min-w-0 flex items-start gap-2">
+                        <div class={`mt-1 h-2.5 w-2.5 rounded-full shrink-0 ${dot.cls}`} style={dot.style}></div>
+                        <div class="min-w-0">
+                          <div class="text-sm font-medium truncate">{e.title}</div>
+                          <div class="text-xs text-white/55 truncate">
+                            {#if e.allDay}
+                              Ganztägig
+                            {:else}
+                              {formatTime(new Date(e.startAt))}{e.endAt ? ` – ${formatTime(new Date(e.endAt))}` : ''}
+                            {/if}
+                            {#if e.location}
+                              · {e.location}
+                            {/if}
+                            {#if e.tag}
+                              · {e.tag.name}
+                            {/if}
+                          </div>
+                          {#if ps.length > 0}
+                            <div class="text-xs mt-0.5">
+                              {#each ps as p, i (p.id)}
+                                {@const pc = p.color as string}
+                                <span
+                                  class={`${!isHexColor(pc) ? (textFg[pc as TagColorKey] ?? 'text-white/70') : 'text-white/70'} font-medium`}
+                                  style={isHexColor(pc) ? `color: ${pc}` : ''}
+                                >
+                                  {p.name}{#if i < ps.length - 1}, {/if}
+                                </span>
+                              {/each}
+                            </div>
                           {/if}
                         </div>
                       </div>
@@ -798,6 +875,7 @@
           <div class={cx('grid grid-cols-7 gap-1', monthLoading && 'opacity-60')}>
             {#each monthDays as d (d.toISOString())}
               {@const k = dateKeyLocal(d)}
+              {@const dayEvents = monthEventsByDay.get(k) ?? []}
               <button
                 type="button"
                 class={cx(
@@ -808,8 +886,16 @@
                 on:click={() => setSelected(d)}
               >
                 <div class="leading-none">{d.getDate()}</div>
-                {#if monthHasEvents.get(k)}
-                  <div class="mt-1 h-1.5 w-1.5 rounded-full bg-white/70"></div>
+                {#if dayEvents.length > 0}
+                  <div class="mt-1 flex items-center justify-center gap-0.5">
+                    {#each dayEvents.slice(0, 3) as ev (eventKey(ev))}
+                      {@const d0 = eventDot(ev)}
+                      <div class={`h-1.5 w-1.5 rounded-full ${d0.cls}`} style={d0.style}></div>
+                    {/each}
+                    {#if dayEvents.length > 3}
+                      <div class="text-[10px] text-white/60 leading-none">+{dayEvents.length - 3}</div>
+                    {/if}
+                  </div>
                 {:else}
                   <div class="mt-1 h-1.5 w-1.5 rounded-full bg-transparent"></div>
                 {/if}
