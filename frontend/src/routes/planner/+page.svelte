@@ -2,6 +2,8 @@
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
 
+  import AddEventModal from '$lib/components/AddEventModal.svelte';
+
   import {
     createEvent,
     fetchEvents,
@@ -86,6 +88,25 @@
 
   // Event modal
   let openEvent: EventDto | null = null;
+
+  // Edit modal (reuse dashboard modal)
+  let editOpen = false;
+  let editEvent: EventDto | null = null;
+
+  function openEditFromEvent(e: EventDto) {
+    editEvent = e;
+    editOpen = true;
+    openEvent = null;
+  }
+
+  function closeEdit() {
+    editOpen = false;
+    editEvent = null;
+  }
+
+  async function onEventMutated() {
+    await Promise.all([refreshAgenda(), refreshMonth()]);
+  }
 
   const weekDays = [
     new Date(2024, 0, 1),
@@ -446,7 +467,7 @@
       <div class="text-red-400 text-sm mb-3">{metaError}</div>
     {/if}
 
-    <div class="bg-white/5 rounded-xl p-4 mb-4 glass border border-white/10">
+    <div class="bg-white/5 rounded-xl p-4 mb-4 glass border border-white/10 relative z-30 overflow-visible">
       <div class="flex items-center justify-between gap-3 mb-3">
         <div class="font-medium">Neuer Termin</div>
       </div>
@@ -516,7 +537,7 @@
 
               {#if tagMenuOpen}
                 <div
-                  class="absolute z-20 mt-2 w-full rounded-xl overflow-hidden border border-white/10 bg-black/60 backdrop-blur-md"
+                  class="absolute z-50 mt-2 w-full rounded-xl overflow-hidden border border-white/10 bg-black/60 backdrop-blur-md"
                   role="listbox"
                 >
                   <button
@@ -580,7 +601,7 @@
 
               {#if personMenuOpen}
                 <div
-                  class="absolute z-20 mt-2 w-full rounded-xl overflow-hidden border border-white/10 bg-black/60 backdrop-blur-md"
+                  class="absolute z-50 mt-2 w-full rounded-xl overflow-hidden border border-white/10 bg-black/60 backdrop-blur-md"
                   role="listbox"
                   aria-multiselectable="true"
                 >
@@ -649,32 +670,39 @@
     </div>
 
     {#if view === 'agenda'}
-      <div class="flex items-center justify-between gap-3 mb-3">
-        <div class="text-white/85 text-sm">{formatDayTitle(selectedDate)} → +7 Tage</div>
-        <button
-          type="button"
-          class="h-9 px-3 rounded-lg text-sm font-medium border border-white/10 hover:bg-white/10"
-          on:click={() => {
-            const d = new Date();
-            selectedDate = d;
-            monthAnchor = new Date(d.getFullYear(), d.getMonth(), 1);
-            newDate = toDateInputValue(d);
-            closePopovers();
-            void refreshAgenda();
-          }}
-        >
-          Heute
-        </button>
-      </div>
+      <div class="relative z-10">
+        <div class="flex items-center justify-between gap-3 mb-3">
+          <div class="text-white/85 text-sm">{formatDayTitle(selectedDate)} → +7 Tage</div>
+          <button
+            type="button"
+            class="h-9 px-3 rounded-lg text-sm font-medium border border-white/10 hover:bg-white/10"
+            on:click={() => {
+              const d = new Date();
+              selectedDate = d;
+              monthAnchor = new Date(d.getFullYear(), d.getMonth(), 1);
+              newDate = toDateInputValue(d);
+              closePopovers();
+              void refreshAgenda();
+            }}
+          >
+            Heute
+          </button>
+        </div>
 
-      {#if agendaLoading}
-        <div class="text-white/60 text-sm">Lade…</div>
-      {:else if agendaError}
-        <div class="text-red-400 text-sm">{agendaError}</div>
-      {:else}
-        <div class="space-y-3">
-          {#each agendaGroups as g (dateKeyLocal(g.day))}
-            <div class="bg-white/5 rounded-xl p-3 glass border border-white/10">
+        {#if agendaError}
+          <div class="text-red-400 text-sm mb-2">{agendaError}</div>
+        {/if}
+
+        {#if agendaLoading && agendaEvents.length === 0}
+          <div class="text-white/60 text-sm">Lade…</div>
+        {:else}
+          {#if agendaLoading}
+            <div class="text-white/50 text-xs mb-2">Aktualisiere…</div>
+          {/if}
+
+          <div class={cx('space-y-3', agendaLoading && 'opacity-60')}>
+            {#each agendaGroups as g (dateKeyLocal(g.day))}
+              <div class="bg-white/5 rounded-xl p-3 glass border border-white/10">
               <div class="flex items-center justify-between">
                 <div class="text-sm font-medium">
                   {g.day.toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit' })}
@@ -724,12 +752,13 @@
                   {/each}
                 </div>
               {/if}
-            </div>
-          {/each}
-        </div>
-      {/if}
+              </div>
+            {/each}
+          </div>
+        {/if}
+      </div>
     {:else}
-      <div class="bg-white/5 rounded-xl p-3 glass border border-white/10">
+      <div class="bg-white/5 rounded-xl p-3 glass border border-white/10 relative z-10">
         <div class="flex items-center justify-between gap-2 mb-3">
           <button
             type="button"
@@ -756,12 +785,17 @@
           {/each}
         </div>
 
-        {#if monthLoading}
+        {#if monthError}
+          <div class="text-red-400 text-sm mb-2">{monthError}</div>
+        {/if}
+
+        {#if monthLoading && monthEvents.length === 0}
           <div class="text-white/60 text-sm">Lade…</div>
-        {:else if monthError}
-          <div class="text-red-400 text-sm">{monthError}</div>
         {:else}
-          <div class="grid grid-cols-7 gap-1">
+          {#if monthLoading}
+            <div class="text-white/50 text-xs mb-2">Aktualisiere…</div>
+          {/if}
+          <div class={cx('grid grid-cols-7 gap-1', monthLoading && 'opacity-60')}>
             {#each monthDays as d (d.toISOString())}
               {@const k = dateKeyLocal(d)}
               <button
@@ -798,9 +832,18 @@
             <div class="text-lg font-semibold leading-tight truncate">{openEvent.title}</div>
             <div class="text-sm text-white/70 mt-1">{formatEventDateLine(openEvent)}</div>
           </div>
-          <button type="button" class="h-9 px-3 rounded-lg bg-white/10 hover:bg-white/15 text-sm" on:click={() => (openEvent = null)}>
-            Schließen
-          </button>
+          <div class="flex items-center gap-2">
+            <button
+              type="button"
+              class="h-9 px-3 rounded-lg bg-white/10 hover:bg-white/15 text-sm"
+              on:click={() => openEditFromEvent(openEvent)}
+            >
+              Bearbeiten
+            </button>
+            <button type="button" class="h-9 px-3 rounded-lg bg-white/10 hover:bg-white/15 text-sm" on:click={() => (openEvent = null)}>
+              Schließen
+            </button>
+          </div>
         </div>
 
         {#if openEvent.location}
@@ -814,14 +857,13 @@
             {#if openEvent.tag}
               <div><span class="text-white/50">Tag:</span> {openEvent.tag.name}</div>
             {/if}
-            {#if openEvent.person}
-              <div><span class="text-white/50">Person:</span> {openEvent.person.name}</div>
-            {/if}
             {#if openEvent.persons && openEvent.persons.length > 0}
               <div>
                 <span class="text-white/50">Personen:</span>
                 {openEvent.persons.map((p) => p.name).join(', ')}
               </div>
+            {:else if openEvent.person}
+              <div><span class="text-white/50">Person:</span> {openEvent.person.name}</div>
             {/if}
           </div>
         {/if}
@@ -833,3 +875,11 @@
     </div>
   </div>
 {/if}
+
+<AddEventModal
+  open={editOpen}
+  selectedDate={editEvent ? new Date(editEvent.startAt) : selectedDate}
+  eventToEdit={editEvent}
+  onClose={closeEdit}
+  onCreated={onEventMutated}
+/>
