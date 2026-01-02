@@ -103,6 +103,10 @@
     return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
   }
 
+  function cx(...parts: Array<string | false | null | undefined>) {
+    return parts.filter(Boolean).join(' ');
+  }
+
   function startOfLocalDay(d: Date): Date {
     const x = new Date(d);
     x.setHours(0, 0, 0, 0);
@@ -283,17 +287,21 @@
       <div class="text-xl font-semibold tracking-wide">Planner</div>
       <div class="flex items-center gap-2">
         <button
-          class="h-9 px-3 rounded-lg text-sm font-medium transition-colors border border-white/10"
-          class:bg-white/20={view === 'agenda'}
-          class:hover:bg-white/15={view !== 'agenda'}
+          type="button"
+          class={cx(
+            'h-9 px-3 rounded-lg text-sm font-medium transition-colors border border-white/10',
+            view === 'agenda' ? 'bg-white/20' : 'hover:bg-white/15'
+          )}
           on:click={() => (view = 'agenda')}
         >
           Agenda
         </button>
         <button
-          class="h-9 px-3 rounded-lg text-sm font-medium transition-colors border border-white/10"
-          class:bg-white/20={view === 'month'}
-          class:hover:bg-white/15={view !== 'month'}
+          type="button"
+          class={cx(
+            'h-9 px-3 rounded-lg text-sm font-medium transition-colors border border-white/10',
+            view === 'month' ? 'bg-white/20' : 'hover:bg-white/15'
+          )}
           on:click={() => (view = 'month')}
         >
           Monat
@@ -362,6 +370,7 @@
       <div class="flex items-center justify-between gap-3 mb-3">
         <div class="text-white/85 text-sm">{formatDayTitle(selectedDate)} → +7 Tage</div>
         <button
+          type="button"
           class="h-9 px-3 rounded-lg text-sm font-medium border border-white/10 hover:bg-white/10"
           on:click={() => {
             const d = new Date();
@@ -388,6 +397,7 @@
                   {g.day.toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit' })}
                 </div>
                 <button
+                  type="button"
                   class="text-xs text-white/60 hover:text-white"
                   on:click={() => {
                     selectedDate = g.day;
@@ -432,11 +442,21 @@
     {:else}
       <div class="bg-white/5 rounded-xl p-3">
         <div class="flex items-center justify-between gap-2 mb-3">
-          <button class="h-9 w-9 rounded-lg bg-white/10 hover:bg-white/15" aria-label="Vorheriger Monat" on:click={() => shiftMonth(-1)}>
+          <button
+            type="button"
+            class="h-9 w-9 rounded-lg bg-white/10 hover:bg-white/15"
+            aria-label="Vorheriger Monat"
+            on:click={() => shiftMonth(-1)}
+          >
             ‹
           </button>
           <div class="text-sm font-medium tracking-wide">{monthTitle}</div>
-          <button class="h-9 w-9 rounded-lg bg-white/10 hover:bg-white/15" aria-label="Nächster Monat" on:click={() => shiftMonth(1)}>
+          <button
+            type="button"
+            class="h-9 w-9 rounded-lg bg-white/10 hover:bg-white/15"
+            aria-label="Nächster Monat"
+            on:click={() => shiftMonth(1)}
+          >
             ›
           </button>
         </div>
@@ -456,10 +476,12 @@
             {#each monthDays as d (d.toISOString())}
               {@const k = dateKeyLocal(d)}
               <button
-                class="aspect-square rounded-lg flex flex-col items-center justify-center text-sm border border-white/10"
-                class:bg-white/15={sameDay(d, selectedDate)}
-                class:hover:bg-white/10={!sameDay(d, selectedDate)}
-                class:opacity-60={!isInMonth(d, monthAnchor)}
+                type="button"
+                class={cx(
+                  'aspect-square rounded-lg flex flex-col items-center justify-center text-sm border border-white/10',
+                  sameDay(d, selectedDate) ? 'bg-white/15' : 'hover:bg-white/10',
+                  !isInMonth(d, monthAnchor) && 'opacity-60'
+                )}
                 on:click={() => setSelected(d)}
               >
                 <div class="leading-none">{d.getDate()}</div>
