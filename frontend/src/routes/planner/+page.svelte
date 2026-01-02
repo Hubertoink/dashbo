@@ -12,6 +12,7 @@
     type EventDto,
     type PersonDto,
     type SettingsDto,
+    type TagColorKey,
     type TagDto
   } from '$lib/api';
   import { daysForMonthGrid, formatGermanDayLabel, formatMonthTitle, startOfDay, endOfDay, sameDay } from '$lib/date';
@@ -49,8 +50,39 @@
   let newAllDay = false;
   let newStartTime = roundToNextHalfHourTime(new Date());
   let newEndTime = '';
-  let newTagId: string = '';
-  let newPersonId: string = '';
+  let newTagIdStr = '';
+  let newPersonIds: number[] = [];
+
+  let tagMenuOpen = false;
+  let personMenuOpen = false;
+
+  const tagBg: Record<TagColorKey, string> = {
+    fuchsia: 'bg-fuchsia-500',
+    cyan: 'bg-cyan-400',
+    emerald: 'bg-emerald-400',
+    amber: 'bg-amber-400',
+    rose: 'bg-rose-400',
+    violet: 'bg-violet-400',
+    sky: 'bg-sky-400',
+    lime: 'bg-lime-400'
+  };
+
+  const hexRe = /^#[0-9a-fA-F]{6}$/;
+  function isHexColor(value: unknown): value is string {
+    return typeof value === 'string' && hexRe.test(value);
+  }
+
+  $: newTagId = newTagIdStr ? Number(newTagIdStr) : null;
+  $: selectedTag = newTagId != null ? tags.find((t) => t.id === newTagId) : undefined;
+
+  $: selectedPersons = persons.filter((p) => newPersonIds.includes(p.id));
+  $: selectedPersonLabel =
+    selectedPersons.length === 0
+      ? 'Keine Person'
+      : selectedPersons.length === 1
+        ? selectedPersons[0]?.name ?? '1 Person'
+        : `${selectedPersons.length} Personen`;
+  $: primaryPerson = selectedPersons[0];
 
   // Event modal
   let openEvent: EventDto | null = null;
@@ -135,6 +167,29 @@
 
   function eventKey(e: EventDto) {
     return e.occurrenceId ?? `${e.id}:${e.startAt}`;
+  }
+
+  function closePopovers() {
+    tagMenuOpen = false;
+    personMenuOpen = false;
+  }
+
+  function chooseTag(id: number | null) {
+    newTagIdStr = id == null ? '' : String(id);
+    tagMenuOpen = false;
+  }
+
+  function choosePerson(id: number | null) {
+    if (id == null) {
+      newPersonIds = [];
+      personMenuOpen = false;
+      return;
+    }
+    if (newPersonIds.includes(id)) {
+      newPersonIds = newPersonIds.filter((x) => x !== id);
+    } else {
+      newPersonIds = [...newPersonIds, id];
+    }
   }
 
   function formatEventDateLine(e: EventDto): string {
@@ -247,6 +302,7 @@
     selectedDate = d;
     newDate = toDateInputValue(d);
     view = 'agenda';
+    closePopovers();
     void refreshAgenda();
   }
 
@@ -299,21 +355,20 @@
 
     creating = true;
     try {
-      const tagIdNum = Number(newTagId);
-      const personIdNum = Number(newPersonId);
       await createEvent({
         title,
         startAt: startAt.toISOString(),
         endAt: endAt ? endAt.toISOString() : null,
         allDay: newAllDay,
-        tagId: Number.isFinite(tagIdNum) && tagIdNum > 0 ? tagIdNum : null,
-        personId: Number.isFinite(personIdNum) && personIdNum > 0 ? personIdNum : null
+        tagId: newTagId != null && Number.isFinite(newTagId) && newTagId > 0 ? newTagId : null,
+        personIds: newPersonIds.length > 0 ? newPersonIds : null
       });
 
       newTitle = '';
       if (!newAllDay) newEndTime = '';
-      newTagId = '';
-      newPersonId = '';
+      newTagIdStr = '';
+      newPersonIds = [];
+      closePopovers();
 
       // Keep the agenda anchored to the event day
       selectedDate = d;
@@ -433,27 +488,148 @@
         {/if}
 
         <div class="grid grid-cols-2 gap-2">
-          <select
-            class="h-10 px-3 rounded-lg bg-white/10 border-0 text-sm text-white/85"
-            bind:value={newTagId}
-            disabled={metaLoading}
-          >
-            <option value="">Kein Tag</option>
-            {#each tags as t (t.id)}
-              <option value={String(t.id)}>{t.name}</option>
-            {/each}
-          </select>
+          {#if tags.length > 0}
+            <div class="relative">
+              <button
+                type="button"
+                class="h-10 w-full rounded-lg bg-white/10 border border-white/10 text-sm px-3 flex items-center justify-between gap-3 hover:bg-white/15 active:bg-white/20 transition"
+                aria-haspopup="listbox"
+                aria-expanded={tagMenuOpen}
+                disabled={metaLoading}
+                on:click={() => (tagMenuOpen = !tagMenuOpen)}
+              >
+                <div class="flex items-center gap-2 min-w-0">
+                  <div
+                    class={`h-3 w-3 rounded-full ${
+                      selectedTag
+                        ? isHexColor(selectedTag.color)
+                          ? 'bg-transparent'
+                          : tagBg[selectedTag.color as TagColorKey] ?? 'bg-white/25'
+                        : 'bg-white/25'
+                    }`}
+                    style={selectedTag && isHexColor(selectedTag.color) ? `background-color: ${selectedTag.color}` : ''}
+                  ></div>
+                  <div class="truncate text-white/85">{selectedTag ? selectedTag.name : 'Kein Tag'}</div>
+                </div>
+                <div class="text-white/60">▾</div>
+              </button>
 
-          <select
-            class="h-10 px-3 rounded-lg bg-white/10 border-0 text-sm text-white/85"
-            bind:value={newPersonId}
-            disabled={metaLoading}
-          >
-            <option value="">Keine Person</option>
-            {#each persons as p (p.id)}
-              <option value={String(p.id)}>{p.name}</option>
-            {/each}
-          </select>
+              {#if tagMenuOpen}
+                <div
+                  class="absolute z-20 mt-2 w-full rounded-xl overflow-hidden border border-white/10 bg-black/60 backdrop-blur-md"
+                  role="listbox"
+                >
+                  <button
+                    type="button"
+                    class={`w-full px-3 py-2.5 flex items-center gap-2 text-left hover:bg-white/10 active:bg-white/15 transition ${newTagId == null ? 'bg-white/10' : ''}`}
+                    role="option"
+                    aria-selected={newTagId == null}
+                    on:click={() => chooseTag(null)}
+                  >
+                    <div class="h-3 w-3 rounded-full bg-white/25"></div>
+                    <div>Kein Tag</div>
+                  </button>
+
+                  {#each tags as t (t.id)}
+                    <button
+                      type="button"
+                      class={`w-full px-3 py-2.5 flex items-center gap-2 text-left hover:bg-white/10 active:bg-white/15 transition ${newTagId === t.id ? 'bg-white/10' : ''}`}
+                      role="option"
+                      aria-selected={newTagId === t.id}
+                      on:click={() => chooseTag(t.id)}
+                    >
+                      <div
+                        class={`h-3 w-3 rounded-full ${isHexColor(t.color) ? 'bg-transparent' : tagBg[t.color as TagColorKey] ?? 'bg-white/25'}`}
+                        style={isHexColor(t.color) ? `background-color: ${t.color}` : ''}
+                      ></div>
+                      <div class="truncate">{t.name}</div>
+                    </button>
+                  {/each}
+                </div>
+              {/if}
+            </div>
+          {:else}
+            <div class="h-10 rounded-lg bg-white/5 border border-white/10 grid place-items-center text-sm text-white/50">
+              Kein Tag
+            </div>
+          {/if}
+
+          {#if persons.length > 0}
+            <div class="relative">
+              <button
+                type="button"
+                class="h-10 w-full rounded-lg bg-white/10 border border-white/10 text-sm px-3 flex items-center justify-between gap-3 hover:bg-white/15 active:bg-white/20 transition"
+                aria-haspopup="listbox"
+                aria-expanded={personMenuOpen}
+                disabled={metaLoading}
+                on:click={() => (personMenuOpen = !personMenuOpen)}
+              >
+                <div class="flex items-center gap-2 min-w-0">
+                  <div
+                    class={`h-3 w-3 rounded-full ${primaryPerson
+                      ? isHexColor(primaryPerson.color)
+                        ? 'bg-transparent'
+                        : tagBg[primaryPerson.color as TagColorKey] ?? 'bg-white/25'
+                      : 'bg-white/25'}`}
+                    style={primaryPerson && isHexColor(primaryPerson.color) ? `background-color: ${primaryPerson.color}` : ''}
+                  ></div>
+                  <div class="truncate text-white/85">{selectedPersonLabel}</div>
+                </div>
+                <div class="text-white/60">▾</div>
+              </button>
+
+              {#if personMenuOpen}
+                <div
+                  class="absolute z-20 mt-2 w-full rounded-xl overflow-hidden border border-white/10 bg-black/60 backdrop-blur-md"
+                  role="listbox"
+                  aria-multiselectable="true"
+                >
+                  <button
+                    type="button"
+                    class="w-full px-3 py-2.5 text-left hover:bg-white/10 active:bg-white/15 transition"
+                    on:click={() => (personMenuOpen = false)}
+                  >
+                    <div class="text-white/70">Fertig</div>
+                  </button>
+
+                  <button
+                    type="button"
+                    class={`w-full px-3 py-2.5 flex items-center gap-2 text-left hover:bg-white/10 active:bg-white/15 transition ${newPersonIds.length === 0 ? 'bg-white/10' : ''}`}
+                    role="option"
+                    aria-selected={newPersonIds.length === 0}
+                    on:click={() => choosePerson(null)}
+                  >
+                    <div class="h-3 w-3 rounded-full bg-white/25"></div>
+                    <div>Keine Person</div>
+                  </button>
+
+                  {#each persons as p (p.id)}
+                    {@const selected = newPersonIds.includes(p.id)}
+                    <button
+                      type="button"
+                      class={`w-full px-3 py-2.5 flex items-center justify-between gap-2 text-left hover:bg-white/10 active:bg-white/15 transition ${selected ? 'bg-white/10' : ''}`}
+                      role="option"
+                      aria-selected={selected}
+                      on:click={() => choosePerson(p.id)}
+                    >
+                      <div class="flex items-center gap-2 min-w-0">
+                        <div
+                          class={`h-3 w-3 rounded-full ${isHexColor(p.color) ? 'bg-transparent' : tagBg[p.color as TagColorKey] ?? 'bg-white/25'}`}
+                          style={isHexColor(p.color) ? `background-color: ${p.color}` : ''}
+                        ></div>
+                        <div class="truncate">{p.name}</div>
+                      </div>
+                      <div class="text-white/60">{selected ? '✓' : ''}</div>
+                    </button>
+                  {/each}
+                </div>
+              {/if}
+            </div>
+          {:else}
+            <div class="h-10 rounded-lg bg-white/5 border border-white/10 grid place-items-center text-sm text-white/50">
+              Keine Person
+            </div>
+          {/if}
         </div>
 
         <div class="flex items-center justify-between gap-3">
@@ -483,6 +659,7 @@
             selectedDate = d;
             monthAnchor = new Date(d.getFullYear(), d.getMonth(), 1);
             newDate = toDateInputValue(d);
+            closePopovers();
             void refreshAgenda();
           }}
         >
