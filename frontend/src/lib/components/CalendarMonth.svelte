@@ -10,6 +10,8 @@
   export let holidays: HolidayDto[] = [];
   export let viewMode: 'month' | 'week' = 'month';
   export let onSetViewMode: (m: 'month' | 'week') => void;
+  export let upcomingMode: boolean = false;
+  export let onToggleUpcoming: () => void;
   export let onOpenPlanner: (() => void) | null = null;
 
   const dotBg: Record<TagColorKey, string> = {
@@ -252,11 +254,19 @@
         <div class="flex items-center gap-2">
           <button
             type="button"
-            class={`h-9 w-9 rounded-xl transition-all duration-150 grid place-items-center ${viewMode === 'month' ? 'bg-white/15 text-white' : 'bg-white/5 text-white/60 hover:bg-white/10 hover:text-white/80'}`}
-            aria-label="Monat"
-            on:click={() => onSetViewMode('month')}
+            class="h-9 w-9 rounded-xl transition-all duration-150 grid place-items-center bg-white/5 text-white/70 hover:bg-white/10 hover:text-white/85"
+            aria-label={upcomingMode ? 'Zurück' : 'Mehr anzeigen'}
+            on:click={onToggleUpcoming}
           >
-            <span class="text-xl leading-none">_</span>
+            {#if upcomingMode}
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-white/80">
+                <path d="M15 18l-6-6 6-6" />
+              </svg>
+            {:else}
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-white/80">
+                <path d="M9 18l6-6-6-6" />
+              </svg>
+            {/if}
           </button>
 
           {#if onOpenPlanner}
