@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
+  import { page } from '$app/stores';
   import { login, setToken, getStoredToken } from '$lib/api';
 
   let identifier = '';
@@ -8,8 +9,10 @@
   let error: string | null = null;
   let loading = false;
 
+  $: nextPath = $page.url.searchParams.get('next') || '/';
+
   onMount(() => {
-    if (getStoredToken()) void goto('/');
+    if (getStoredToken()) void goto(nextPath);
   });
 
   async function doLogin() {
@@ -19,7 +22,7 @@
     try {
       const res = await login(identifier, password);
       setToken(res.token);
-      await goto('/');
+      await goto(nextPath);
     } catch {
       error = 'Login fehlgeschlagen';
     } finally {
