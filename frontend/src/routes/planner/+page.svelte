@@ -2,7 +2,18 @@
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
 
-  import { createEvent, fetchEvents, getStoredToken, type EventDto } from '$lib/api';
+  import {
+    createEvent,
+    fetchEvents,
+    fetchSettings,
+    getStoredToken,
+    listPersons,
+    listTags,
+    type EventDto,
+    type PersonDto,
+    type SettingsDto,
+    type TagDto
+  } from '$lib/api';
   import { daysForMonthGrid, formatGermanDayLabel, formatMonthTitle, startOfDay, endOfDay, sameDay } from '$lib/date';
 
   type ViewMode = 'agenda' | 'month';
@@ -20,6 +31,16 @@
   let agendaEvents: EventDto[] = [];
   let monthEvents: EventDto[] = [];
 
+  // Background (match dashboard setting)
+  let backgroundUrl = '/background.jpg';
+  const bgOverlay = 'linear-gradient(180deg, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.70) 100%)';
+
+  // Tags/persons for quick add
+  let tags: TagDto[] = [];
+  let persons: PersonDto[] = [];
+  let metaLoading = false;
+  let metaError: string | null = null;
+
   // Quick add
   let creating = false;
   let createError: string | null = null;
@@ -28,6 +49,11 @@
   let newAllDay = false;
   let newStartTime = roundToNextHalfHourTime(new Date());
   let newEndTime = '';
+  let newTagId: string = '';
+  let newPersonId: string = '';
+
+  // Event modal
+  let openEvent: EventDto | null = null;
 
   const weekDays = [
     new Date(2024, 0, 1),
@@ -105,6 +131,29 @@
 
   function cx(...parts: Array<string | false | null | undefined>) {
     return parts.filter(Boolean).join(' ');
+  }
+
+  function eventKey(e: EventDto) {
+    return e.occurrenceId ?? `${e.id}:${e.startAt}`;
+  }
+
+  function formatEventDateLine(e: EventDto): string {
+    const start = new Date(e.startAt);
+    const d = start.toLocaleDateString('de-DE', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' });
+    if (e.allDay) return d;
+
+    const time = `${formatTime(start)}${e.endAt ? ` – ${formatTime(new Date(e.endAt))}` : ''}`;
+    return `${d} · ${time}`;
+  }
+
+  function pickBackgroundFromSettings(s: SettingsDto): string {
+    const uploaded = (s.images ?? []).map((img) => `/api/media/${img}`);
+    if (uploaded.length > 0) {
+      const preferred = s.background ? `/api/media/${s.background}` : null;
+      return preferred && uploaded.includes(preferred) ? preferred : uploaded[0] ?? '/background.jpg';
+    }
+    if (s.backgroundUrl) return `/api${s.backgroundUrl}`;
+    return '/background.jpg';
   }
 
   function startOfLocalDay(d: Date): Date {
@@ -250,15 +299,21 @@
 
     creating = true;
     try {
+      const tagIdNum = Number(newTagId);
+      const personIdNum = Number(newPersonId);
       await createEvent({
         title,
         startAt: startAt.toISOString(),
         endAt: endAt ? endAt.toISOString() : null,
-        allDay: newAllDay
+        allDay: newAllDay,
+        tagId: Number.isFinite(tagIdNum) && tagIdNum > 0 ? tagIdNum : null,
+        personId: Number.isFinite(personIdNum) && personIdNum > 0 ? personIdNum : null
       });
 
       newTitle = '';
       if (!newAllDay) newEndTime = '';
+      newTagId = '';
+      newPersonId = '';
 
       // Keep the agenda anchored to the event day
       selectedDate = d;
@@ -277,14 +332,37 @@
       void goto(`/login?next=${encodeURIComponent('/planner')}`);
       return;
     }
+
+    metaLoading = true;
+    metaError = null;
+    void (async () => {
+      try {
+        const [s, t, p] = await Promise.all([fetchSettings(), listTags(), listPersons()]);
+        backgroundUrl = pickBackgroundFromSettings(s);
+        tags = (t ?? []).slice().sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || a.name.localeCompare(b.name));
+        persons = (p ?? []).slice().sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || a.name.localeCompare(b.name));
+      } catch (err) {
+        metaError = err instanceof Error ? err.message : 'Fehler beim Laden.';
+      } finally {
+        metaLoading = false;
+      }
+    })();
+
     void Promise.all([refreshAgenda(), refreshMonth()]);
   });
 </script>
 
-<div class="min-h-screen bg-black text-white">
-  <div class="max-w-xl mx-auto px-4 py-4">
+<div class="min-h-screen text-white overflow-hidden relative bg-black">
+  <div class="absolute inset-0 overflow-hidden">
+    <div
+      class="absolute inset-0"
+      style={`background-image: ${bgOverlay}, url('${backgroundUrl}'); background-size: cover; background-position: center;`}
+    ></div>
+  </div>
+
+  <div class="relative z-10 max-w-xl mx-auto px-4 py-4">
     <div class="flex items-center justify-between gap-3 mb-3">
-      <div class="text-xl font-semibold tracking-wide">Planner</div>
+      <div class="text-xl font-semibold tracking-wide">Dashbo</div>
       <div class="flex items-center gap-2">
         <button
           type="button"
@@ -309,7 +387,11 @@
       </div>
     </div>
 
-    <div class="bg-white/5 rounded-xl p-4 mb-4">
+    {#if metaError}
+      <div class="text-red-400 text-sm mb-3">{metaError}</div>
+    {/if}
+
+    <div class="bg-white/5 rounded-xl p-4 mb-4 glass border border-white/10">
       <div class="flex items-center justify-between gap-3 mb-3">
         <div class="font-medium">Neuer Termin</div>
       </div>
@@ -349,6 +431,30 @@
             />
           </div>
         {/if}
+
+        <div class="grid grid-cols-2 gap-2">
+          <select
+            class="h-10 px-3 rounded-lg bg-white/10 border-0 text-sm text-white/85"
+            bind:value={newTagId}
+            disabled={metaLoading}
+          >
+            <option value="">Kein Tag</option>
+            {#each tags as t (t.id)}
+              <option value={String(t.id)}>{t.name}</option>
+            {/each}
+          </select>
+
+          <select
+            class="h-10 px-3 rounded-lg bg-white/10 border-0 text-sm text-white/85"
+            bind:value={newPersonId}
+            disabled={metaLoading}
+          >
+            <option value="">Keine Person</option>
+            {#each persons as p (p.id)}
+              <option value={String(p.id)}>{p.name}</option>
+            {/each}
+          </select>
+        </div>
 
         <div class="flex items-center justify-between gap-3">
           <button
@@ -391,7 +497,7 @@
       {:else}
         <div class="space-y-3">
           {#each agendaGroups as g (dateKeyLocal(g.day))}
-            <div class="bg-white/5 rounded-xl p-3">
+            <div class="bg-white/5 rounded-xl p-3 glass border border-white/10">
               <div class="flex items-center justify-between">
                 <div class="text-sm font-medium">
                   {g.day.toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit' })}
@@ -413,8 +519,13 @@
                 <div class="text-white/40 text-sm mt-2">Keine Termine</div>
               {:else}
                 <div class="mt-2 space-y-2">
-                  {#each g.items as e (e.occurrenceId ?? `${e.id}:${e.startAt}`)}
-                    <div class="flex items-start justify-between gap-3">
+                  {#each g.items as e (eventKey(e))}
+                    <button
+                      type="button"
+                      class="w-full text-left rounded-lg hover:bg-white/5 px-2 py-2 -mx-2"
+                      on:click={() => (openEvent = e)}
+                    >
+                      <div class="flex items-start justify-between gap-3">
                       <div class="min-w-0">
                         <div class="text-sm font-medium truncate">{e.title}</div>
                         <div class="text-xs text-white/55 truncate">
@@ -431,7 +542,8 @@
                       {#if e.source && e.source !== 'dashbo'}
                         <div class="text-[10px] text-white/40 mt-0.5">{e.source}</div>
                       {/if}
-                    </div>
+                      </div>
+                    </button>
                   {/each}
                 </div>
               {/if}
@@ -440,7 +552,7 @@
         </div>
       {/if}
     {:else}
-      <div class="bg-white/5 rounded-xl p-3">
+      <div class="bg-white/5 rounded-xl p-3 glass border border-white/10">
         <div class="flex items-center justify-between gap-2 mb-3">
           <button
             type="button"
@@ -486,9 +598,9 @@
               >
                 <div class="leading-none">{d.getDate()}</div>
                 {#if monthHasEvents.get(k)}
-                  <div class="mt-1 h-1.5 w-1.5 rounded-full bg-white/70" />
+                  <div class="mt-1 h-1.5 w-1.5 rounded-full bg-white/70"></div>
                 {:else}
-                  <div class="mt-1 h-1.5 w-1.5 rounded-full bg-transparent" />
+                  <div class="mt-1 h-1.5 w-1.5 rounded-full bg-transparent"></div>
                 {/if}
               </button>
             {/each}
@@ -498,3 +610,49 @@
     {/if}
   </div>
 </div>
+
+{#if openEvent}
+  <div class="fixed inset-0 z-50">
+    <button type="button" class="absolute inset-0 bg-black/70" aria-label="Schließen" on:click={() => (openEvent = null)}></button>
+    <div class="absolute inset-x-0 bottom-0 p-4">
+      <div class="max-w-xl mx-auto glass border border-white/10 rounded-2xl p-4">
+        <div class="flex items-start justify-between gap-3">
+          <div class="min-w-0">
+            <div class="text-lg font-semibold leading-tight truncate">{openEvent.title}</div>
+            <div class="text-sm text-white/70 mt-1">{formatEventDateLine(openEvent)}</div>
+          </div>
+          <button type="button" class="h-9 px-3 rounded-lg bg-white/10 hover:bg-white/15 text-sm" on:click={() => (openEvent = null)}>
+            Schließen
+          </button>
+        </div>
+
+        {#if openEvent.location}
+          <div class="mt-3 text-sm text-white/80">
+            <span class="text-white/50">Ort:</span> {openEvent.location}
+          </div>
+        {/if}
+
+        {#if openEvent.tag || openEvent.person || (openEvent.persons && openEvent.persons.length > 0)}
+          <div class="mt-3 text-sm text-white/80">
+            {#if openEvent.tag}
+              <div><span class="text-white/50">Tag:</span> {openEvent.tag.name}</div>
+            {/if}
+            {#if openEvent.person}
+              <div><span class="text-white/50">Person:</span> {openEvent.person.name}</div>
+            {/if}
+            {#if openEvent.persons && openEvent.persons.length > 0}
+              <div>
+                <span class="text-white/50">Personen:</span>
+                {openEvent.persons.map((p) => p.name).join(', ')}
+              </div>
+            {/if}
+          </div>
+        {/if}
+
+        {#if openEvent.description}
+          <div class="mt-3 text-sm text-white/80 whitespace-pre-wrap">{openEvent.description}</div>
+        {/if}
+      </div>
+    </div>
+  </div>
+{/if}
