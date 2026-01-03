@@ -47,7 +47,8 @@
   let metaLoading = false;
   let metaError: string | null = null;
 
-  // Quick add
+  // Quick add modal
+  let quickAddOpen = false;
   let creating = false;
   let createError: string | null = null;
   let newTitle = '';
@@ -57,6 +58,12 @@
   let newEndTime = '';
   let newTagIdStr = '';
   let newPersonIds: number[] = [];
+
+  // Swipe to submit
+  let swipeStartX = 0;
+  let swipeCurrentX = 0;
+  let swiping = false;
+  const SWIPE_THRESHOLD = 180;
 
   let tagMenuOpen = false;
   let personMenuOpen = false;
@@ -460,12 +467,39 @@
       monthAnchor = new Date(d.getFullYear(), d.getMonth(), 1);
 
       await Promise.all([refreshAgenda(), refreshMonth()]);
+      quickAddOpen = false; // Close modal on success
     } catch (err) {
       createError = err instanceof Error ? err.message : 'Fehler beim Anlegen.';
     } finally {
       creating = false;
     }
   }
+
+  // Swipe handlers
+  function handleSwipeStart(e: TouchEvent | MouseEvent) {
+    if (creating) return;
+    swiping = true;
+    swipeStartX = 'touches' in e ? e.touches[0].clientX : e.clientX;
+    swipeCurrentX = 0;
+  }
+
+  function handleSwipeMove(e: TouchEvent | MouseEvent) {
+    if (!swiping) return;
+    const currentX = 'touches' in e ? e.touches[0].clientX : e.clientX;
+    swipeCurrentX = Math.max(0, currentX - swipeStartX);
+  }
+
+  function handleSwipeEnd() {
+    if (!swiping) return;
+    if (swipeCurrentX >= SWIPE_THRESHOLD) {
+      void doCreate();
+    }
+    swiping = false;
+    swipeCurrentX = 0;
+  }
+
+  $: swipeProgress = Math.min(1, swipeCurrentX / SWIPE_THRESHOLD);
+  $: canSubmit = newTitle.trim().length > 0;
 
   onMount(() => {
     if (!getStoredToken()) {
@@ -545,208 +579,6 @@
     {#if metaError}
       <div class="text-red-400 text-sm mb-3">{metaError}</div>
     {/if}
-
-    <div class="bg-white/5 rounded-xl p-4 mb-4 glass border border-white/10 relative z-30 overflow-visible">
-      <div class="flex items-center justify-between gap-3 mb-3">
-        <div class="font-medium">Neuer Termin</div>
-      </div>
-
-      <div class="space-y-2">
-        <input
-          class="h-10 w-full px-3 rounded-lg bg-white/10 border-0 text-sm placeholder:text-white/40"
-          placeholder="Titel"
-          bind:value={newTitle}
-        />
-
-        <div class="grid grid-cols-2 gap-2">
-          <input
-            class="h-10 px-3 rounded-lg bg-white/10 border-0 text-sm"
-            type="date"
-            bind:value={newDate}
-          />
-
-          <label class="h-10 px-3 rounded-lg bg-white/10 border-0 text-sm flex items-center gap-2 text-white/80">
-            <input type="checkbox" class="rounded bg-white/10 border-0" bind:checked={newAllDay} />
-            Ganztägig
-          </label>
-        </div>
-
-        {#if !newAllDay}
-          <div class="grid grid-cols-2 gap-2">
-            <input
-              class="h-10 px-3 rounded-lg bg-white/10 border-0 text-sm"
-              type="time"
-              bind:value={newStartTime}
-            />
-            <input
-              class="h-10 px-3 rounded-lg bg-white/10 border-0 text-sm"
-              type="time"
-              placeholder="Ende (optional)"
-              bind:value={newEndTime}
-            />
-          </div>
-        {/if}
-
-        <div class="grid grid-cols-2 gap-2">
-          {#if tags.length > 0}
-            <div class="relative">
-              <button
-                type="button"
-                class="h-10 w-full rounded-lg bg-white/10 border border-white/10 text-sm px-3 flex items-center justify-between gap-3 hover:bg-white/15 active:bg-white/20 transition"
-                aria-haspopup="listbox"
-                aria-expanded={tagMenuOpen}
-                disabled={metaLoading}
-                on:click={() => (tagMenuOpen = !tagMenuOpen)}
-              >
-                <div class="flex items-center gap-2 min-w-0">
-                  <div
-                    class={`h-3 w-3 rounded-full ${
-                      selectedTag
-                        ? isHexColor(selectedTag.color)
-                          ? 'bg-transparent'
-                          : tagBg[selectedTag.color as TagColorKey] ?? 'bg-white/25'
-                        : 'bg-white/25'
-                    }`}
-                    style={selectedTag && isHexColor(selectedTag.color) ? `background-color: ${selectedTag.color}` : ''}
-                  ></div>
-                  <div class="truncate text-white/85">{selectedTag ? selectedTag.name : 'Kein Tag'}</div>
-                </div>
-                <div class="text-white/60">▾</div>
-              </button>
-
-              {#if tagMenuOpen}
-                <div
-                  class="absolute z-50 mt-2 w-full rounded-xl overflow-hidden border border-white/10 bg-black/60 backdrop-blur-md"
-                  role="listbox"
-                >
-                  <button
-                    type="button"
-                    class={`w-full px-3 py-2.5 flex items-center gap-2 text-left hover:bg-white/10 active:bg-white/15 transition ${newTagId == null ? 'bg-white/10' : ''}`}
-                    role="option"
-                    aria-selected={newTagId == null}
-                    on:click={() => chooseTag(null)}
-                  >
-                    <div class="h-3 w-3 rounded-full bg-white/25"></div>
-                    <div>Kein Tag</div>
-                  </button>
-
-                  {#each tags as t (t.id)}
-                    <button
-                      type="button"
-                      class={`w-full px-3 py-2.5 flex items-center gap-2 text-left hover:bg-white/10 active:bg-white/15 transition ${newTagId === t.id ? 'bg-white/10' : ''}`}
-                      role="option"
-                      aria-selected={newTagId === t.id}
-                      on:click={() => chooseTag(t.id)}
-                    >
-                      <div
-                        class={`h-3 w-3 rounded-full ${isHexColor(t.color) ? 'bg-transparent' : tagBg[t.color as TagColorKey] ?? 'bg-white/25'}`}
-                        style={isHexColor(t.color) ? `background-color: ${t.color}` : ''}
-                      ></div>
-                      <div class="truncate">{t.name}</div>
-                    </button>
-                  {/each}
-                </div>
-              {/if}
-            </div>
-          {:else}
-            <div class="h-10 rounded-lg bg-white/5 border border-white/10 grid place-items-center text-sm text-white/50">
-              Kein Tag
-            </div>
-          {/if}
-
-          {#if persons.length > 0}
-            <div class="relative">
-              <button
-                type="button"
-                class="h-10 w-full rounded-lg bg-white/10 border border-white/10 text-sm px-3 flex items-center justify-between gap-3 hover:bg-white/15 active:bg-white/20 transition"
-                aria-haspopup="listbox"
-                aria-expanded={personMenuOpen}
-                disabled={metaLoading}
-                on:click={() => (personMenuOpen = !personMenuOpen)}
-              >
-                <div class="flex items-center gap-2 min-w-0">
-                  <div
-                    class={`h-3 w-3 rounded-full ${primaryPerson
-                      ? isHexColor(primaryPerson.color)
-                        ? 'bg-transparent'
-                        : tagBg[primaryPerson.color as TagColorKey] ?? 'bg-white/25'
-                      : 'bg-white/25'}`}
-                    style={primaryPerson && isHexColor(primaryPerson.color) ? `background-color: ${primaryPerson.color}` : ''}
-                  ></div>
-                  <div class="truncate text-white/85">{selectedPersonLabel}</div>
-                </div>
-                <div class="text-white/60">▾</div>
-              </button>
-
-              {#if personMenuOpen}
-                <div
-                  class="absolute z-50 mt-2 w-full rounded-xl overflow-hidden border border-white/10 bg-black/60 backdrop-blur-md"
-                  role="listbox"
-                  aria-multiselectable="true"
-                >
-                  <button
-                    type="button"
-                    class="w-full px-3 py-2.5 text-left hover:bg-white/10 active:bg-white/15 transition"
-                    on:click={() => (personMenuOpen = false)}
-                  >
-                    <div class="text-white/70">Fertig</div>
-                  </button>
-
-                  <button
-                    type="button"
-                    class={`w-full px-3 py-2.5 flex items-center gap-2 text-left hover:bg-white/10 active:bg-white/15 transition ${newPersonIds.length === 0 ? 'bg-white/10' : ''}`}
-                    role="option"
-                    aria-selected={newPersonIds.length === 0}
-                    on:click={() => choosePerson(null)}
-                  >
-                    <div class="h-3 w-3 rounded-full bg-white/25"></div>
-                    <div>Keine Person</div>
-                  </button>
-
-                  {#each persons as p (p.id)}
-                    {@const selected = newPersonIds.includes(p.id)}
-                    <button
-                      type="button"
-                      class={`w-full px-3 py-2.5 flex items-center justify-between gap-2 text-left hover:bg-white/10 active:bg-white/15 transition ${selected ? 'bg-white/10' : ''}`}
-                      role="option"
-                      aria-selected={selected}
-                      on:click={() => choosePerson(p.id)}
-                    >
-                      <div class="flex items-center gap-2 min-w-0">
-                        <div
-                          class={`h-3 w-3 rounded-full ${isHexColor(p.color) ? 'bg-transparent' : tagBg[p.color as TagColorKey] ?? 'bg-white/25'}`}
-                          style={isHexColor(p.color) ? `background-color: ${p.color}` : ''}
-                        ></div>
-                        <div class="truncate">{p.name}</div>
-                      </div>
-                      <div class="text-white/60">{selected ? '✓' : ''}</div>
-                    </button>
-                  {/each}
-                </div>
-              {/if}
-            </div>
-          {:else}
-            <div class="h-10 rounded-lg bg-white/5 border border-white/10 grid place-items-center text-sm text-white/50">
-              Keine Person
-            </div>
-          {/if}
-        </div>
-
-        <div class="flex items-center justify-between gap-3">
-          <button
-            class="h-10 px-4 rounded-lg bg-white/20 hover:bg-white/25 text-sm font-medium disabled:opacity-50"
-            disabled={creating}
-            on:click={doCreate}
-          >
-            {creating ? 'Speichere…' : 'Anlegen'}
-          </button>
-
-          {#if createError}
-            <div class="text-red-400 text-xs text-right">{createError}</div>
-          {/if}
-        </div>
-      </div>
-    </div>
 
     {#if view === 'agenda'}
       <div class="relative z-10" in:fly={{ x: -30, duration: 200 }} out:fade={{ duration: 100 }}>
@@ -992,6 +824,291 @@
   onClose={closeEdit}
   onCreated={onEventMutated}
 />
+
+<!-- Quick Add Event Modal -->
+{#if quickAddOpen}
+  <!-- svelte-ignore a11y_no_static_element_interactions a11y_click_events_have_key_events -->
+  <div
+    class="fixed inset-0 z-50 flex items-end justify-center bg-black/70 backdrop-blur-sm"
+    transition:fade={{ duration: 200 }}
+  >
+    <div
+      class="w-full max-w-lg mx-4 mb-4 bg-black/90 border border-white/10 rounded-2xl shadow-2xl overflow-hidden"
+      transition:fly={{ y: 100, duration: 300 }}
+      on:click|stopPropagation
+    >
+      <!-- Header -->
+      <div class="flex items-center justify-between px-5 py-4 border-b border-white/10">
+        <button
+          type="button"
+          class="p-2 -m-2 text-white/60 hover:text-white transition"
+          on:click={() => (quickAddOpen = false)}
+          aria-label="Schließen"
+        >
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+
+        <h2 class="text-lg font-semibold text-white">Neuer Termin</h2>
+
+        <div class="w-10"></div>
+      </div>
+
+      <!-- Form Content -->
+      <div class="p-5 space-y-3">
+        <input
+          class="h-12 w-full px-4 rounded-xl bg-white/10 border-0 text-base placeholder:text-white/40"
+          placeholder="Titel"
+          bind:value={newTitle}
+        />
+
+        <div class="grid grid-cols-2 gap-3">
+          <input
+            class="h-12 px-4 rounded-xl bg-white/10 border-0 text-sm"
+            type="date"
+            bind:value={newDate}
+          />
+
+          <label class="h-12 px-4 rounded-xl bg-white/10 border-0 text-sm flex items-center gap-2 text-white/80">
+            <input type="checkbox" class="rounded bg-white/10 border-0" bind:checked={newAllDay} />
+            Ganztägig
+          </label>
+        </div>
+
+        {#if !newAllDay}
+          <div class="grid grid-cols-2 gap-3">
+            <input
+              class="h-12 px-4 rounded-xl bg-white/10 border-0 text-sm"
+              type="time"
+              bind:value={newStartTime}
+            />
+            <input
+              class="h-12 px-4 rounded-xl bg-white/10 border-0 text-sm"
+              type="time"
+              placeholder="Ende (optional)"
+              bind:value={newEndTime}
+            />
+          </div>
+        {/if}
+
+        <div class="grid grid-cols-2 gap-3">
+          {#if tags.length > 0}
+            <div class="relative">
+              <button
+                type="button"
+                class="h-12 w-full rounded-xl bg-white/10 border border-white/10 text-sm px-4 flex items-center justify-between gap-3 hover:bg-white/15 active:bg-white/20 transition"
+                aria-haspopup="listbox"
+                aria-expanded={tagMenuOpen}
+                disabled={metaLoading}
+                on:click={() => (tagMenuOpen = !tagMenuOpen)}
+              >
+                <div class="flex items-center gap-2 min-w-0">
+                  <div
+                    class={`h-3 w-3 rounded-full ${
+                      selectedTag
+                        ? isHexColor(selectedTag.color)
+                          ? 'bg-transparent'
+                          : tagBg[selectedTag.color as TagColorKey] ?? 'bg-white/25'
+                        : 'bg-white/25'
+                    }`}
+                    style={selectedTag && isHexColor(selectedTag.color) ? `background-color: ${selectedTag.color}` : ''}
+                  ></div>
+                  <div class="truncate text-white/85">{selectedTag ? selectedTag.name : 'Kein Tag'}</div>
+                </div>
+                <div class="text-white/60">▾</div>
+              </button>
+
+              {#if tagMenuOpen}
+                <div
+                  class="absolute z-50 bottom-full mb-2 w-full rounded-xl overflow-hidden border border-white/10 bg-black/80 backdrop-blur-md max-h-60 overflow-y-auto"
+                  role="listbox"
+                >
+                  <button
+                    type="button"
+                    class={`w-full px-4 py-3 flex items-center gap-2 text-left hover:bg-white/10 active:bg-white/15 transition ${newTagId == null ? 'bg-white/10' : ''}`}
+                    role="option"
+                    aria-selected={newTagId == null}
+                    on:click={() => chooseTag(null)}
+                  >
+                    <div class="h-3 w-3 rounded-full bg-white/25"></div>
+                    <div>Kein Tag</div>
+                  </button>
+
+                  {#each tags as t (t.id)}
+                    <button
+                      type="button"
+                      class={`w-full px-4 py-3 flex items-center gap-2 text-left hover:bg-white/10 active:bg-white/15 transition ${newTagId === t.id ? 'bg-white/10' : ''}`}
+                      role="option"
+                      aria-selected={newTagId === t.id}
+                      on:click={() => chooseTag(t.id)}
+                    >
+                      <div
+                        class={`h-3 w-3 rounded-full ${isHexColor(t.color) ? 'bg-transparent' : tagBg[t.color as TagColorKey] ?? 'bg-white/25'}`}
+                        style={isHexColor(t.color) ? `background-color: ${t.color}` : ''}
+                      ></div>
+                      <div class="truncate">{t.name}</div>
+                    </button>
+                  {/each}
+                </div>
+              {/if}
+            </div>
+          {:else}
+            <div class="h-12 rounded-xl bg-white/5 border border-white/10 grid place-items-center text-sm text-white/50">
+              Kein Tag
+            </div>
+          {/if}
+
+          {#if persons.length > 0}
+            <div class="relative">
+              <button
+                type="button"
+                class="h-12 w-full rounded-xl bg-white/10 border border-white/10 text-sm px-4 flex items-center justify-between gap-3 hover:bg-white/15 active:bg-white/20 transition"
+                aria-haspopup="listbox"
+                aria-expanded={personMenuOpen}
+                disabled={metaLoading}
+                on:click={() => (personMenuOpen = !personMenuOpen)}
+              >
+                <div class="flex items-center gap-2 min-w-0">
+                  <div
+                    class={`h-3 w-3 rounded-full ${primaryPerson
+                      ? isHexColor(primaryPerson.color)
+                        ? 'bg-transparent'
+                        : tagBg[primaryPerson.color as TagColorKey] ?? 'bg-white/25'
+                      : 'bg-white/25'}`}
+                    style={primaryPerson && isHexColor(primaryPerson.color) ? `background-color: ${primaryPerson.color}` : ''}
+                  ></div>
+                  <div class="truncate text-white/85">{selectedPersonLabel}</div>
+                </div>
+                <div class="text-white/60">▾</div>
+              </button>
+
+              {#if personMenuOpen}
+                <div
+                  class="absolute z-50 bottom-full mb-2 w-full rounded-xl overflow-hidden border border-white/10 bg-black/80 backdrop-blur-md max-h-60 overflow-y-auto"
+                  role="listbox"
+                  aria-multiselectable="true"
+                >
+                  <button
+                    type="button"
+                    class="w-full px-4 py-3 text-left hover:bg-white/10 active:bg-white/15 transition"
+                    on:click={() => (personMenuOpen = false)}
+                  >
+                    <div class="text-white/70">Fertig</div>
+                  </button>
+
+                  <button
+                    type="button"
+                    class={`w-full px-4 py-3 flex items-center gap-2 text-left hover:bg-white/10 active:bg-white/15 transition ${newPersonIds.length === 0 ? 'bg-white/10' : ''}`}
+                    role="option"
+                    aria-selected={newPersonIds.length === 0}
+                    on:click={() => choosePerson(null)}
+                  >
+                    <div class="h-3 w-3 rounded-full bg-white/25"></div>
+                    <div>Keine Person</div>
+                  </button>
+
+                  {#each persons as p (p.id)}
+                    {@const selected = newPersonIds.includes(p.id)}
+                    <button
+                      type="button"
+                      class={`w-full px-4 py-3 flex items-center justify-between gap-2 text-left hover:bg-white/10 active:bg-white/15 transition ${selected ? 'bg-white/10' : ''}`}
+                      role="option"
+                      aria-selected={selected}
+                      on:click={() => choosePerson(p.id)}
+                    >
+                      <div class="flex items-center gap-2 min-w-0">
+                        <div
+                          class={`h-3 w-3 rounded-full ${isHexColor(p.color) ? 'bg-transparent' : tagBg[p.color as TagColorKey] ?? 'bg-white/25'}`}
+                          style={isHexColor(p.color) ? `background-color: ${p.color}` : ''}
+                        ></div>
+                        <div class="truncate">{p.name}</div>
+                      </div>
+                      <div class="text-white/60">{selected ? '✓' : ''}</div>
+                    </button>
+                  {/each}
+                </div>
+              {/if}
+            </div>
+          {:else}
+            <div class="h-12 rounded-xl bg-white/5 border border-white/10 grid place-items-center text-sm text-white/50">
+              Keine Person
+            </div>
+          {/if}
+        </div>
+
+        {#if createError}
+          <div class="text-red-400 text-sm">{createError}</div>
+        {/if}
+
+        <!-- Swipe to Submit -->
+        <div class="pt-2">
+          <!-- svelte-ignore a11y_interactive_supports_focus -->
+          <div
+            class="relative h-14 rounded-full bg-white/10 border border-white/10 overflow-hidden select-none touch-pan-x"
+            role="slider"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={Math.round(swipeProgress * 100)}
+            on:touchstart={handleSwipeStart}
+            on:touchmove={handleSwipeMove}
+            on:touchend={handleSwipeEnd}
+            on:mousedown={handleSwipeStart}
+            on:mousemove={handleSwipeMove}
+            on:mouseup={handleSwipeEnd}
+            on:mouseleave={handleSwipeEnd}
+          >
+            <!-- Progress background -->
+            <div
+              class="absolute inset-y-0 left-0 bg-gradient-to-r from-emerald-500/50 to-emerald-400/50 transition-all duration-75"
+              style="width: {swipeProgress * 100}%"
+            ></div>
+
+            <!-- Swipe handle -->
+            <div
+              class="absolute top-1 bottom-1 left-1 w-12 rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 shadow-lg flex items-center justify-center transition-transform duration-75"
+              style="transform: translateX({swipeCurrentX}px)"
+            >
+              {#if creating}
+                <svg class="w-5 h-5 text-white animate-spin" fill="none" viewBox="0 0 24 24">
+                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+              {:else}
+                <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                </svg>
+              {/if}
+            </div>
+
+            <!-- Label -->
+            <div class="absolute inset-0 flex items-center justify-center pointer-events-none">
+              <span class="text-white/60 text-sm font-medium pl-12">
+                {creating ? 'Wird angelegt…' : swipeProgress > 0.5 ? 'Loslassen zum Anlegen' : 'Wischen zum Anlegen'}
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+{/if}
+
+<!-- Floating Add Event Button -->
+<button
+  type="button"
+  class="fixed z-50 h-14 w-14 rounded-full bg-gradient-to-br from-blue-400 to-indigo-500 shadow-lg flex items-center justify-center hover:scale-105 active:scale-95 transition-transform"
+  class:bottom-24={scribbleEnabled}
+  class:bottom-6={!scribbleEnabled}
+  class:right-6={true}
+  aria-label="Neuen Termin erstellen"
+  on:click={() => (quickAddOpen = true)}
+  in:fly={{ y: 50, duration: 300 }}
+>
+  <svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+    <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
+  </svg>
+</button>
 
 <!-- Floating Scribble Button (mobile) -->
 {#if scribbleEnabled}
