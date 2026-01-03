@@ -1092,20 +1092,28 @@
       {:else}
         <div class="h-screen overflow-hidden" in:fly={{ x: 120, duration: 220 }}>
           <div class="h-full flex">
-            <!-- Left: todo + forecast + clock -->
-            <div class="hidden md:flex w-[34%] min-w-[280px] flex-col p-10 h-full">
-              {#if todoEnabled && outlookConnected}
-                <div class="mt-6 pb-8 text-white"><TodoWidget variant="plain" showAddButton={false} /></div>
-              {/if}
+            <!-- Left: todo + weather (side by side) + scribble + clock -->
+            <div class="hidden md:flex w-[38%] min-w-[320px] flex-col p-8 h-full">
+              <!-- Top row: Todo + Weather side by side -->
+              <div class="flex gap-6">
+                {#if todoEnabled && outlookConnected}
+                  <div class="flex-1 min-w-0 text-white">
+                    <TodoWidget variant="plain" showAddButton={false} compact={true} />
+                  </div>
+                {/if}
+                <div class="w-36 shrink-0 text-white">
+                  <ForecastWidget compact={true} />
+                </div>
+              </div>
 
               {#if scribbleEnabled}
-                <div class="text-white mt-4 mb-6">
+                <div class="text-white mt-5 mb-4">
                   {#if standbyScribbles.length > 0}
                     <!-- Grid container for crossfade without layout jump -->
                     <div class="grid" style="grid-template-areas: 'stack';">
                       {#key standbyScribbles[standbyScribbleIndex]?.id}
                         <div
-                          class="{scribblePaperLook ? 'scribble-paper-bg' : 'bg-white/5 backdrop-blur-md'} rounded-2xl p-4 shadow-lg"
+                          class="{scribblePaperLook ? 'scribble-paper-bg' : 'bg-white/5 backdrop-blur-md'} rounded-2xl p-3 shadow-lg"
                           style="grid-area: stack;"
                           in:fade={{ duration: 300 }}
                           out:fade={{ duration: 300 }}
@@ -1113,10 +1121,10 @@
                           <img
                             src={standbyScribbles[standbyScribbleIndex]?.imageData}
                             alt="Notiz"
-                            class="w-full aspect-[4/3] object-contain rounded-lg"
+                            class="w-full max-w-[280px] aspect-[4/3] object-contain rounded-lg"
                           />
                           {#if standbyScribbles[standbyScribbleIndex]?.authorName}
-                            <div class="{scribblePaperLook ? 'text-zinc-500' : 'text-white/50'} text-xs mt-2 truncate text-center font-medium">
+                            <div class="{scribblePaperLook ? 'text-zinc-500' : 'text-white/50'} text-xs mt-1.5 truncate text-center font-medium">
                               {standbyScribbles[standbyScribbleIndex].authorName}
                             </div>
                           {/if}
@@ -1126,8 +1134,6 @@
                   {/if}
                 </div>
               {/if}
-
-              <div class="text-white"><ForecastWidget /></div>
 
               {#if musicWidgetEnabled && ($musicPlayerState.now || $heosPlaybackStatus.isExternal)}
                 <div class="standby-music mt-10 mb-6">
