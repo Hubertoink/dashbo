@@ -500,6 +500,7 @@
 
   $: swipeProgress = Math.min(1, swipeCurrentX / SWIPE_THRESHOLD);
   $: canSubmit = newTitle.trim().length > 0;
+  $: anyModalOpen = quickAddOpen || scribbleModalOpen || editOpen || openEvent !== null;
 
   onMount(() => {
     if (!getStoredToken()) {
@@ -1094,35 +1095,40 @@
   </div>
 {/if}
 
-<!-- Floating Add Event Button -->
-<button
-  type="button"
-  class="fixed z-50 h-14 w-14 rounded-full bg-gradient-to-br from-blue-400 to-indigo-500 shadow-lg flex items-center justify-center hover:scale-105 active:scale-95 transition-transform"
-  class:bottom-24={scribbleEnabled}
-  class:bottom-6={!scribbleEnabled}
-  class:right-6={true}
-  aria-label="Neuen Termin erstellen"
-  on:click={() => (quickAddOpen = true)}
-  in:fly={{ y: 50, duration: 300 }}
->
-  <svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-    <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
-  </svg>
-</button>
-
-<!-- Floating Scribble Button (mobile) -->
-{#if scribbleEnabled}
+<!-- Floating Buttons - hidden when any modal is open -->
+{#if !anyModalOpen}
+  <!-- Floating Add Event Button -->
   <button
     type="button"
-    class="fixed bottom-6 right-6 z-50 h-14 w-14 rounded-full bg-gradient-to-br from-amber-400 to-orange-500 shadow-lg flex items-center justify-center hover:scale-105 active:scale-95 transition-transform"
-    aria-label="Scribble Notiz erstellen"
-    on:click={() => (scribbleModalOpen = true)}
+    class="fixed z-50 h-14 w-14 rounded-full bg-gradient-to-br from-blue-400 to-indigo-500 shadow-lg flex items-center justify-center hover:scale-105 active:scale-95 transition-transform"
+    class:bottom-24={scribbleEnabled}
+    class:bottom-6={!scribbleEnabled}
+    class:right-6={true}
+    aria-label="Neuen Termin erstellen"
+    on:click={() => (quickAddOpen = true)}
     in:fly={{ y: 50, duration: 300 }}
+    out:fade={{ duration: 150 }}
   >
     <svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-      <path stroke-linecap="round" stroke-linejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+      <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
     </svg>
   </button>
+
+  <!-- Floating Scribble Button (mobile) -->
+  {#if scribbleEnabled}
+    <button
+      type="button"
+      class="fixed bottom-6 right-6 z-50 h-14 w-14 rounded-full bg-gradient-to-br from-amber-400 to-orange-500 shadow-lg flex items-center justify-center hover:scale-105 active:scale-95 transition-transform"
+      aria-label="Scribble Notiz erstellen"
+      on:click={() => (scribbleModalOpen = true)}
+      in:fly={{ y: 50, duration: 300 }}
+      out:fade={{ duration: 150 }}
+    >
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+      </svg>
+    </button>
+  {/if}
 {/if}
 
 <ScribbleModal
