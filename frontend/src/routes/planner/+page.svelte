@@ -1061,13 +1061,13 @@
           >
             <!-- Progress background -->
             <div
-              class="absolute inset-y-0 left-0 bg-gradient-to-r from-emerald-500/50 to-emerald-400/50 transition-all duration-75"
-              style="width: {swipeProgress * 100}%"
+              class="absolute inset-y-0 left-0 bg-gradient-to-r from-emerald-500/50 to-emerald-400/50"
+              style="width: calc({swipeCurrentX}px + 52px)"
             ></div>
 
             <!-- Swipe handle -->
             <div
-              class="absolute top-1 bottom-1 left-1 w-12 rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 shadow-lg flex items-center justify-center transition-transform duration-75"
+              class="absolute top-1 bottom-1 left-1 w-12 rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 shadow-lg flex items-center justify-center"
               style="transform: translateX({swipeCurrentX}px)"
             >
               {#if creating}
