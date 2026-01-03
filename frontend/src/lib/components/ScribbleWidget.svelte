@@ -196,15 +196,15 @@
         {#if onToggleExpand}
           <button
             type="button"
-            class="p-1 text-white/40 hover:text-white/70 transition"
+            class="p-1 rounded hover:bg-white/10 text-white/40 hover:text-white/70 transition"
             on:click={onToggleExpand}
-            title={expanded ? 'Minimieren' : 'Erweitern'}
+            title={expanded ? 'Verkleinern' : 'Vergrößern'}
           >
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
               {#if expanded}
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4" />
+                <path stroke-linecap="round" stroke-linejoin="round" d="M4 14h6m0 0v6m0-6L3 21M20 10h-6m0 0V4m0 6l7-7" />
               {:else}
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+                <path stroke-linecap="round" stroke-linejoin="round" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5" />
               {/if}
             </svg>
           </button>
