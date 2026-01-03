@@ -301,10 +301,10 @@
   </div>
 
   <div class="px-8 pt-4 flex-1 min-h-0 overflow-hidden">
-    <div class="space-y-4">
+    <div class="h-full min-h-0 grid grid-rows-6 gap-4">
       {#each weeks as week, wi}
-        <div class="relative">
-          <div class="relative z-10 grid grid-cols-7 gap-4">
+        <div class="relative min-h-0">
+          <div class="relative z-10 grid grid-cols-7 gap-4 h-full">
             {#each week as d}
               {@const isSelected = sameDay(d, selected)}
               {@const inMonth = d.getMonth() === monthAnchor.getMonth()}
@@ -316,7 +316,7 @@
 
               <button
                 type="button"
-                class={`relative h-[58px] md:h-[72px] rounded-2xl text-left px-3 py-2 transition
+                class={`relative h-full min-h-[58px] md:min-h-[72px] rounded-2xl text-left px-3 py-2 transition
                   ${inMonth ? 'text-white' : 'text-white/35'}
                   ${isSelected ? 'bg-white/15' : 'bg-white/0 hover:bg-white/10 active:bg-white/15'}
                   ${isToday ? 'ring-2 ring-white/30' : ''}

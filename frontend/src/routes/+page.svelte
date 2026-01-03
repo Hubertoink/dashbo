@@ -814,7 +814,7 @@
         {:else if expandedWidget === 'scribble'}
           <!-- Expanded Scribble takes all space between weather and clock -->
           <div class="mt-6 pb-8 text-white flex-1 flex flex-col min-h-0" transition:slide={{ duration: 300 }}>
-            <ScribbleWidget expanded={true} onToggleExpand={() => expandedWidget = null} />
+            <ScribbleWidget expanded={true} rotationSeconds={scribbleStandbySeconds} onToggleExpand={() => expandedWidget = null} />
           </div>
         {:else}
           <!-- Normal layout with all widgets -->
@@ -832,7 +832,7 @@
 
           {#if scribbleEnabled}
             <div class="mt-2 {compactWidgets ? 'pb-3' : 'pb-6'} text-white" transition:slide={{ duration: 300 }}>
-              <ScribbleWidget compact={compactWidgets} onToggleExpand={() => expandedWidget = 'scribble'} />
+              <ScribbleWidget compact={compactWidgets} rotationSeconds={scribbleStandbySeconds} onToggleExpand={() => expandedWidget = 'scribble'} />
             </div>
           {/if}
 

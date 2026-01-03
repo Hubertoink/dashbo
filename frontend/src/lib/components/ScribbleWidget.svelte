@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onDestroy, onMount } from 'svelte';
   import { fade, slide } from 'svelte/transition';
   import { fetchScribbles, createScribble, deleteScribble, pinScribble, type ScribbleDto } from '$lib/api';
   import ScribbleModal from './ScribbleModal.svelte';
@@ -12,6 +12,8 @@
   export let showAddButton = true;
   /** Only show latest scribble (for standby mode) */
   export let standbyMode = false;
+  /** Rotation interval (seconds) for dashboard paging (reuses existing settings) */
+  export let rotationSeconds: number | null = null;
 
   let scribbles: ScribbleDto[] = [];
   let loading = true;
@@ -20,6 +22,10 @@
   let viewerOpen = false;
   let viewerScribble: ScribbleDto | null = null;
   let authorName = '';
+
+  const PAGE_SIZE = 4;
+  let pageIndex = 0;
+  let pageRotateInterval: ReturnType<typeof setInterval> | null = null;
 
   const SCRIBBLES_CACHE_KEY = 'dashbo_scribbles_cache_v1';
   const SCRIBBLES_CACHE_TTL_MS = 5 * 60 * 1000;
@@ -77,6 +83,11 @@
     loadFromCache();
     authorName = getAuthorFromStorage();
     void load();
+  });
+
+  onDestroy(() => {
+    if (pageRotateInterval) clearInterval(pageRotateInterval);
+    pageRotateInterval = null;
   });
 
   function openModal() {
@@ -145,9 +156,34 @@
     }
   }
 
-  $: latestScribble = scribbles[0] ?? null;
-  $: thumbnails = scribbles.slice(1);
-  $: showThumbnails = !compact && thumbnails.length > 0;
+  function clampRotationSeconds(value: unknown): number {
+    const n = Math.round(Number(value));
+    if (!Number.isFinite(n)) return 20;
+    return Math.max(5, Math.min(300, n));
+  }
+
+  $: pageCount = Math.max(1, Math.ceil(scribbles.length / PAGE_SIZE));
+  $: if (pageIndex >= pageCount) pageIndex = 0;
+  $: visibleScribbles = scribbles.slice(pageIndex * PAGE_SIZE, pageIndex * PAGE_SIZE + PAGE_SIZE);
+
+  function restartRotation() {
+    if (pageRotateInterval) clearInterval(pageRotateInterval);
+    pageRotateInterval = null;
+    if (standbyMode) return;
+    if (pageCount <= 1) return;
+    const seconds = clampRotationSeconds(rotationSeconds ?? 20);
+    pageRotateInterval = setInterval(() => {
+      pageIndex = (pageIndex + 1) % pageCount;
+    }, seconds * 1000);
+  }
+
+  $: {
+    const key = `${standbyMode}:${pageCount}:${rotationSeconds}`;
+    // Reset to first page whenever the paging model changes
+    pageIndex = 0;
+    void key;
+    restartRotation();
+  }
 </script>
 
 {#if standbyMode}
@@ -241,54 +277,27 @@
         <span class="text-sm">Erste Notiz erstellen</span>
       </button>
     {:else}
-      <!-- Latest scribble -->
-      <button
-        type="button"
-        class="w-full text-left hover:bg-white/5 rounded-lg transition p-1 -m-1"
-        on:click={() => latestScribble && openViewer(latestScribble)}
-      >
-        <div class="flex items-start gap-3">
-          <img
-            src={latestScribble?.imageData}
-            alt="Notiz"
-            class="w-20 h-14 object-contain rounded-md bg-white/5 flex-shrink-0 {compact ? 'w-16 h-11' : ''}"
-          />
-          <div class="min-w-0 flex-1 py-0.5">
-            {#if latestScribble?.authorName}
-              <div class="text-sm font-medium text-white/80 truncate">{latestScribble.authorName}</div>
-            {/if}
-            <div class="text-xs text-white/40">{formatTime(latestScribble?.createdAt ?? '')}</div>
-            {#if latestScribble?.pinned}
-              <span class="inline-flex items-center gap-1 text-xs text-amber-400/80 mt-1">
-                <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                  <path d="M10 2a.75.75 0 01.75.75v1.5a.75.75 0 01-1.5 0v-1.5A.75.75 0 0110 2zm0 13a.75.75 0 01.75.75v1.5a.75.75 0 01-1.5 0v-1.5A.75.75 0 0110 15z" />
-                </svg>
-                Angepinnt
-              </span>
-            {/if}
-          </div>
-        </div>
-      </button>
-
-      <!-- Thumbnails (hidden in compact mode) -->
-      {#if showThumbnails && !compact}
-        <div class="mt-3 grid grid-cols-4 gap-2" transition:slide={{ duration: 200 }}>
-          {#each thumbnails.slice(0, expanded ? 8 : 4) as scribble (scribble.id)}
-            <button
-              type="button"
-              class="aspect-[4/3] rounded-md overflow-hidden bg-white/5 hover:ring-2 hover:ring-white/30 transition"
-              on:click={() => openViewer(scribble)}
-            >
-              <img src={scribble.imageData} alt="" class="w-full h-full object-contain" />
-            </button>
-          {/each}
-          {#if thumbnails.length > (expanded ? 8 : 4)}
-            <div class="aspect-[4/3] rounded-md bg-white/5 flex items-center justify-center text-white/40 text-xs">
-              +{thumbnails.length - (expanded ? 8 : 4)}
+      <!-- Grid (up to 4 notes at once; rotates when more exist) -->
+      <div class="grid grid-cols-2 xl:grid-cols-3 gap-2">
+        {#each visibleScribbles as scribble (scribble.id)}
+          <button
+            type="button"
+            class="rounded-xl overflow-hidden bg-white/5 hover:bg-white/10 transition text-left"
+            on:click={() => openViewer(scribble)}
+          >
+            <div class="p-2">
+              <img
+                src={scribble.imageData}
+                alt="Notiz"
+                class="w-full aspect-[4/3] object-contain rounded-lg bg-white/5"
+              />
+              {#if scribble.authorName}
+                <div class="mt-1 text-xs text-white/55 truncate">{scribble.authorName}</div>
+              {/if}
             </div>
-          {/if}
-        </div>
-      {/if}
+          </button>
+        {/each}
+      </div>
     {/if}
   </div>
 {/if}
