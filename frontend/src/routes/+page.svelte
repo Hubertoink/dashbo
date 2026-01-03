@@ -901,10 +901,10 @@
                 <div class="text-white mt-5 mb-4">
                   {#if standbyScribbles.length > 0}
                     <!-- Grid container for crossfade without layout jump -->
-                    <div class="grid" style="grid-template-areas: 'stack';">
+                    <div class="grid place-items-center" style="grid-template-areas: 'stack';">
                       {#key standbyScribbles[standbyScribbleIndex]?.id}
                         <div
-                          class="{scribblePaperLook ? 'scribble-paper-bg' : 'bg-white/5 backdrop-blur-md'} rounded-2xl p-3 shadow-lg flex flex-col items-center"
+                          class="{scribblePaperLook ? 'scribble-paper-bg' : 'bg-white/5 backdrop-blur-md'} rounded-2xl p-2 shadow-lg inline-flex flex-col items-center justify-self-center"
                           style="grid-area: stack;"
                           in:fade={{ duration: 300 }}
                           out:fade={{ duration: 300 }}
@@ -912,7 +912,7 @@
                           <img
                             src={standbyScribbles[standbyScribbleIndex]?.imageData}
                             alt="Notiz"
-                            class="max-w-[280px] w-full aspect-[4/3] object-contain rounded-lg"
+                            class="w-64 max-w-[280px] aspect-square object-contain rounded-lg"
                           />
                           {#if standbyScribbles[standbyScribbleIndex]?.authorName}
                             <div class="{scribblePaperLook ? 'text-zinc-500' : 'text-white/50'} text-xs mt-1.5 truncate text-center font-medium">
@@ -1157,10 +1157,10 @@
                 <div class="text-white mt-5 mb-4">
                   {#if standbyScribbles.length > 0}
                     <!-- Grid container for crossfade without layout jump -->
-                    <div class="grid" style="grid-template-areas: 'stack';">
+                    <div class="grid place-items-center" style="grid-template-areas: 'stack';">
                       {#key standbyScribbles[standbyScribbleIndex]?.id}
                         <div
-                          class="{scribblePaperLook ? 'scribble-paper-bg' : 'bg-white/5 backdrop-blur-md'} rounded-2xl p-3 shadow-lg flex flex-col items-center"
+                          class="{scribblePaperLook ? 'scribble-paper-bg' : 'bg-white/5 backdrop-blur-md'} rounded-2xl p-2 shadow-lg inline-flex flex-col items-center justify-self-center"
                           style="grid-area: stack;"
                           in:fade={{ duration: 300 }}
                           out:fade={{ duration: 300 }}
@@ -1168,7 +1168,7 @@
                           <img
                             src={standbyScribbles[standbyScribbleIndex]?.imageData}
                             alt="Notiz"
-                            class="max-w-[280px] w-full aspect-[4/3] object-contain rounded-lg"
+                            class="w-64 max-w-[280px] aspect-square object-contain rounded-lg"
                           />
                           {#if standbyScribbles[standbyScribbleIndex]?.authorName}
                             <div class="{scribblePaperLook ? 'text-zinc-500' : 'text-white/50'} text-xs mt-1.5 truncate text-center font-medium">

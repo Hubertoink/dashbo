@@ -198,11 +198,11 @@
       </div>
       <div class="grid grid-cols-2 gap-3">
         {#each scribbles.slice(0, 4) as scribble (scribble.id)}
-          <div class="bg-white/5 rounded-xl p-2 backdrop-blur-sm">
+          <div class="bg-white/5 rounded-xl p-2 backdrop-blur-sm inline-flex flex-col items-center">
             <img
               src={scribble.imageData}
               alt="Notiz"
-              class="w-full aspect-[4/3] object-contain rounded-lg"
+              class="w-32 aspect-square object-contain rounded-lg"
             />
             {#if scribble.authorName}
               <div class="text-white/50 text-xs mt-1.5 truncate">
