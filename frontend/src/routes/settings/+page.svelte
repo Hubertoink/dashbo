@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onDestroy, onMount } from 'svelte';
   import { goto } from '$app/navigation';
+  import { page } from '$app/stores';
   import { fade, fly } from 'svelte/transition';
   import {
     login,
@@ -82,6 +83,9 @@
   let authError: string | null = null;
   let authed = false;
   let isAdmin = false;
+
+  // Return URL from query params (for mobile navigation from planner)
+  $: returnUrl = $page.url.searchParams.get('from') || '/';
 
   let settings: SettingsDto | null = null;
   let users: UserDto[] = [];
@@ -1265,7 +1269,7 @@
     <!-- Header -->
     <div class="flex items-center justify-between mb-8">
       <h1 class="text-3xl font-bold">Einstellungen</h1>
-      <a class="text-white/60 hover:text-white text-sm" href="/">← Zurück</a>
+      <a class="text-white/60 hover:text-white text-sm" href={returnUrl}>← Zurück</a>
     </div>
 
     <AccountSection {authed} {isAdmin} bind:email bind:password {authError} {doLogin} {logout} />
