@@ -23,7 +23,7 @@
   let viewerScribble: ScribbleDto | null = null;
   let authorName = '';
 
-  const PAGE_SIZE = 4;
+  let pageSize = 4;
   let pageIndex = 0;
   let pageRotateInterval: ReturnType<typeof setInterval> | null = null;
 
@@ -162,9 +162,10 @@
     return Math.max(5, Math.min(300, n));
   }
 
-  $: pageCount = Math.max(1, Math.ceil(scribbles.length / PAGE_SIZE));
+  $: pageSize = compact ? 3 : 4;
+  $: pageCount = Math.max(1, Math.ceil(scribbles.length / pageSize));
   $: if (pageIndex >= pageCount) pageIndex = 0;
-  $: visibleScribbles = scribbles.slice(pageIndex * PAGE_SIZE, pageIndex * PAGE_SIZE + PAGE_SIZE);
+  $: visibleScribbles = scribbles.slice(pageIndex * pageSize, pageIndex * pageSize + pageSize);
 
   function restartRotation() {
     if (pageRotateInterval) clearInterval(pageRotateInterval);
@@ -278,7 +279,7 @@
       </button>
     {:else}
       <!-- Grid (up to 4 notes at once; rotates when more exist) -->
-      <div class="grid grid-cols-2 xl:grid-cols-3 gap-2">
+      <div class={`grid gap-2 ${compact ? 'grid-cols-3' : 'grid-cols-2 xl:grid-cols-3'}`}>
         {#each visibleScribbles as scribble (scribble.id)}
           <button
             type="button"

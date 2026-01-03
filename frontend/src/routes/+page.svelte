@@ -901,10 +901,10 @@
                 <div class="text-white mt-5 mb-4">
                   {#if standbyScribbles.length > 0}
                     <!-- Grid container for crossfade without layout jump -->
-                    <div class="grid place-items-center" style="grid-template-areas: 'stack';">
+                    <div class="grid place-items-start" style="grid-template-areas: 'stack';">
                       {#key standbyScribbles[standbyScribbleIndex]?.id}
                         <div
-                          class="{scribblePaperLook ? 'scribble-paper-bg' : 'bg-white/5 backdrop-blur-md'} rounded-2xl p-2 shadow-lg inline-flex flex-col items-center justify-self-center"
+                          class="{scribblePaperLook ? 'scribble-paper-bg' : 'bg-white/5 backdrop-blur-md'} rounded-2xl p-2 shadow-lg inline-flex flex-col items-center justify-self-start"
                           style="grid-area: stack;"
                           in:fade={{ duration: 300 }}
                           out:fade={{ duration: 300 }}
@@ -1157,10 +1157,10 @@
                 <div class="text-white mt-5 mb-4">
                   {#if standbyScribbles.length > 0}
                     <!-- Grid container for crossfade without layout jump -->
-                    <div class="grid place-items-center" style="grid-template-areas: 'stack';">
+                    <div class="grid place-items-start" style="grid-template-areas: 'stack';">
                       {#key standbyScribbles[standbyScribbleIndex]?.id}
                         <div
-                          class="{scribblePaperLook ? 'scribble-paper-bg' : 'bg-white/5 backdrop-blur-md'} rounded-2xl p-2 shadow-lg inline-flex flex-col items-center justify-self-center"
+                          class="{scribblePaperLook ? 'scribble-paper-bg' : 'bg-white/5 backdrop-blur-md'} rounded-2xl p-2 shadow-lg inline-flex flex-col items-center justify-self-start"
                           style="grid-area: stack;"
                           in:fade={{ duration: 300 }}
                           out:fade={{ duration: 300 }}
