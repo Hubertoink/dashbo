@@ -904,17 +904,22 @@
 
         {#if !newAllDay}
           <div class="grid grid-cols-2 gap-3">
-            <input
-              class="h-12 px-4 rounded-xl bg-white/10 border-0 text-sm"
-              type="time"
-              bind:value={newStartTime}
-            />
-            <input
-              class="h-12 px-4 rounded-xl bg-white/10 border-0 text-sm"
-              type="time"
-              placeholder="Ende (optional)"
-              bind:value={newEndTime}
-            />
+            <div class="relative">
+              <label class="absolute left-4 top-1 text-[10px] text-white/50 uppercase tracking-wide">Von</label>
+              <input
+                class="h-12 w-full px-4 pt-4 rounded-xl bg-white/10 border-0 text-sm"
+                type="time"
+                bind:value={newStartTime}
+              />
+            </div>
+            <div class="relative">
+              <label class="absolute left-4 top-1 text-[10px] text-white/50 uppercase tracking-wide">Bis</label>
+              <input
+                class="h-12 w-full px-4 pt-4 rounded-xl bg-white/10 border-0 text-sm"
+                type="time"
+                bind:value={newEndTime}
+              />
+            </div>
           </div>
         {/if}
 
@@ -1071,7 +1076,7 @@
         <div class="pt-2">
           <!-- svelte-ignore a11y_interactive_supports_focus -->
           <div
-            class="relative h-14 rounded-full bg-white/10 border border-white/10 overflow-hidden select-none touch-pan-x"
+            class="relative h-14 rounded-full bg-white/5 border border-white/10 overflow-hidden select-none touch-pan-x"
             role="slider"
             aria-valuemin={0}
             aria-valuemax={100}
@@ -1084,15 +1089,21 @@
             on:mouseup={handleSwipeEnd}
             on:mouseleave={handleSwipeEnd}
           >
-            <!-- Progress background -->
-            <div
-              class="absolute inset-y-0 left-0 bg-gradient-to-r from-emerald-500/50 to-emerald-400/50"
-              style="width: calc({swipeCurrentX}px + 52px)"
-            ></div>
+            <!-- Progress trail (only shows when swiping) -->
+            {#if swipeCurrentX > 0}
+              <div
+                class="absolute inset-y-0 left-0 bg-gradient-to-r from-emerald-500/30 to-emerald-400/40 rounded-full"
+                style="width: calc({swipeCurrentX}px + 56px)"
+              ></div>
+            {/if}
 
             <!-- Swipe handle -->
             <div
-              class="absolute top-1 bottom-1 left-1 w-12 rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 shadow-lg flex items-center justify-center"
+              class="absolute top-1 bottom-1 left-1 w-12 rounded-full shadow-lg flex items-center justify-center transition-colors"
+              class:bg-gradient-to-br={!creating}
+              class:from-emerald-400={!creating}
+              class:to-emerald-600={!creating}
+              class:bg-emerald-500={creating}
               style="transform: translateX({swipeCurrentX}px)"
             >
               {#if creating}
@@ -1102,16 +1113,32 @@
                 </svg>
               {:else}
                 <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 5l7 7-7 7" />
                 </svg>
               {/if}
             </div>
 
             <!-- Label -->
             <div class="absolute inset-0 flex items-center justify-center pointer-events-none">
-              <span class="text-white/60 text-sm font-medium pl-12">
-                {creating ? 'Wird angelegt…' : swipeProgress > 0.5 ? 'Loslassen zum Anlegen' : 'Wischen zum Anlegen'}
+              <span class="text-white/50 text-sm font-medium pl-14">
+                {creating ? 'Wird angelegt…' : swipeProgress > 0.5 ? 'Loslassen zum Anlegen' : 'Schieben zum Anlegen →'}
               </span>
+            </div>
+
+            <!-- Destination indicator -->
+            <div class="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
+              <div 
+                class="w-8 h-8 rounded-full border-2 flex items-center justify-center transition-colors {swipeProgress > 0.8 ? 'border-emerald-400 border-solid' : 'border-dashed border-white/20'}"
+              >
+                <svg 
+                  class="w-4 h-4 transition-colors {swipeProgress > 0.8 ? 'text-emerald-400' : 'text-white/20'}" 
+                  fill="none" 
+                  stroke="currentColor" 
+                  viewBox="0 0 24 24"
+                >
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                </svg>
+              </div>
             </div>
           </div>
         </div>
