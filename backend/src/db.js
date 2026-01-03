@@ -459,6 +459,42 @@ async function initDb() {
     CREATE INDEX IF NOT EXISTS persons_user_id_idx ON persons (user_id);
   `);
 
+  // Scribble notes (handwritten family notes)
+  await p.query(`
+    CREATE TABLE IF NOT EXISTS scribbles (
+      id BIGSERIAL PRIMARY KEY,
+      user_id BIGINT NOT NULL,
+      image_data TEXT NOT NULL,
+      author_name TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      expires_at TIMESTAMPTZ,
+      pinned BOOLEAN NOT NULL DEFAULT FALSE
+    );
+  `);
+
+  await p.query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'scribbles_user_id_fkey'
+      ) THEN
+        ALTER TABLE scribbles
+        ADD CONSTRAINT scribbles_user_id_fkey
+        FOREIGN KEY (user_id)
+        REFERENCES users(id)
+        ON DELETE CASCADE;
+      END IF;
+    END $$;
+  `);
+
+  await p.query(`
+    CREATE INDEX IF NOT EXISTS scribbles_user_id_idx ON scribbles (user_id);
+  `);
+
+  await p.query(`
+    CREATE INDEX IF NOT EXISTS scribbles_created_at_idx ON scribbles (created_at DESC);
+  `);
+
   // Optional bootstrap admin
   const bootstrapUser = process.env.ADMIN_USERNAME || process.env.BOOTSTRAP_ADMIN_USERNAME || process.env.BOOTSTRAP_USERNAME;
   const bootstrapName = process.env.BOOTSTRAP_ADMIN_NAME || bootstrapUser || 'Admin';

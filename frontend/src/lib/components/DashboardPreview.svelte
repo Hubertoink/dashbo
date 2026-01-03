@@ -2,6 +2,7 @@
   export let weatherEnabled = true;
   export let todoEnabled = true;
   export let newsEnabled = false;
+  export let scribbleEnabled = false;
   export let musicEnabled = false;
 
   // Highlight which widget the user is hovering/focusing
@@ -48,6 +49,18 @@
         <div class="flex items-center gap-1.5">
           <span class="text-sm">📰</span>
           <span>News</span>
+        </div>
+      </div>
+
+      <!-- Scribble -->
+      <div
+        class="rounded-lg px-2 py-1.5 text-[10px] transition-all duration-150 {scribbleEnabled
+          ? 'bg-white/15 text-white/90'
+          : 'bg-white/5 text-white/30'} {highlightWidget === 'scribble' ? 'ring-2 ring-cyan-400/60' : ''}"
+      >
+        <div class="flex items-center gap-1.5">
+          <span class="text-sm">✏️</span>
+          <span>Notizen</span>
         </div>
       </div>
 

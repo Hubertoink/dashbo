@@ -5,6 +5,7 @@
 
   export let variant: 'panel' | 'plain' = 'panel';
   export let expanded = false;
+  export let compact = false;
   export let onToggleExpand: (() => void) | null = null;
   export let showAddButton = true;
 
@@ -279,7 +280,7 @@
       {#if visibleItems.length === 0}
         <div class="text-white/50 text-sm">Keine ToDos</div>
       {:else}
-        {#each visibleItems.slice(0, expanded ? 20 : 5) as item (item.taskId)}
+        {#each visibleItems.slice(0, expanded ? 20 : compact ? 3 : 5) as item (item.taskId)}
           {@const key = `${item.connectionId}:${item.listId}:${item.taskId}`}
           {@const dueLabel = formatDue(item.dueAt)}
           <div class="flex items-center gap-2">

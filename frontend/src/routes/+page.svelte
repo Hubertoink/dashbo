@@ -8,6 +8,7 @@
   import ZeitNewsWidget from '$lib/components/ZeitNewsWidget.svelte';
   import ForecastWidget from '$lib/components/ForecastWidget.svelte';
   import MusicWidget from '$lib/components/MusicWidget.svelte';
+  import ScribbleWidget from '$lib/components/ScribbleWidget.svelte';
   import CalendarMonth from '$lib/components/CalendarMonth.svelte';
   import WeekView from '$lib/components/WeekView.svelte';
   import WeekPlanner from '$lib/components/WeekPlanner.svelte';
@@ -17,9 +18,11 @@
     fetchEvents,
     fetchHolidays,
     fetchNews,
+    fetchScribbles,
     type HolidayDto,
     type EventDto,
     type NewsItemDto,
+    type ScribbleDto,
     type TagColorKey,
     fetchSettings,
     fetchOutlookStatus,
@@ -64,9 +67,55 @@
   let holidays: HolidayDto[] = [];
 
   let outlookConnected = false;
+  let scribbleEnabled = false;
+
+  let scribbleStandbySeconds = 20;
+  let scribblePaperLook = true;
+  let standbyScribbles: ScribbleDto[] = [];
+  let standbyScribbleIndex = 0;
+  let standbyScribbleRotateInterval: ReturnType<typeof setInterval> | null = null;
+
+  async function loadStandbyScribbles() {
+    try {
+      const r = await fetchScribbles();
+      standbyScribbles = (r.scribbles ?? []).slice(0, 5);
+      standbyScribbleIndex = 0;
+    } catch {
+      standbyScribbles = [];
+      standbyScribbleIndex = 0;
+    }
+  }
+
+  function clearStandbyScribbleRotation() {
+    if (standbyScribbleRotateInterval) clearInterval(standbyScribbleRotateInterval);
+    standbyScribbleRotateInterval = null;
+  }
+
+  function startStandbyScribbleRotation() {
+    clearStandbyScribbleRotation();
+    if (!scribbleEnabled) return;
+    const seconds = Math.max(5, Math.min(300, Math.round(Number(scribbleStandbySeconds) || 20)));
+    if (standbyScribbles.length === 0) {
+      void loadStandbyScribbles();
+    }
+
+    standbyScribbleRotateInterval = setInterval(() => {
+      if (standbyScribbles.length <= 1) return;
+      standbyScribbleIndex = (standbyScribbleIndex + 1) % standbyScribbles.length;
+    }, seconds * 1000);
+  }
 
   // Track which widget is expanded in the dashboard sidebar (null = none)
-  let expandedWidget: 'todo' | 'news' | null = null;
+  let expandedWidget: 'todo' | 'news' | 'scribble' | null = null;
+
+  // Count active widgets in sidebar to enable compact mode when > 3
+  $: activeWidgetCount = [
+    todoEnabled && outlookConnected,
+    newsEnabled,
+    scribbleEnabled,
+    musicWidgetEnabled
+  ].filter(Boolean).length;
+  $: compactWidgets = activeWidgetCount > 3;
 
   let standbyNewsItems: NewsItemDto[] = [];
   let standbyNewsIndex = 0;
@@ -251,6 +300,7 @@
       upcomingMode = true;
       void loadEvents();
       if (newsEnabled) void loadNews();
+      if (scribbleEnabled) void loadStandbyScribbles();
       standbyOverlayVisible = false;
       standbySwitchTimer = null;
     }, STANDBY_TRANSITION_MS);
@@ -312,6 +362,13 @@
 
   function onUserActivity() {
     scheduleStandby();
+  }
+
+  $: showUpcomingStandby = upcomingMode && !standbyMode;
+  $: if (showUpcomingStandby && scribbleEnabled) {
+    startStandbyScribbleRotation();
+  } else {
+    clearStandbyScribbleRotation();
   }
 
   const dotBg: Record<TagColorKey, string> = {
@@ -432,6 +489,7 @@
 
   onDestroy(() => {
     clearStandbyTransitionTimers();
+    clearStandbyScribbleRotation();
     if (standbyRotateInterval) clearInterval(standbyRotateInterval);
     if (standbyNewsRotateInterval) clearInterval(standbyNewsRotateInterval);
     if (standbyNewsRefreshInterval) clearInterval(standbyNewsRefreshInterval);
@@ -659,6 +717,14 @@
         const newsChanged = nextNewsEnabled !== newsEnabled;
         newsEnabled = nextNewsEnabled;
 
+        const nextScribbleEnabled = s.scribbleEnabled !== false;
+        scribbleEnabled = nextScribbleEnabled;
+        const nextScribbleStandbySeconds = Number.isFinite(Number((s as any)?.scribbleStandbySeconds))
+          ? Number((s as any)?.scribbleStandbySeconds)
+          : 20;
+        scribbleStandbySeconds = nextScribbleStandbySeconds;
+        scribblePaperLook = (s as any)?.scribblePaperLook !== false;
+
         if (nextNewsEnabled) {
           void loadNews();
         } else {
@@ -730,17 +796,28 @@
           <div class="mt-6 pb-8 text-white flex-1 flex flex-col min-h-0" transition:slide={{ duration: 300 }}>
             <ZeitNewsWidget expanded={true} onToggleExpand={() => expandedWidget = null} />
           </div>
+        {:else if expandedWidget === 'scribble'}
+          <!-- Expanded Scribble takes all space between weather and clock -->
+          <div class="mt-6 pb-8 text-white flex-1 flex flex-col min-h-0" transition:slide={{ duration: 300 }}>
+            <ScribbleWidget expanded={true} onToggleExpand={() => expandedWidget = null} />
+          </div>
         {:else}
           <!-- Normal layout with all widgets -->
           {#if todoEnabled && outlookConnected}
-            <div class="mt-6 pb-8 text-white" transition:slide={{ duration: 300 }}>
-              <TodoWidget onToggleExpand={() => expandedWidget = 'todo'} />
+            <div class="mt-6 {compactWidgets ? 'pb-4' : 'pb-8'} text-white" transition:slide={{ duration: 300 }}>
+              <TodoWidget compact={compactWidgets} onToggleExpand={() => expandedWidget = 'todo'} />
             </div>
           {/if}
 
           {#if newsEnabled}
-            <div class="mt-2 pb-8 text-white" transition:slide={{ duration: 300 }}>
-              <ZeitNewsWidget onToggleExpand={() => expandedWidget = 'news'} />
+            <div class="mt-2 {compactWidgets ? 'pb-4' : 'pb-8'} text-white" transition:slide={{ duration: 300 }}>
+              <ZeitNewsWidget compact={compactWidgets} onToggleExpand={() => expandedWidget = 'news'} />
+            </div>
+          {/if}
+
+          {#if scribbleEnabled}
+            <div class="mt-2 {compactWidgets ? 'pb-3' : 'pb-6'} text-white" transition:slide={{ duration: 300 }}>
+              <ScribbleWidget compact={compactWidgets} onToggleExpand={() => expandedWidget = 'scribble'} />
             </div>
           {/if}
 
@@ -795,6 +872,10 @@
             <div class="hidden md:flex w-[34%] min-w-[280px] flex-col justify-between p-10 h-full">
               {#if todoEnabled && outlookConnected}
                 <div class="text-white"><TodoWidget showAddButton={false} /></div>
+              {/if}
+
+              {#if scribbleEnabled}
+                <div class="text-white mt-4"><ScribbleWidget standbyMode={true} /></div>
               {/if}
 
               <div class="text-white"><ForecastWidget /></div>
@@ -879,7 +960,7 @@
                                 {#if e.location} <span> · {e.location}</span>{/if}
                                 {#if ps.length > 0}
                                   <span>
-                                    · {#each ps as p, i (p.id)}{#if i > 0},{/if}<span class={`${textFg[p.color] ?? 'text-white/80'} font-semibold ${i > 0 ? 'pl-0.5' : ''}`}>{p.name}</span>{/each}
+                                    · {#each ps as p, i (p.id)}{#if i > 0},{/if}<span class={`${textFg[p.color as TagColorKey] ?? 'text-white/80'} font-semibold ${i > 0 ? 'pl-0.5' : ''}`}>{p.name}</span>{/each}
                                   </span>
                                 {/if}
                               </div>
@@ -1017,6 +1098,35 @@
                 <div class="mt-6 pb-8 text-white"><TodoWidget variant="plain" showAddButton={false} /></div>
               {/if}
 
+              {#if scribbleEnabled}
+                <div class="text-white mt-4 mb-6">
+                  {#if standbyScribbles.length > 0}
+                    <!-- Grid container for crossfade without layout jump -->
+                    <div class="grid" style="grid-template-areas: 'stack';">
+                      {#key standbyScribbles[standbyScribbleIndex]?.id}
+                        <div
+                          class="{scribblePaperLook ? 'scribble-paper-bg' : 'bg-white/5 backdrop-blur-md'} rounded-2xl p-4 shadow-lg"
+                          style="grid-area: stack;"
+                          in:fade={{ duration: 300 }}
+                          out:fade={{ duration: 300 }}
+                        >
+                          <img
+                            src={standbyScribbles[standbyScribbleIndex]?.imageData}
+                            alt="Notiz"
+                            class="w-full aspect-[4/3] object-contain rounded-lg"
+                          />
+                          {#if standbyScribbles[standbyScribbleIndex]?.authorName}
+                            <div class="{scribblePaperLook ? 'text-zinc-500' : 'text-white/50'} text-xs mt-2 truncate text-center font-medium">
+                              {standbyScribbles[standbyScribbleIndex].authorName}
+                            </div>
+                          {/if}
+                        </div>
+                      {/key}
+                    </div>
+                  {/if}
+                </div>
+              {/if}
+
               <div class="text-white"><ForecastWidget /></div>
 
               {#if musicWidgetEnabled && ($musicPlayerState.now || $heosPlaybackStatus.isExternal)}
@@ -1102,7 +1212,7 @@
                                 {#if e.location} <span> · {e.location}</span>{/if}
                                 {#if ps.length > 0}
                                   <span>
-                                    · {#each ps as p, i (p.id)}{#if i > 0},{/if}<span class={`${textFg[p.color] ?? 'text-white/80'} font-semibold ${i > 0 ? 'pl-0.5' : ''}`}>{p.name}</span>{/each}
+                                    · {#each ps as p, i (p.id)}{#if i > 0},{/if}<span class={`${textFg[p.color as TagColorKey] ?? 'text-white/80'} font-semibold ${i > 0 ? 'pl-0.5' : ''}`}>{p.name}</span>{/each}
                                   </span>
                                 {/if}
                               </div>

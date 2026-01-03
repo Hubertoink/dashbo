@@ -369,6 +369,9 @@ export type SettingsDto = {
   holidaysEnabled?: boolean;
   todoEnabled?: boolean;
   newsEnabled?: boolean;
+  scribbleEnabled?: boolean;
+  scribbleStandbySeconds?: number;
+  scribblePaperLook?: boolean;
   todoListName?: string | null;
   todoListNames?: string[];
   newsFeeds?: NewsFeedId[];
@@ -386,6 +389,18 @@ export async function fetchNews(): Promise<NewsResponseDto> {
 
 export async function setNewsEnabled(enabled: boolean): Promise<{ ok: true }> {
   return api<{ ok: true }>('/settings/news', { method: 'POST', body: JSON.stringify({ enabled }) });
+}
+
+export async function setScribbleEnabled(enabled: boolean): Promise<{ ok: true }> {
+  return api<{ ok: true }>('/settings/scribble', { method: 'POST', body: JSON.stringify({ enabled }) });
+}
+
+export async function setScribbleStandbySeconds(seconds: number): Promise<{ ok: true }> {
+  return api<{ ok: true }>('/settings/scribble/standby-seconds', { method: 'POST', body: JSON.stringify({ seconds }) });
+}
+
+export async function setScribblePaperLook(enabled: boolean): Promise<{ ok: true }> {
+  return api<{ ok: true }>('/settings/scribble/paper-look', { method: 'POST', body: JSON.stringify({ enabled }) });
 }
 
 export async function setClockStyle(style: ClockStyle): Promise<{ ok: true }> {
@@ -468,6 +483,51 @@ export async function setTodoListNames(listNames: string[]): Promise<{ ok: true 
 
 export async function setNewsFeeds(feeds: NewsFeedId[]): Promise<{ ok: true }> {
   return api<{ ok: true }>('/settings/news/feeds', { method: 'POST', body: JSON.stringify({ feeds }) });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Scribble Notes
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type ScribbleDto = {
+  id: number;
+  userId: number;
+  imageData: string; // Base64 data URL
+  authorName: string | null;
+  createdAt: string;
+  expiresAt: string | null;
+  pinned: boolean;
+};
+
+export type ScribblesResponseDto = {
+  scribbles: ScribbleDto[];
+  maxScribbles: number;
+};
+
+export async function fetchScribbles(): Promise<ScribblesResponseDto> {
+  return api<ScribblesResponseDto>('/scribbles');
+}
+
+export async function createScribble(input: {
+  imageData: string;
+  authorName?: string;
+  expiresInDays?: number;
+}): Promise<{ scribble: ScribbleDto }> {
+  return api<{ scribble: ScribbleDto }>('/scribbles', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}
+
+export async function deleteScribble(id: number): Promise<{ ok: true }> {
+  return api<{ ok: true }>(`/scribbles/${id}`, { method: 'DELETE' });
+}
+
+export async function pinScribble(id: number, pinned: boolean): Promise<{ ok: true }> {
+  return api<{ ok: true }>(`/scribbles/${id}/pin`, {
+    method: 'PATCH',
+    body: JSON.stringify({ pinned }),
+  });
 }
 
 export type HolidayDto = {

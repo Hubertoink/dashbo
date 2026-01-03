@@ -37,6 +37,21 @@
   export let newsError: string | null;
   export let saveNews: () => void | Promise<void>;
 
+  export let scribbleEnabled: boolean;
+  export let scribbleSaving: boolean;
+  export let scribbleError: string | null;
+  export let saveScribble: () => void | Promise<void>;
+
+  export let scribbleStandbySeconds: number;
+  export let scribbleStandbySecondsSaving: boolean;
+  export let scribbleStandbySecondsError: string | null;
+  export let saveScribbleStandbySeconds: () => void | Promise<void>;
+
+  export let scribblePaperLook: boolean;
+  export let scribblePaperLookSaving: boolean;
+  export let scribblePaperLookError: string | null;
+  export let saveScribblePaperLook: () => void | Promise<void>;
+
   export let newsFeeds: import('$lib/api').NewsFeedId[];
   export let newsFeedsSaving: boolean;
   export let newsFeedsError: string | null;
@@ -148,6 +163,18 @@
           {newsSaving}
           {newsError}
           {saveNews}
+          bind:scribbleEnabled
+          {scribbleSaving}
+          {scribbleError}
+          {saveScribble}
+          bind:scribbleStandbySeconds
+          {scribbleStandbySecondsSaving}
+          {scribbleStandbySecondsError}
+          {saveScribbleStandbySeconds}
+          bind:scribblePaperLook
+          {scribblePaperLookSaving}
+          {scribblePaperLookError}
+          {saveScribblePaperLook}
           bind:newsFeeds
           {newsFeedsSaving}
           {newsFeedsError}
@@ -227,6 +254,7 @@
           weatherEnabled={true}
           todoEnabled={todoEnabled}
           newsEnabled={newsEnabled}
+          scribbleEnabled={scribbleEnabled}
           musicEnabled={edgePlayerWidgetEnabled}
           {highlightWidget}
         />

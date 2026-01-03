@@ -24,6 +24,9 @@
     setTodoEnabled,
     setTodoListNames,
     setNewsEnabled,
+    setScribbleEnabled,
+    setScribbleStandbySeconds,
+    setScribblePaperLook,
     setNewsFeeds,
     setClockStyle,
     uploadBackgroundWithProgress,
@@ -110,6 +113,18 @@
   let newsEnabled = false;
   let newsSaving = false;
   let newsError: string | null = null;
+
+  let scribbleEnabled = true;
+  let scribbleSaving = false;
+  let scribbleError: string | null = null;
+
+  let scribbleStandbySeconds = 20;
+  let scribbleStandbySecondsSaving = false;
+  let scribbleStandbySecondsError: string | null = null;
+
+  let scribblePaperLook = true;
+  let scribblePaperLookSaving = false;
+  let scribblePaperLookError: string | null = null;
 
   type NewsFeedId = import('$lib/api').NewsFeedId;
   let newsFeeds: NewsFeedId[] = ['zeit'];
@@ -668,6 +683,11 @@
     holidaysEnabled = Boolean(settings?.holidaysEnabled);
     todoEnabled = settings?.todoEnabled !== false;
     newsEnabled = Boolean(settings?.newsEnabled);
+    scribbleEnabled = settings?.scribbleEnabled !== false;
+    scribbleStandbySeconds = Number.isFinite(Number(settings?.scribbleStandbySeconds))
+      ? Number(settings?.scribbleStandbySeconds)
+      : 20;
+    scribblePaperLook = settings?.scribblePaperLook !== false;
     backgroundRotateEnabled = Boolean(settings?.backgroundRotateEnabled);
 
     const listNames = Array.isArray(settings?.todoListNames) ? settings!.todoListNames! : [];
@@ -1175,6 +1195,51 @@
     }
   }
 
+  async function saveScribble() {
+    scribbleError = null;
+    scribbleSaving = true;
+    try {
+      await setScribbleEnabled(scribbleEnabled);
+      await refreshSettings();
+      showToast(scribbleEnabled ? 'Scribble Notizen aktiviert' : 'Scribble Notizen deaktiviert');
+    } catch {
+      scribbleError = 'Fehler beim Speichern.';
+    } finally {
+      scribbleSaving = false;
+    }
+  }
+
+  async function saveScribbleStandbySeconds() {
+    if (!authed) return;
+    scribbleStandbySecondsError = null;
+    scribbleStandbySecondsSaving = true;
+    try {
+      const n = Math.round(Number(scribbleStandbySeconds));
+      await setScribbleStandbySeconds(n);
+      await refreshSettings();
+      showToast('Scribble Standby-Zeit gespeichert');
+    } catch {
+      scribbleStandbySecondsError = 'Fehler beim Speichern.';
+    } finally {
+      scribbleStandbySecondsSaving = false;
+    }
+  }
+
+  async function saveScribblePaperLook() {
+    if (!authed) return;
+    scribblePaperLookError = null;
+    scribblePaperLookSaving = true;
+    try {
+      await setScribblePaperLook(scribblePaperLook);
+      await refreshSettings();
+      showToast(scribblePaperLook ? 'Papier-Look aktiviert' : 'Papier-Look deaktiviert');
+    } catch {
+      scribblePaperLookError = 'Fehler beim Speichern.';
+    } finally {
+      scribblePaperLookSaving = false;
+    }
+  }
+
   function showToast(msg: string) {
     weatherToast = msg;
     if (weatherToastTimer) clearTimeout(weatherToastTimer);
@@ -1276,6 +1341,18 @@
       {newsSaving}
       {newsError}
       {saveNews}
+      bind:scribbleEnabled
+      {scribbleSaving}
+      {scribbleError}
+      {saveScribble}
+      bind:scribbleStandbySeconds
+      {scribbleStandbySecondsSaving}
+      {scribbleStandbySecondsError}
+      {saveScribbleStandbySeconds}
+      bind:scribblePaperLook
+      {scribblePaperLookSaving}
+      {scribblePaperLookError}
+      {saveScribblePaperLook}
       bind:newsFeeds
       {newsFeedsSaving}
       {newsFeedsError}

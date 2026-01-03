@@ -1,11 +1,14 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
+  import { fly, fade } from 'svelte/transition';
 
   import AddEventModal from '$lib/components/AddEventModal.svelte';
+  import ScribbleModal from '$lib/components/ScribbleModal.svelte';
 
   import {
     createEvent,
+    createScribble,
     fetchEvents,
     fetchSettings,
     getStoredToken,
@@ -57,6 +60,11 @@
 
   let tagMenuOpen = false;
   let personMenuOpen = false;
+
+  // Scribble Notes FAB
+  let scribbleEnabled = false;
+  let scribbleModalOpen = false;
+  let scribbleSaving = false;
 
   const tagBg: Record<TagColorKey, string> = {
     fuchsia: 'bg-fuchsia-500',
@@ -471,6 +479,7 @@
       try {
         const [s, t, p] = await Promise.all([fetchSettings(), listTags(), listPersons()]);
         backgroundUrl = pickBackgroundFromSettings(s);
+        scribbleEnabled = s.scribbleEnabled !== false;
         tags = (t ?? []).slice().sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || a.name.localeCompare(b.name));
         persons = (p ?? []).slice().sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || a.name.localeCompare(b.name));
       } catch (err) {
@@ -482,6 +491,20 @@
 
     void Promise.all([refreshAgenda(), refreshMonth()]);
   });
+
+  // Scribble handlers
+  async function handleScribbleSave(e: CustomEvent<{ imageData: string; authorName: string }>) {
+    if (scribbleSaving) return;
+    scribbleSaving = true;
+    try {
+      await createScribble({ imageData: e.detail.imageData, authorName: e.detail.authorName });
+      scribbleModalOpen = false;
+    } catch (err) {
+      console.error('Scribble save failed', err);
+    } finally {
+      scribbleSaving = false;
+    }
+  }
 </script>
 
 <div class="min-h-screen text-white overflow-hidden relative bg-black">
@@ -726,7 +749,7 @@
     </div>
 
     {#if view === 'agenda'}
-      <div class="relative z-10">
+      <div class="relative z-10" in:fly={{ x: -30, duration: 200 }} out:fade={{ duration: 100 }}>
         <div class="flex items-center justify-between gap-3 mb-3">
           <div class="text-white/85 text-sm">{formatDayTitle(selectedDate)} → +7 Tage</div>
           <button
@@ -835,7 +858,7 @@
         {/if}
       </div>
     {:else}
-      <div class="bg-white/5 rounded-xl p-3 glass border border-white/10 relative z-10">
+      <div class="bg-white/5 rounded-xl p-3 glass border border-white/10 relative z-10" in:fly={{ x: 30, duration: 200 }} out:fade={{ duration: 100 }}>
         <div class="flex items-center justify-between gap-2 mb-3">
           <button
             type="button"
@@ -968,4 +991,26 @@
   eventToEdit={editEvent}
   onClose={closeEdit}
   onCreated={onEventMutated}
+/>
+
+<!-- Floating Scribble Button (mobile) -->
+{#if scribbleEnabled}
+  <button
+    type="button"
+    class="fixed bottom-6 right-6 z-50 h-14 w-14 rounded-full bg-gradient-to-br from-amber-400 to-orange-500 shadow-lg flex items-center justify-center hover:scale-105 active:scale-95 transition-transform"
+    aria-label="Scribble Notiz erstellen"
+    on:click={() => (scribbleModalOpen = true)}
+    in:fly={{ y: 50, duration: 300 }}
+  >
+    <svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+      <path stroke-linecap="round" stroke-linejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+    </svg>
+  </button>
+{/if}
+
+<ScribbleModal
+  bind:open={scribbleModalOpen}
+  authorName=""
+  on:close={() => (scribbleModalOpen = false)}
+  on:save={handleScribbleSave}
 />

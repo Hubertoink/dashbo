@@ -33,6 +33,21 @@
   export let newsError: string | null;
   export let saveNews: () => void | Promise<void>;
 
+  export let scribbleEnabled: boolean;
+  export let scribbleSaving: boolean;
+  export let scribbleError: string | null;
+  export let saveScribble: () => void | Promise<void>;
+
+  export let scribbleStandbySeconds: number;
+  export let scribbleStandbySecondsSaving: boolean;
+  export let scribbleStandbySecondsError: string | null;
+  export let saveScribbleStandbySeconds: () => void | Promise<void>;
+
+  export let scribblePaperLook: boolean;
+  export let scribblePaperLookSaving: boolean;
+  export let scribblePaperLookError: string | null;
+  export let saveScribblePaperLook: () => void | Promise<void>;
+
   export let newsFeeds: NewsFeedId[];
   export let newsFeedsSaving: boolean;
   export let newsFeedsError: string | null;
@@ -111,6 +126,7 @@
       weatherEnabled={true}
       todoEnabled={todoEnabled}
       newsEnabled={newsEnabled}
+      scribbleEnabled={scribbleEnabled}
       musicEnabled={edgePlayerWidgetEnabled}
       {highlightWidget}
     />
@@ -374,6 +390,88 @@
       {/if}
 
       <div class="text-xs text-white/40">Zeigt aktuelle Schlagzeilen aus den ausgewählten RSS-Feeds in der Sidebar.</div>
+    </div>
+  </WidgetSettingsCard>
+
+  <!-- Scribble Notes Widget -->
+  <WidgetSettingsCard
+    title="Scribble Notizen"
+    icon="✏️"
+    kicker="scribble"
+    enabled={scribbleEnabled}
+    widgetKey="scribble"
+    saving={scribbleSaving}
+    error={scribbleError}
+    on:toggle={() => {
+      scribbleEnabled = !scribbleEnabled;
+      void saveScribble();
+    }}
+    on:hover={(e) => (highlightWidget = e.detail.key)}
+  >
+    <div class="space-y-2">
+      <div class="text-xs text-white/40">
+        Ermöglicht handgezeichnete Notizen per Touch oder Stift. Perfekt für schnelle Nachrichten an die Familie.
+        Die Notizen werden auf dem Dashboard und im Standby-Modus angezeigt.
+      </div>
+
+      <div class="pt-1">
+        <div class="text-sm text-white/80">Anzeige-Dauer im Standby</div>
+        <div class="mt-2 flex items-center gap-2">
+          <input
+            type="number"
+            min="5"
+            max="300"
+            step="1"
+            class="w-24 h-9 px-3 rounded-lg bg-white/10 border-0 text-sm"
+            bind:value={scribbleStandbySeconds}
+            disabled={!authed}
+          />
+          <div class="text-xs text-white/40">Sekunden pro Notiz</div>
+          <button
+            class="ml-auto h-9 px-4 rounded-lg bg-white/20 hover:bg-white/25 text-sm font-medium disabled:opacity-50"
+            on:click={saveScribbleStandbySeconds}
+            disabled={!authed || scribbleStandbySecondsSaving}
+          >
+            Speichern
+          </button>
+        </div>
+
+        {#if scribbleStandbySecondsError}
+          <div class="mt-2 text-red-400 text-xs">{scribbleStandbySecondsError}</div>
+        {/if}
+      </div>
+
+      <div class="pt-2">
+        <div class="flex items-center justify-between gap-4">
+          <div class="min-w-0">
+            <div class="text-sm text-white/80">Papier-Look</div>
+            <div class="text-xs text-white/50">Zeigt Notizen im Standby mit Papier-Textur. Aus = transparent.</div>
+          </div>
+          <button
+            type="button"
+            class="relative h-6 w-11 rounded-full transition-colors duration-200 {scribblePaperLook
+              ? 'bg-cyan-500/60'
+              : 'bg-white/20'} disabled:opacity-50"
+            on:click={() => {
+              if (!authed) return;
+              scribblePaperLook = !scribblePaperLook;
+              void saveScribblePaperLook();
+            }}
+            disabled={!authed || scribblePaperLookSaving}
+            aria-pressed={scribblePaperLook}
+            aria-label="Papier-Look {scribblePaperLook ? 'deaktivieren' : 'aktivieren'}"
+          >
+            <span
+              class="absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform duration-200 {scribblePaperLook
+                ? 'translate-x-5'
+                : 'translate-x-0'}"
+            ></span>
+          </button>
+        </div>
+        {#if scribblePaperLookError}
+          <div class="mt-2 text-red-400 text-xs">{scribblePaperLookError}</div>
+        {/if}
+      </div>
     </div>
   </WidgetSettingsCard>
 

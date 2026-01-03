@@ -14,6 +14,7 @@ const { outlookRouter } = require('./routes/outlook');
 const { todosRouter } = require('./routes/todos');
 const { newsRouter } = require('./routes/news');
 const { spotifyRouter } = require('./routes/spotify');
+const { scribblesRouter } = require('./routes/scribbles');
 
 function createApp() {
   const app = express();
@@ -44,6 +45,7 @@ function createApp() {
   app.use('/todos', todosRouter);
   app.use('/news', newsRouter);
   app.use('/spotify', spotifyRouter);
+  app.use('/scribbles', scribblesRouter);
   app.use('/weather', weatherRouter);
   app.use('/holidays', holidaysRouter);
 

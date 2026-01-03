@@ -38,6 +38,9 @@ settingsRouter.get('/', requireAuth, async (_req, res) => {
   const todoEnabledRaw = await getUserSetting({ userId, key: 'todo.enabled' });
   const todoListNamesRaw = await getUserSetting({ userId, key: 'todo.listNames' });
   const newsEnabledRaw = await getUserSetting({ userId, key: 'news.enabled' });
+  const scribbleEnabledRaw = await getUserSetting({ userId, key: 'scribble.enabled' });
+  const scribbleStandbySecondsRaw = await getUserSetting({ userId, key: 'scribble.standbySeconds' });
+  const scribblePaperLookRaw = await getUserSetting({ userId, key: 'scribble.standbyPaperLook' });
   const newsFeedsRaw = await getUserSetting({ userId, key: 'news.feeds' });
   const clockStyleRaw = await getUserSetting({ userId, key: 'clock.style' });
   const images = listImages({ userId });
@@ -50,6 +53,21 @@ settingsRouter.get('/', requireAuth, async (_req, res) => {
   const todoEnabled = todoEnabledRaw === null ? true : String(todoEnabledRaw).toLowerCase() === 'true';
   // Default to false
   const newsEnabled = String(newsEnabledRaw ?? '').toLowerCase() === 'true';
+  // Default to true for scribble notes
+  const scribbleEnabled = scribbleEnabledRaw === null ? true : String(scribbleEnabledRaw).toLowerCase() === 'true';
+
+  const scribbleStandbySeconds = (() => {
+    // Default: 20s per note
+    const v = Number(scribbleStandbySecondsRaw);
+    if (!Number.isFinite(v)) return 20;
+    const n = Math.round(v);
+    if (n < 5) return 5;
+    if (n > 300) return 300;
+    return n;
+  })();
+
+  // Default to true for paper look
+  const scribblePaperLook = scribblePaperLookRaw === null ? true : String(scribblePaperLookRaw).toLowerCase() === 'true';
   let todoListNames = null;
   if (todoListNamesRaw && String(todoListNamesRaw).trim()) {
     try {
@@ -108,6 +126,9 @@ settingsRouter.get('/', requireAuth, async (_req, res) => {
     holidaysEnabled,
     todoEnabled,
     newsEnabled,
+    scribbleEnabled,
+    scribbleStandbySeconds,
+    scribblePaperLook,
     todoListName,
     todoListNames,
     newsFeeds,
@@ -245,6 +266,42 @@ settingsRouter.post('/news', requireAuth, async (req, res) => {
 
   const userId = Number(req.auth?.sub);
   await setUserSetting({ userId, key: 'news.enabled', value: parsed.data.enabled ? 'true' : 'false' });
+  return res.json({ ok: true });
+});
+
+settingsRouter.post('/scribble', requireAuth, async (req, res) => {
+  const schema = z.object({ enabled: z.boolean() });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: 'invalid_body', details: parsed.error.flatten() });
+  }
+
+  const userId = Number(req.auth?.sub);
+  await setUserSetting({ userId, key: 'scribble.enabled', value: parsed.data.enabled ? 'true' : 'false' });
+  return res.json({ ok: true });
+});
+
+settingsRouter.post('/scribble/standby-seconds', requireAuth, async (req, res) => {
+  const schema = z.object({ seconds: z.number().int().min(5).max(300) });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: 'invalid_body', details: parsed.error.flatten() });
+  }
+
+  const userId = Number(req.auth?.sub);
+  await setUserSetting({ userId, key: 'scribble.standbySeconds', value: String(parsed.data.seconds) });
+  return res.json({ ok: true });
+});
+
+settingsRouter.post('/scribble/paper-look', requireAuth, async (req, res) => {
+  const schema = z.object({ enabled: z.boolean() });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: 'invalid_body', details: parsed.error.flatten() });
+  }
+
+  const userId = Number(req.auth?.sub);
+  await setUserSetting({ userId, key: 'scribble.standbyPaperLook', value: parsed.data.enabled ? 'true' : 'false' });
   return res.json({ ok: true });
 });
 

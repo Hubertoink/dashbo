@@ -5,6 +5,7 @@
 
   export let variant: 'panel' | 'plain' = 'panel';
   export let expanded = false;
+  export let compact = false;
   export let onToggleExpand: (() => void) | null = null;
 
   let items: NewsItemDto[] = [];
@@ -111,7 +112,7 @@
   }
 
   $: containerClass = variant === 'plain' ? 'text-white' : 'rounded-lg bg-white/5 p-3 text-white';
-  $: effectivePageSize = expanded ? 12 : PAGE_SIZE;
+  $: effectivePageSize = expanded ? 12 : compact ? 2 : PAGE_SIZE;
 
   onMount(() => {
     loadFromCache();
@@ -150,13 +151,15 @@
     </div>
 
     {#if items.length > 0}
-      {@const displayItems = expanded ? items : items.slice(0, MAX_ITEMS)}
-      {@const pageCount = expanded ? 1 : Math.ceil(Math.min(items.length, MAX_ITEMS) / PAGE_SIZE)}
-      {@const start = expanded ? 0 : page * PAGE_SIZE}
-      {@const view = expanded ? displayItems : items.slice(start, start + PAGE_SIZE)}
+      {@const maxItems = compact ? 6 : MAX_ITEMS}
+      {@const pageSize = compact ? 2 : PAGE_SIZE}
+      {@const displayItems = expanded ? items : items.slice(0, maxItems)}
+      {@const pageCount = expanded ? 1 : Math.ceil(Math.min(items.length, maxItems) / pageSize)}
+      {@const start = expanded ? 0 : page * pageSize}
+      {@const view = expanded ? displayItems : items.slice(start, start + pageSize)}
       <div
         class="relative {expanded ? 'flex-1 overflow-y-auto' : 'overflow-hidden'}"
-        style="{expanded ? '' : 'height: 10rem;'}"
+        style="{expanded ? '' : compact ? 'height: 6rem;' : 'height: 10rem;'}"
       >
         {#key expanded ? 'expanded' : page}
           <div
