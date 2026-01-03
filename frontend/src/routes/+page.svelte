@@ -89,7 +89,11 @@
   function clearStandbyScribbleRotation() {
     if (standbyScribbleRotateInterval) clearInterval(standbyScribbleRotateInterval);
     standbyScribbleRotateInterval = null;
+    if (standbyScribbleRefreshInterval) clearInterval(standbyScribbleRefreshInterval);
+    standbyScribbleRefreshInterval = null;
   }
+
+  let standbyScribbleRefreshInterval: ReturnType<typeof setInterval> | null = null;
 
   function startStandbyScribbleRotation() {
     clearStandbyScribbleRotation();
@@ -99,10 +103,21 @@
       void loadStandbyScribbles();
     }
 
+    // Rotation interval for switching between scribbles
     standbyScribbleRotateInterval = setInterval(() => {
       if (standbyScribbles.length <= 1) return;
       standbyScribbleIndex = (standbyScribbleIndex + 1) % standbyScribbles.length;
     }, seconds * 1000);
+
+    // Refresh interval to sync with backend (every 30 seconds)
+    standbyScribbleRefreshInterval = setInterval(async () => {
+      const oldLength = standbyScribbles.length;
+      await loadStandbyScribbles();
+      // Adjust index if current index is out of bounds after refresh
+      if (standbyScribbleIndex >= standbyScribbles.length && standbyScribbles.length > 0) {
+        standbyScribbleIndex = 0;
+      }
+    }, 30_000);
   }
 
   // Track which widget is expanded in the dashboard sidebar (null = none)
@@ -869,51 +884,83 @@
         <!-- Standby screen (click anywhere to exit) -->
         <div class="h-screen overflow-hidden">
           <div class="h-full flex" on:click|stopPropagation={exitStandby}>
-            <div class="hidden md:flex w-[34%] min-w-[280px] flex-col justify-between p-10 h-full">
-              {#if todoEnabled && outlookConnected}
-                <div class="text-white"><TodoWidget showAddButton={false} /></div>
-              {/if}
+            <div class="hidden md:flex w-[38%] min-w-[320px] flex-col p-8 h-full">
+              <!-- Top row: Todo + Weather side by side -->
+              <div class="flex gap-6">
+                {#if todoEnabled && outlookConnected}
+                  <div class="flex-1 min-w-0 text-white">
+                    <TodoWidget variant="plain" showAddButton={false} compact={true} />
+                  </div>
+                {/if}
+                <div class="w-36 shrink-0 text-white">
+                  <ForecastWidget compact={true} />
+                </div>
+              </div>
 
               {#if scribbleEnabled}
-                <div class="text-white mt-4"><ScribbleWidget standbyMode={true} /></div>
+                <div class="text-white mt-5 mb-4">
+                  {#if standbyScribbles.length > 0}
+                    <!-- Grid container for crossfade without layout jump -->
+                    <div class="grid" style="grid-template-areas: 'stack';">
+                      {#key standbyScribbles[standbyScribbleIndex]?.id}
+                        <div
+                          class="{scribblePaperLook ? 'scribble-paper-bg' : 'bg-white/5 backdrop-blur-md'} rounded-2xl p-3 shadow-lg flex flex-col items-center"
+                          style="grid-area: stack;"
+                          in:fade={{ duration: 300 }}
+                          out:fade={{ duration: 300 }}
+                        >
+                          <img
+                            src={standbyScribbles[standbyScribbleIndex]?.imageData}
+                            alt="Notiz"
+                            class="max-w-[280px] w-full aspect-[4/3] object-contain rounded-lg"
+                          />
+                          {#if standbyScribbles[standbyScribbleIndex]?.authorName}
+                            <div class="{scribblePaperLook ? 'text-zinc-500' : 'text-white/50'} text-xs mt-1.5 truncate text-center font-medium">
+                              {standbyScribbles[standbyScribbleIndex].authorName}
+                            </div>
+                          {/if}
+                        </div>
+                      {/key}
+                    </div>
+                  {/if}
+                </div>
               {/if}
 
-              <div class="text-white"><ForecastWidget /></div>
-
-              <div class="mt-auto">
-                {#if musicWidgetEnabled && (($musicPlayerState.playing && $musicPlayerState.now) || $heosPlaybackStatus.isExternal)}
-                  <div class="standby-music mb-5">
-                    <div class="relative h-24 w-24 overflow-hidden rounded-none shadow-lg shadow-black/30">
+              {#if musicWidgetEnabled && (($musicPlayerState.playing && $musicPlayerState.now) || $heosPlaybackStatus.isExternal)}
+                <div class="standby-music mt-10 mb-6">
+                  <div class="flex items-center gap-5">
+                    <div class="relative w-28 h-28 overflow-hidden rounded-lg shadow-2xl shadow-black/50 shrink-0">
                       {#if $musicPlayerState.now?.coverUrl}
                         <img src={$musicPlayerState.now.coverUrl} alt="" class="h-full w-full object-cover" loading="lazy" />
                       {:else if $heosPlaybackStatus.isExternal && $heosPlaybackStatus.imageUrl}
                         <img src={$heosPlaybackStatus.imageUrl} alt="" class="h-full w-full object-cover" loading="lazy" />
                       {:else}
                         <div class="h-full w-full bg-white/10 flex items-center justify-center">
-                          <svg viewBox="0 0 24 24" class="h-7 w-7 text-white/30" fill="currentColor"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>
+                          <svg viewBox="0 0 24 24" class="h-10 w-10 text-white/30" fill="currentColor"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>
                         </div>
                       {/if}
-                      <div class="absolute inset-0 bg-gradient-to-t from-black/70 via-black/15 to-transparent"></div>
-                      <div class="absolute inset-x-0 bottom-0 p-2">
-                        {#if $musicPlayerState.now}
-                          <div class="text-sm font-semibold text-white leading-tight line-clamp-1">{$musicPlayerState.now.artist}</div>
-                          <div class="text-[11px] text-white/70 leading-tight line-clamp-1">{$musicPlayerState.now.title}</div>
-                        {:else if $heosPlaybackStatus.isExternal}
-                          <div class="text-sm font-semibold text-white leading-tight line-clamp-1">{$heosPlaybackStatus.artist ?? 'Musik'}</div>
-                          <div class="text-[11px] text-white/70 leading-tight line-clamp-1">{$heosPlaybackStatus.title ?? 'Wiedergabe'}</div>
-                        {:else}
-                          <div class="text-[11px] text-white/60">Keine Wiedergabe</div>
-                        {/if}
-                      </div>
+                      <div class="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent"></div>
+                    </div>
+
+                    <div class="min-w-0">
+                      {#if $musicPlayerState.now}
+                        <div class="text-lg font-semibold text-white leading-tight truncate">{$musicPlayerState.now.artist}</div>
+                        <div class="text-white/60 text-sm mt-1 leading-snug line-clamp-2">{$musicPlayerState.now.title}</div>
+                      {:else if $heosPlaybackStatus.isExternal}
+                        <div class="text-lg font-semibold text-white leading-tight truncate">{$heosPlaybackStatus.artist ?? 'Musik'}</div>
+                        <div class="text-white/60 text-sm mt-1 leading-snug line-clamp-2">{$heosPlaybackStatus.title ?? 'Wiedergabe'}</div>
+                      {:else}
+                        <div class="text-white/40 text-sm">Keine Wiedergabe</div>
+                      {/if}
                     </div>
                   </div>
-                {/if}
+                </div>
+              {/if}
 
-                <div class="pb-2">
-                  <div class="text-white">
-                    <div class="text-xl md:text-2xl font-semibold tracking-wide mb-3">{todayFullDate}</div>
-                    <Clock tone="light" style={clockStyle} />
-                  </div>
+              <div class="mt-auto pb-2">
+                <div class="text-white">
+                  <div class="text-xl md:text-2xl font-semibold tracking-wide mb-3">{todayFullDate}</div>
+                  <Clock tone="light" style={clockStyle} />
                 </div>
               </div>
             </div>

@@ -11,6 +11,15 @@
     save: { imageData: string; authorName: string };
   }>();
 
+  // Lock body scroll when modal is open
+  $: if (typeof document !== 'undefined') {
+    if (open) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+  }
+
   let canvasComponent: ScribbleCanvas;
   let selectedColor = '#000000';
   let selectedSize: 'S' | 'M' | 'L' = 'M';
