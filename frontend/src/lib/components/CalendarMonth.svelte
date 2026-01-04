@@ -18,6 +18,7 @@
   export let suggestions: DashboardSuggestionDto[] = [];
   export let onMonthChange: ((delta: number) => void) | null = null;
   export let onAcceptSuggestion: ((s: DashboardSuggestionDto) => void) | null = null;
+  export let onJumpToToday: (() => void) | null = null;
   export let viewMode: 'month' | 'week' = 'month';
   export let onSetViewMode: (m: 'month' | 'week') => void;
   export let upcomingMode: boolean = false;
@@ -271,7 +272,7 @@
   {#key monthTitle}
     <div class="px-8 pt-8 pb-4" in:fly={{ y: -10, duration: 160 }} out:fade={{ duration: 120 }}>
       <div class="flex items-center justify-between gap-4">
-        <div class="flex items-center gap-3">
+        <div class="grid items-center gap-3" style="grid-template-columns: 2rem auto 2rem;">
           {#if onMonthChange}
             <button
               type="button"
@@ -283,8 +284,20 @@
                 <path d="M15 18l-6-6 6-6" />
               </svg>
             </button>
+          {:else}
+            <div class="h-8 w-8"></div>
           {/if}
-          <div class="text-4xl font-semibold tracking-wide">{monthTitle}</div>
+
+          <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+          <div
+            class="text-4xl font-semibold tracking-wide cursor-pointer select-none"
+            aria-label="Zum aktuellen Monat"
+            title="Zum aktuellen Monat"
+            on:click={() => onJumpToToday?.()}
+          >
+            {monthTitle}
+          </div>
+
           {#if onMonthChange}
             <button
               type="button"
@@ -296,6 +309,8 @@
                 <path d="M9 18l6-6-6-6" />
               </svg>
             </button>
+          {:else}
+            <div class="h-8 w-8"></div>
           {/if}
         </div>
 

@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { EventDto, HolidayDto, TagColorKey } from '$lib/api';
+  import type { DashboardSuggestionDto } from '$lib/components/CalendarMonth.svelte';
   import { fade, fly } from 'svelte/transition';
   import { onDestroy } from 'svelte';
   import { formatGermanShortDate, sameDay, startOfDay, endOfDay } from '$lib/date';
@@ -7,6 +8,7 @@
   export let selectedDate: Date;
   export let events: EventDto[];
   export let holidays: HolidayDto[] = [];
+  export let suggestions: DashboardSuggestionDto[] = [];
   export let onCreate: () => void;
   export let onEdit: (e: EventDto) => void;
 
@@ -92,7 +94,13 @@
     })
     .sort((a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime());
 
-  $: hasAnyItems = dayEvents.length > 0 || dayHolidays.length > 0;
+  function sameDayLocal(a: Date, b: Date) {
+    return dateKeyLocal(a) === dateKeyLocal(b);
+  }
+
+  $: daySuggestions = (suggestions ?? []).filter((s) => sameDayLocal(s.date, selectedDate));
+
+  $: hasAnyItems = dayEvents.length > 0 || dayHolidays.length > 0 || daySuggestions.length > 0;
 
   function fmtTime(iso: string) {
     const d = new Date(iso);
@@ -198,6 +206,22 @@
               <div class="text-white/60 text-sm">Keine Termine.</div>
             {:else}
               <div class="flex flex-wrap gap-x-6 gap-y-2 items-start">
+                {#each daySuggestions as s (s.suggestionKey)}
+                  <div
+                    class="flex items-center gap-2 max-w-full px-3 py-2 rounded-2xl border border-dashed border-violet-400/40 bg-violet-500/10"
+                    in:fly={{ y: 4, duration: 120 }}
+                  >
+                    <div class="h-3 w-3 rounded-full border border-dashed border-violet-300/70 shrink-0"></div>
+                    <div class="min-w-0">
+                      <div class="flex items-center gap-2 min-w-0">
+                        <div class="text-base md:text-lg font-semibold leading-tight truncate">{s.title}</div>
+                        <div class="shrink-0 text-[11px] px-2 py-0.5 rounded-full bg-violet-500/15 text-violet-200/90 border border-violet-400/30 font-semibold">Vorschlag</div>
+                      </div>
+                      <div class="text-white/50 text-xs leading-tight">{#if s.allDay}Ganztägig{:else}Uhrzeit wie üblich{/if}</div>
+                    </div>
+                  </div>
+                {/each}
+
                 {#each dayHolidays as h (h.date + ':' + h.title)}
                   <div class="flex items-center gap-2 max-w-full" in:fly={{ y: 4, duration: 120 }}>
                     <div class="h-3 w-3 rounded-full border border-white/50 shrink-0"></div>

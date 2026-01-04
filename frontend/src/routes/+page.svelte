@@ -656,15 +656,20 @@
       const gridStart = gridDays[0] ?? new Date(monthAnchor.getFullYear(), monthAnchor.getMonth(), 1);
       const gridEnd = gridDays[gridDays.length - 1] ?? new Date(monthAnchor.getFullYear(), monthAnchor.getMonth() + 1, 0);
 
-      // Lookback for patterns (12 weeks)
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+
+      // Lookback for patterns (12 weeks) – but include the whole visible grid range,
+      // otherwise patterns inside the current month won't be detected (e.g. Jan 7/14/21 -> Jan 28).
       const lookbackFrom = new Date(gridStart);
       lookbackFrom.setDate(lookbackFrom.getDate() - 12 * 7);
       lookbackFrom.setHours(0, 0, 0, 0);
 
-      const lookbackTo = new Date(gridStart);
-      lookbackTo.setHours(0, 0, 0, 0);
+      const historyTo = new Date(gridEnd);
+      historyTo.setHours(23, 59, 59, 999);
 
-      const history = await fetchEvents(lookbackFrom, lookbackTo);
+      // Fetch a single consolidated range for pattern analysis + "already exists" checks.
+      const allEventsForAnalysis = await fetchEvents(lookbackFrom, historyTo);
 
       // Build pattern suggestions (simplified version for dashboard)
       const suggestions: DashboardSuggestionDto[] = [];
@@ -679,7 +684,7 @@
       const isBirthdayEvent = (e: EventDto) => /\b(geburtstag|birthday)\b/i.test(normalizeTitle(e.title) + ' ' + normalizeTitle(e.tag?.name ?? ''));
 
       // Filter candidates
-      const candidates = (history ?? []).filter((e) => {
+      const candidates = (allEventsForAnalysis ?? []).filter((e) => {
         if (e.source === 'outlook') return false;
         if (e.allDay) return false;
         if (e.recurrence) return false;
@@ -689,7 +694,10 @@
 
       // Weekly pattern aggregation
       if (recurringSuggestionsWeekly) {
-        const weeklyAgg = new Map<string, { count: number; weeks: Set<string>; sample: EventDto; weekday: number; startBucket: number; titleNorm: string }>();
+        const weeklyAgg = new Map<
+          string,
+          { dates: Date[]; sample: EventDto; weekday: number; startBucket: number; titleNorm: string }
+        >();
 
         for (const e of candidates) {
           const start = new Date(e.startAt);
@@ -701,29 +709,38 @@
 
           const sig = `weekly|${wd}|${startMin}|${titleNorm}`;
           const existing = weeklyAgg.get(sig);
-          const weekId = dateKey(new Date(start.getFullYear(), start.getMonth(), start.getDate() - weekdayMon0(start)));
 
           if (existing) {
-            existing.count++;
-            existing.weeks.add(weekId);
+            existing.dates.push(start);
           } else {
-            weeklyAgg.set(sig, { count: 1, weeks: new Set([weekId]), sample: e, weekday: wd, startBucket: startMin, titleNorm });
+            weeklyAgg.set(sig, { dates: [start], sample: e, weekday: wd, startBucket: startMin, titleNorm });
           }
         }
 
         // Generate suggestions for matching days in grid
         for (const [sig, agg] of weeklyAgg) {
-          if (agg.count < 3 || agg.weeks.size < 3) continue;
-
           for (const day of gridDays) {
+            const dayStart = new Date(day);
+            dayStart.setHours(0, 0, 0, 0);
+            if (dayStart < todayStart) continue;
             if (weekdayMon0(day) !== agg.weekday) continue;
+
+            const datesBefore = agg.dates.filter((d) => d.getTime() < dayStart.getTime());
+            if (datesBefore.length < 3) continue;
+            const weeksBefore = new Set(
+              datesBefore.map((d) => {
+                const weekStart = new Date(d.getFullYear(), d.getMonth(), d.getDate() - weekdayMon0(d));
+                return dateKey(weekStart);
+              })
+            );
+            if (weeksBefore.size < 3) continue;
 
             const dayDateKey = dateKey(day);
             const suggKey = `${sig}|${dayDateKey}`;
             if (addedKeys.has(suggKey)) continue;
 
             // Check if event already exists on this day
-            const hasExisting = events.some((ev) => {
+            const hasExisting = (allEventsForAnalysis ?? []).some((ev) => {
               const evStart = new Date(ev.startAt);
               return dateKey(evStart) === dayDateKey && normalizeTitle(ev.title) === agg.titleNorm;
             });
@@ -744,7 +761,8 @@
       if (recurringSuggestionsBirthdays) {
         const birthdayLookbackFrom = new Date(gridStart);
         birthdayLookbackFrom.setDate(birthdayLookbackFrom.getDate() - 370);
-        const birthdayHistory = await fetchEvents(birthdayLookbackFrom, lookbackTo);
+        birthdayLookbackFrom.setHours(0, 0, 0, 0);
+        const birthdayHistory = await fetchEvents(birthdayLookbackFrom, historyTo);
 
         const birthdayCandidates = (birthdayHistory ?? []).filter((e) => {
           if (e.source === 'outlook') return false;
@@ -762,6 +780,9 @@
           const titleNorm = normalizeTitle(e.title);
 
           for (const day of gridDays) {
+            const dayStart = new Date(day);
+            dayStart.setHours(0, 0, 0, 0);
+            if (dayStart < todayStart) continue;
             const year = day.getFullYear();
             const isLeap = (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
             const effDay = srcMonth === 1 && srcDay === 29 && !isLeap ? 28 : srcDay;
@@ -773,7 +794,7 @@
             if (addedKeys.has(suggKey)) continue;
 
             // Check if event already exists
-            const hasExisting = events.some((ev) => {
+            const hasExisting = (allEventsForAnalysis ?? []).some((ev) => {
               const evStart = new Date(ev.startAt);
               return dateKey(evStart) === dayDateKey && normalizeTitle(ev.title) === titleNorm;
             });
@@ -818,6 +839,17 @@
       void loadEvents();
       void loadDashboardSuggestions();
     }
+  }
+
+  function jumpToToday() {
+    const today = new Date();
+    const nextAnchor = new Date(today.getFullYear(), today.getMonth(), 1);
+    const nextSelected = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+
+    selectedDate = nextSelected;
+    monthAnchor = nextAnchor;
+    void loadEvents();
+    void loadDashboardSuggestions();
   }
 
   onMount(() => {
@@ -1318,6 +1350,7 @@
                 {holidays}
                 suggestions={dashboardSuggestions}
                 onMonthChange={handleMonthChange}
+                onJumpToToday={jumpToToday}
                 {viewMode}
                 onSetViewMode={setViewMode}
                 {upcomingMode}
@@ -1327,7 +1360,7 @@
             </div>
           </div>
           <div class={`${dashboardTextClasses} border-t border-white/10 ${dashboardGlassBlurEnabled ? 'glass-dashboard-blur' : 'glass-dashboard-flat'} h-full overflow-hidden`}>
-            <EventsPanel {selectedDate} {events} {holidays} onCreate={openAddEventModal} onEdit={openEditEventModal} />
+            <EventsPanel {selectedDate} {events} {holidays} suggestions={dashboardSuggestions} onCreate={openAddEventModal} onEdit={openEditEventModal} />
           </div>
         </div>
       {:else}
