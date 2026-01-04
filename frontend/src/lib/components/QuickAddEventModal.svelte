@@ -15,6 +15,12 @@
 
   export let open: boolean;
   export let prefilledDate: Date;
+  export let prefillTitle: string | null = null;
+  export let prefillStartTime: string | null = null;
+  export let prefillEndTime: string | null = null;
+  export let prefillAllDay: boolean | null = null;
+  export let prefillPersonIds: number[] | null = null;
+  export let prefillTagId: number | null = null;
   export let outlookConnected = false;
   export let todoEnabled = true;
   export let onClose: () => void;
@@ -46,6 +52,8 @@
   let tags: TagDto[] = [];
   let persons: PersonDto[] = [];
   let dataLoaded = false;
+
+  let lastPrefillKey = '';
 
   const tagBg: Record<TagColorKey, string> = {
     fuchsia: 'bg-fuchsia-500',
@@ -134,8 +142,45 @@
     void loadData();
   }
 
+  function normalizeHhMm(v: string | null): string | null {
+    if (!v) return null;
+    const m = String(v).trim().match(/^([01]?\d|2[0-3]):([0-5]\d)$/);
+    if (!m) return null;
+    const hh = m[1].padStart(2, '0');
+    const mm = m[2];
+    return `${hh}:${mm}`;
+  }
+
+  $: if (open) {
+    const key = JSON.stringify({
+      d: yyyymmddLocal(prefilledDate),
+      t: prefillTitle ?? null,
+      st: prefillStartTime ?? null,
+      et: prefillEndTime ?? null,
+      ad: prefillAllDay ?? null,
+      ps: Array.isArray(prefillPersonIds) ? prefillPersonIds : null,
+      tag: prefillTagId ?? null
+    });
+    if (key !== lastPrefillKey) {
+      lastPrefillKey = key;
+      if (prefillTitle != null) title = String(prefillTitle);
+      const st = normalizeHhMm(prefillStartTime);
+      if (st) startTime = st;
+      const et = normalizeHhMm(prefillEndTime);
+      if (prefillEndTime === '') {
+        endTime = '';
+      } else if (et) {
+        endTime = et;
+      }
+      if (prefillAllDay != null) allDay = Boolean(prefillAllDay);
+      if (Array.isArray(prefillPersonIds)) personIds = prefillPersonIds.slice(0, 20);
+      if (prefillTagId !== undefined) tagId = prefillTagId;
+    }
+  }
+
   $: if (!open) {
     dataLoaded = false;
+    lastPrefillKey = '';
     resetForm();
   }
 

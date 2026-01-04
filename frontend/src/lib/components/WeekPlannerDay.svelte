@@ -4,14 +4,27 @@
   import { formatGermanDayLabel } from '$lib/date';
   import { fade, scale } from 'svelte/transition';
 
+  export type EventSuggestionDto = {
+    suggestionKey: string;
+    title: string;
+    startAt: string;
+    endAt: string | null;
+    allDay: boolean;
+    tag: EventDto['tag'];
+    person: EventDto['person'];
+    persons?: EventDto['persons'];
+  };
+
   export let day: Date;
   export let isToday = false;
   export let events: EventDto[] = [];
+  export let suggestions: EventSuggestionDto[] = [];
   export let holidays: HolidayDto[] = [];
   export let todos: TodoItemDto[] = [];
   export let outlookConnected = false;
   export let onAddEvent: () => void;
   export let onEditEvent: (e: EventDto) => void;
+  export let onAcceptSuggestion: (s: EventSuggestionDto) => void;
   export let onEventDeleted: () => void = () => {};
   export let onToggleTodo: (t: TodoItemDto) => void = () => {};
 
@@ -126,6 +139,62 @@
 
   <!-- Events List -->
   <div class="flex-1 min-h-0 overflow-y-auto px-2 py-2 space-y-1.5">
+    {#each suggestions as s (s.suggestionKey)}
+      {@const ps = s.persons && s.persons.length > 0 ? s.persons : s.person ? [s.person] : []}
+      {@const p0 = ps[0]}
+      {@const tagColor = s.tag?.color}
+      <div class="relative">
+        <button
+          type="button"
+          class="w-full text-left rounded-xl px-2.5 py-2 pr-3 bg-white/5 border border-white/15 border-dashed hover:bg-white/10 active:bg-white/15 active:scale-[0.98] transition group touch-manipulation select-none opacity-70 hover:opacity-100"
+          style="-webkit-touch-callout: none;"
+          on:click|stopPropagation={() => onAcceptSuggestion(s)}
+        >
+          <div class="flex gap-2 items-start">
+            <div
+              class={`mt-1 h-2.5 w-2.5 rounded-full shrink-0 ${
+                tagColor
+                  ? isHexColor(tagColor)
+                    ? ''
+                    : dotBg[tagColor as TagColorKey] ?? 'bg-white/40'
+                  : p0
+                    ? dotBg[p0.color as TagColorKey] ?? 'bg-white/40'
+                    : 'bg-white/40'
+              }`}
+              style={tagColor && isHexColor(tagColor) ? `background-color: ${tagColor}` : ''}
+            ></div>
+
+            <div class="min-w-0 flex-1">
+              <div class="text-sm font-medium leading-tight truncate group-hover:text-white transition">
+                {s.title}
+                <span class="text-white/40 text-xs font-normal"> · Vorschlag</span>
+              </div>
+              <div class="text-xs text-white/60 leading-tight mt-0.5">
+                {#if s.allDay}
+                  Ganztägig
+                {:else}
+                  {fmtTimeRange(s.startAt, s.endAt)}
+                {/if}
+              </div>
+              {#if ps.length > 0}
+                <div class="text-xs mt-0.5">
+                  {#each ps as p, i (p.id)}
+                    {@const pc = p.color as string}
+                    <span
+                      class={`${!isHexColor(pc) ? (textFg[pc as TagColorKey] ?? 'text-white/70') : 'text-white/70'} font-medium`}
+                      style={isHexColor(pc) ? `color: ${pc}` : ''}
+                    >
+                      {p.name}{#if i < ps.length - 1}, {/if}
+                    </span>
+                  {/each}
+                </div>
+              {/if}
+            </div>
+          </div>
+        </button>
+      </div>
+    {/each}
+
     {#each events as e (e.occurrenceId ?? `${e.id}:${e.startAt}`)}
       {@const ps = e.persons && e.persons.length > 0 ? e.persons : e.person ? [e.person] : []}
       {@const p0 = ps[0]}
@@ -201,7 +270,7 @@
       </div>
     {/each}
 
-    {#if events.length === 0 && holidays.length === 0}
+    {#if events.length === 0 && suggestions.length === 0 && holidays.length === 0}
       <div class="text-center text-white/40 text-sm py-4">
         Keine Termine
       </div>

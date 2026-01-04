@@ -55,6 +55,7 @@
     , fetchMe
     , decodeJwtPayload
     , requestEmailVerification
+    , setRecurringSuggestionsEnabled
   } from '$lib/api';
 
   import { normalizeClockStyle, type ClockStyle } from '$lib/clockStyle';
@@ -192,6 +193,10 @@
   let backgroundRotateImages: string[] = [];
   let rotateImagesSaving = false;
   let rotateImagesError: string | null = null;
+
+  let recurringSuggestionsEnabled = false;
+  let recurringSuggestionsSaving = false;
+  let recurringSuggestionsError: string | null = null;
 
   let folderConfirmOpen = false;
   let pendingFolderFiles: File[] = [];
@@ -717,6 +722,22 @@
     newsFeeds = (feeds.length ? feeds : ['zeit']) as NewsFeedId[];
 
     clockStyle = normalizeClockStyle((settings as any)?.clockStyle);
+
+    recurringSuggestionsEnabled = Boolean((settings as any)?.recurringSuggestionsEnabled);
+  }
+
+  async function saveRecurringSuggestionsEnabled() {
+    recurringSuggestionsError = null;
+    recurringSuggestionsSaving = true;
+    try {
+      await setRecurringSuggestionsEnabled(recurringSuggestionsEnabled);
+      await refreshSettings();
+      showToast('Gespeichert');
+    } catch {
+      recurringSuggestionsError = 'Speichern fehlgeschlagen.';
+    } finally {
+      recurringSuggestionsSaving = false;
+    }
   }
 
   async function saveClockStyleHandler() {
@@ -1434,6 +1455,10 @@
 
     <CalendarSection
       {authed}
+      {recurringSuggestionsEnabled}
+      {recurringSuggestionsSaving}
+      {recurringSuggestionsError}
+      {saveRecurringSuggestionsEnabled}
       {tags}
       bind:newTagName
       bind:newTagColor

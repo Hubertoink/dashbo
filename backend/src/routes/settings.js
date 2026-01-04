@@ -3,9 +3,9 @@ const path = require('path');
 const multer = require('multer');
 const { z } = require('zod');
 
-const { requireAuth } = require('../middleware/auth');
+const { requireAuth, attachUserContext } = require('../middleware/auth');
 const { ensureUserUploadDir, listImages, deleteImage } = require('../services/mediaService');
-const { getUserSetting, setUserSetting } = require('../services/settingsService');
+const { getUserSetting, setUserSetting, getCalendarSetting, setCalendarSetting } = require('../services/settingsService');
 const { getTodoListName } = require('../services/todoService');
 
 const settingsRouter = express.Router();
@@ -28,8 +28,9 @@ const upload = multer({
   limits: { fileSize: 10 * 1024 * 1024 }
 });
 
-settingsRouter.get('/', requireAuth, async (_req, res) => {
+settingsRouter.get('/', requireAuth, attachUserContext, async (_req, res) => {
   const userId = Number(_req.auth?.sub);
+  const calendarId = Number(_req.ctx?.calendarId);
   const backgroundRaw = await getUserSetting({ userId, key: 'background' });
   const background = backgroundRaw && String(backgroundRaw).trim() ? backgroundRaw : null;
   const rotateEnabledRaw = await getUserSetting({ userId, key: 'background.rotate' });
@@ -45,6 +46,11 @@ settingsRouter.get('/', requireAuth, async (_req, res) => {
   const newsFeedsRaw = await getUserSetting({ userId, key: 'news.feeds' });
   const clockStyleRaw = await getUserSetting({ userId, key: 'clock.style' });
   const images = listImages({ userId });
+
+  const recurringSuggestionsEnabledRaw = Number.isFinite(calendarId) && calendarId > 0
+    ? await getCalendarSetting({ calendarId, key: 'planner.recurringSuggestions' })
+    : null;
+  const recurringSuggestionsEnabled = String(recurringSuggestionsEnabledRaw ?? '').toLowerCase() === 'true';
 
   const backgroundUrl = background ? `/media/${background}` : null;
 
@@ -139,6 +145,7 @@ settingsRouter.get('/', requireAuth, async (_req, res) => {
     background,
     backgroundUrl,
     images,
+    recurringSuggestionsEnabled,
     backgroundRotateEnabled,
     ...(backgroundRotateImages ? { backgroundRotateImages } : {}),
     weatherLocation,
@@ -154,6 +161,27 @@ settingsRouter.get('/', requireAuth, async (_req, res) => {
     dataRefreshMs,
     clockStyle,
   });
+});
+
+settingsRouter.post('/recurring-suggestions', requireAuth, attachUserContext, async (req, res) => {
+  const schema = z.object({ enabled: z.boolean() });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: 'invalid_body', details: parsed.error.flatten() });
+  }
+
+  const calendarId = Number(req.ctx?.calendarId);
+  if (!Number.isFinite(calendarId) || calendarId <= 0) {
+    return res.status(400).json({ error: 'missing_calendar' });
+  }
+
+  await setCalendarSetting({
+    calendarId,
+    key: 'planner.recurringSuggestions',
+    value: parsed.data.enabled ? 'true' : 'false',
+  });
+
+  return res.json({ ok: true });
 });
 
 settingsRouter.post('/clock/style', requireAuth, async (req, res) => {

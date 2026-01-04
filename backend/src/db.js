@@ -447,6 +447,34 @@ async function initDb() {
     CREATE INDEX IF NOT EXISTS user_settings_user_id_idx ON user_settings (user_id);
   `);
 
+  // Per-calendar settings (shared family settings)
+  await p.query(`
+    CREATE TABLE IF NOT EXISTS calendar_settings (
+      calendar_id BIGINT NOT NULL,
+      key TEXT NOT NULL,
+      value TEXT NOT NULL,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (calendar_id, key)
+    );
+  `);
+
+  await p.query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'calendar_settings_calendar_id_fkey'
+      ) THEN
+        ALTER TABLE calendar_settings
+        ADD CONSTRAINT calendar_settings_calendar_id_fkey
+        FOREIGN KEY (calendar_id)
+        REFERENCES calendars(id)
+        ON DELETE CASCADE;
+      END IF;
+    END $$;
+  `);
+
+  await p.query('CREATE INDEX IF NOT EXISTS calendar_settings_calendar_id_idx ON calendar_settings (calendar_id);');
+
   // Auth tokens (email verification, password reset)
   await p.query(`
     CREATE TABLE IF NOT EXISTS auth_tokens (

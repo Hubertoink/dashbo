@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { fetchTodos, updateTodo, type EventDto, type HolidayDto, type TodoItemDto } from '$lib/api';
+  import { fetchEvents, fetchTodos, updateTodo, type EventDto, type HolidayDto, type TodoItemDto } from '$lib/api';
   import { formatGermanShortDate, sameDay } from '$lib/date';
   import { onDestroy } from 'svelte';
   import { fade, fly } from 'svelte/transition';
@@ -13,6 +13,7 @@
   export let holidays: HolidayDto[] = [];
   export let outlookConnected = false;
   export let todoEnabled = true;
+  export let recurringSuggestionsEnabled = false;
   export let onSelect: (d: Date) => void;
   export let onEditEvent: (e: EventDto) => void;
   export let onBack: () => void;
@@ -22,13 +23,207 @@
   let quickAddOpen = false;
   let quickAddDate = new Date();
 
+  let quickAddPrefillTitle: string | null = null;
+  let quickAddPrefillStartTime: string | null = null;
+  let quickAddPrefillEndTime: string | null = null;
+  let quickAddPrefillAllDay: boolean | null = null;
+  let quickAddPrefillPersonIds: number[] | null = null;
+  let quickAddPrefillTagId: number | null = null;
+
   function openQuickAdd(day: Date) {
     quickAddDate = day;
+    quickAddPrefillTitle = null;
+    quickAddPrefillStartTime = null;
+    quickAddPrefillEndTime = null;
+    quickAddPrefillAllDay = null;
+    quickAddPrefillPersonIds = null;
+    quickAddPrefillTagId = null;
     quickAddOpen = true;
   }
 
   function closeQuickAdd() {
     quickAddOpen = false;
+  }
+
+  type EventSuggestionDto = import('./WeekPlannerDay.svelte').EventSuggestionDto;
+  let suggestions: EventSuggestionDto[] = [];
+  let suggestionsLoading = false;
+  let suggestionsForWeekKey = '';
+
+  function normalizeTitle(t: string): string {
+    return String(t || '')
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, ' ');
+  }
+
+  function weekdayMon0(d: Date): number {
+    return (d.getDay() + 6) % 7;
+  }
+
+  function minutesSinceMidnight(d: Date): number {
+    return d.getHours() * 60 + d.getMinutes();
+  }
+
+  function bucket15(mins: number): number {
+    return Math.max(0, Math.min(24 * 60 - 1, Math.round(mins / 15) * 15));
+  }
+
+  function hhmmFromMinutes(mins: number): string {
+    const h = Math.floor(mins / 60);
+    const m = mins % 60;
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+  }
+
+  function timeFromIso(iso: string): string {
+    const d = new Date(iso);
+    const h = String(d.getHours()).padStart(2, '0');
+    const m = String(d.getMinutes()).padStart(2, '0');
+    return `${h}:${m}`;
+  }
+
+  function overlaps(aStart: Date, aEnd: Date | null, bStart: Date, bEnd: Date | null): boolean {
+    const a0 = aStart.getTime();
+    const a1 = (aEnd ?? aStart).getTime();
+    const b0 = bStart.getTime();
+    const b1 = (bEnd ?? bStart).getTime();
+    return a0 <= b1 && b0 <= a1;
+  }
+
+  async function loadSuggestionsForWeek(weekStartLocal: Date, weekEndLocal: Date) {
+    if (!recurringSuggestionsEnabled) {
+      suggestions = [];
+      return;
+    }
+
+    const weekKey = dateKey(weekStartLocal);
+    if (suggestionsLoading || suggestionsForWeekKey === weekKey) return;
+    suggestionsLoading = true;
+
+    try {
+      const lookbackWeeks = 10;
+      const from = new Date(weekStartLocal);
+      from.setDate(from.getDate() - lookbackWeeks * 7);
+      from.setHours(0, 0, 0, 0);
+
+      const to = new Date(weekStartLocal);
+      to.setHours(0, 0, 0, 0);
+
+      const history = await fetchEvents(from, to);
+
+      const candidates = (history ?? []).filter((e) => {
+        if (e.source === 'outlook') return false;
+        if (e.allDay) return false;
+        if (e.recurrence) return false;
+        if (!e.title || !String(e.title).trim()) return false;
+        return true;
+      });
+
+      const currentWeekEvents = (events ?? []).filter((e) => {
+        const s = new Date(e.startAt);
+        if (Number.isNaN(s.getTime())) return false;
+        return s.getTime() >= weekStartLocal.getTime() && s.getTime() <= weekEndLocal.getTime();
+      });
+
+      type PatternAgg = {
+        count: number;
+        weeks: Set<string>;
+        sample: EventDto;
+        weekday: number;
+        startBucket: number;
+        durationBucket: number | null;
+        titleNorm: string;
+      };
+
+      const bySig = new Map<string, PatternAgg>();
+
+      for (const e of candidates) {
+        const start = new Date(e.startAt);
+        if (Number.isNaN(start.getTime())) continue;
+        const wd = weekdayMon0(start);
+        const startMin = bucket15(minutesSinceMidnight(start));
+
+        const end = e.endAt ? new Date(e.endAt) : null;
+        const durationMinRaw = end && !Number.isNaN(end.getTime()) ? Math.max(0, Math.round((end.getTime() - start.getTime()) / 60000)) : null;
+        const durationBucket = durationMinRaw != null ? bucket15(durationMinRaw) : null;
+
+        const titleNorm = normalizeTitle(e.title);
+        if (!titleNorm) continue;
+
+        const weekOfEvent = mondayStart(start);
+        const weekId = dateKey(weekOfEvent);
+
+        const sig = `${wd}|${startMin}|${durationBucket ?? 'x'}|${titleNorm}`;
+        const existing = bySig.get(sig);
+        if (existing) {
+          existing.count++;
+          existing.weeks.add(weekId);
+          // Prefer the most recent sample (roughly)
+          if (new Date(existing.sample.startAt).getTime() < start.getTime()) {
+            existing.sample = e;
+          }
+        } else {
+          bySig.set(sig, {
+            count: 1,
+            weeks: new Set([weekId]),
+            sample: e,
+            weekday: wd,
+            startBucket: startMin,
+            durationBucket,
+            titleNorm,
+          });
+        }
+      }
+
+      const out: EventSuggestionDto[] = [];
+
+      for (const [sig, agg] of bySig) {
+        if (agg.count < 3) continue;
+        if (agg.weeks.size < 3) continue;
+
+        const day = new Date(weekStartLocal);
+        day.setDate(day.getDate() + agg.weekday);
+        day.setHours(0, 0, 0, 0);
+
+        const start = new Date(day);
+        const hhmm = hhmmFromMinutes(agg.startBucket);
+        const [hh, mm] = hhmm.split(':').map((x) => Number(x));
+        start.setHours(hh || 0, mm || 0, 0, 0);
+
+        const end = agg.durationBucket != null ? new Date(start.getTime() + agg.durationBucket * 60000) : null;
+
+        const conflicts = currentWeekEvents.some((e) => {
+          const es = new Date(e.startAt);
+          if (Number.isNaN(es.getTime())) return false;
+          const ee = e.endAt ? new Date(e.endAt) : null;
+          if (ee && Number.isNaN(ee.getTime())) return overlaps(start, end, es, null);
+          return overlaps(start, end, es, ee);
+        });
+
+        if (conflicts) continue;
+
+        out.push({
+          suggestionKey: sig,
+          title: agg.sample.title,
+          startAt: start.toISOString(),
+          endAt: end ? end.toISOString() : null,
+          allDay: false,
+          tag: agg.sample.tag,
+          person: agg.sample.person,
+          persons: agg.sample.persons,
+        });
+      }
+
+      out.sort((a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime());
+
+      suggestions = out.slice(0, 10);
+      suggestionsForWeekKey = weekKey;
+    } catch {
+      suggestions = [];
+      suggestionsForWeekKey = weekKey;
+    } finally {
+      suggestionsLoading = false;
+    }
   }
 
   function handleEventCreated() {
@@ -171,6 +366,13 @@
   $: weekEnd = days[6] ?? addLocalDays(weekStart, 6);
   $: weekNumber = getWeekNumber(selectedDate);
 
+  $: if (recurringSuggestionsEnabled) {
+    void loadSuggestionsForWeek(weekStart, weekEnd);
+  } else {
+    suggestions = [];
+    suggestionsForWeekKey = '';
+  }
+
   $: eventsByDay = (() => {
     const m = new Map<string, EventDto[]>();
     for (const e of events) {
@@ -223,6 +425,33 @@
     }
     return m;
   })();
+
+  $: suggestionsByDay = (() => {
+    const m = new Map<string, EventSuggestionDto[]>();
+    for (const s of suggestions) {
+      const d = startOfLocalDay(new Date(s.startAt));
+      const k = dateKey(d);
+      const arr = m.get(k) ?? [];
+      arr.push(s);
+      m.set(k, arr);
+    }
+    for (const arr of m.values()) {
+      arr.sort((a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime());
+    }
+    return m;
+  })();
+
+  function acceptSuggestion(s: EventSuggestionDto) {
+    const d = new Date(s.startAt);
+    quickAddDate = d;
+    quickAddPrefillTitle = s.title;
+    quickAddPrefillStartTime = timeFromIso(s.startAt);
+    quickAddPrefillEndTime = s.endAt ? timeFromIso(s.endAt) : '';
+    quickAddPrefillAllDay = Boolean(s.allDay);
+    quickAddPrefillPersonIds = (s.persons && s.persons.length > 0 ? s.persons : s.person ? [s.person] : []).map((p) => p.id);
+    quickAddPrefillTagId = s.tag?.id ?? null;
+    quickAddOpen = true;
+  }
 </script>
 
 <!-- Backdrop -->
@@ -295,6 +524,7 @@
       {#each days as day, i (dateKey(day))}
         {@const isToday = sameDay(day, new Date())}
         {@const dayEvents = eventsByDay.get(dateKey(day)) ?? []}
+        {@const daySuggestions = suggestionsByDay.get(dateKey(day)) ?? []}
         {@const dayHolidays = holidaysByDay.get(dateKey(day)) ?? []}
         {@const dayTodos = todosByDay.get(dateKey(day)) ?? []}
         <div in:fly={{ y: 20, duration: 220, delay: 120 + i * 30 }}>
@@ -302,11 +532,13 @@
             {day}
             {isToday}
             events={dayEvents}
+            suggestions={daySuggestions}
             holidays={dayHolidays}
             todos={dayTodos}
             {outlookConnected}
             onAddEvent={() => openQuickAdd(day)}
             onEditEvent={onEditEvent}
+            onAcceptSuggestion={acceptSuggestion}
             onEventDeleted={handleEventDeleted}
             onToggleTodo={toggleTodo}
           />
@@ -334,6 +566,12 @@
 <QuickAddEventModal
   open={quickAddOpen}
   prefilledDate={quickAddDate}
+  prefillTitle={quickAddPrefillTitle}
+  prefillStartTime={quickAddPrefillStartTime}
+  prefillEndTime={quickAddPrefillEndTime}
+  prefillAllDay={quickAddPrefillAllDay}
+  prefillPersonIds={quickAddPrefillPersonIds}
+  prefillTagId={quickAddPrefillTagId}
   {outlookConnected}
   {todoEnabled}
   onClose={closeQuickAdd}
