@@ -4,6 +4,7 @@ const { z } = require('zod');
 const { requireAuth, attachUserContext } = require('../middleware/auth');
 const { login, signToken } = require('../services/authService');
 const { createAuthToken, consumeAuthToken } = require('../services/authTokenService');
+const { consumeCalendarInvite } = require('../services/calendarInviteService');
 const { sendMail, isEnabled: isMailEnabled } = require('../services/mailService');
 const bcrypt = require('bcryptjs');
 const { getPool } = require('../db');
@@ -214,6 +215,52 @@ authRouter.post('/accept-invite', async (req, res) => {
     [passwordHash, String(parsed.data.name), consumed.userId]
   );
   return res.json({ ok: true });
+});
+
+authRouter.post('/accept-calendar-invite', async (req, res) => {
+  const schema = z.object({
+    token: z.string().min(10).max(500),
+    email: z.string().email().max(200),
+    name: z.string().min(1).max(200),
+    password: z.string().min(6).max(200),
+  });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: 'invalid_body' });
+
+  const consumed = await consumeCalendarInvite({ token: parsed.data.token });
+  if (!consumed) return res.status(400).json({ error: 'invalid_token' });
+
+  const pool = getPool();
+  const email = String(parsed.data.email).trim().toLowerCase();
+  const name = String(parsed.data.name).trim();
+  const passwordHash = await bcrypt.hash(String(parsed.data.password), 10);
+
+  try {
+    // If user already exists in this calendar and is still invited, activate it.
+    const existing = await pool.query('SELECT id, calendar_id, password_hash FROM users WHERE lower(email) = lower($1) LIMIT 1;', [email]);
+    if (existing.rowCount > 0) {
+      const u = existing.rows[0];
+      if (Number(u.calendar_id) !== Number(consumed.calendarId)) return res.status(409).json({ error: 'email_in_use' });
+      if (u.password_hash) return res.status(409).json({ error: 'already_active' });
+
+      await pool.query(
+        'UPDATE users SET password_hash = $1, name = $2, updated_at = NOW() WHERE id = $3;',
+        [passwordHash, name, Number(u.id)]
+      );
+      return res.json({ ok: true });
+    }
+
+    await pool.query(
+      `
+      INSERT INTO users (email, name, password_hash, is_admin, role, calendar_id)
+      VALUES ($1, $2, $3, FALSE, 'member', $4);
+      `,
+      [email, name, passwordHash, consumed.calendarId]
+    );
+    return res.json({ ok: true });
+  } catch (e) {
+    return res.status(409).json({ error: 'email_in_use' });
+  }
 });
 
 module.exports = { authRouter };

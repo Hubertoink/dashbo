@@ -1408,6 +1408,24 @@
       </div>
     </div>
   {/if}
+
+  <!-- Floating button on mobile: hint at /planner -->
+  {#if !standbyMode && !plannerOpen}
+    <a
+      href="/planner"
+      class="fixed bottom-6 right-6 z-50 md:hidden flex items-center gap-2 px-4 py-3 rounded-full bg-white/20 backdrop-blur-md border border-white/10 shadow-lg text-white text-sm font-medium hover:bg-white/30 transition-colors"
+      in:fly={{ y: 20, duration: 250, delay: 500 }}
+      out:fade={{ duration: 150 }}
+    >
+      <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+        <line x1="16" y1="2" x2="16" y2="6"></line>
+        <line x1="8" y1="2" x2="8" y2="6"></line>
+        <line x1="3" y1="10" x2="21" y2="10"></line>
+      </svg>
+      Mobile Ansicht
+    </a>
+  {/if}
 </div>
 
 <style>

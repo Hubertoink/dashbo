@@ -5,6 +5,7 @@ const { requireAuth, requireAdmin, attachUserContext } = require('../middleware/
 const { listUsers, createUser, inviteUser, deleteUser, resetPassword } = require('../services/usersService');
 const { createAuthToken } = require('../services/authTokenService');
 const { getPool } = require('../db');
+const { createCalendarInvite } = require('../services/calendarInviteService');
 
 const usersRouter = express.Router();
 
@@ -119,6 +120,20 @@ usersRouter.post('/:id/invite-link', requireAuth, attachUserContext, requireAdmi
 
   const { token } = await createAuthToken({ userId: Number(user.id), kind: 'accept_invite', ttlSeconds: 7 * 24 * 60 * 60 });
   const link = `${publicUrl}/accept-invite?token=${encodeURIComponent(token)}`;
+  return res.json({ ok: true, link });
+});
+
+// POST /users/calendar-invite-link - Create a calendar invite link (admin-only)
+usersRouter.post('/calendar-invite-link', requireAuth, attachUserContext, requireAdmin, async (req, res) => {
+  const calendarId = req.ctx?.calendarId;
+  const actorUserId = req.ctx?.userId;
+  if (!calendarId) return res.status(400).json({ error: 'missing_calendar' });
+
+  const publicUrl = String(process.env.PUBLIC_APP_URL || '').replace(/\/$/, '');
+  if (!publicUrl) return res.status(400).json({ error: 'missing_public_app_url' });
+
+  const { token } = await createCalendarInvite({ calendarId, createdByUserId: actorUserId, ttlSeconds: 7 * 24 * 60 * 60 });
+  const link = `${publicUrl}/accept-calendar-invite?token=${encodeURIComponent(token)}`;
   return res.json({ ok: true, link });
 });
 

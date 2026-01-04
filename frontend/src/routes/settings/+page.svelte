@@ -21,6 +21,7 @@
     createUser,
     inviteUser,
     createInviteLinkForUser,
+    createCalendarInviteLink,
     deleteUser,
     resetUserPassword,
     setWeatherLocation,
@@ -1104,8 +1105,22 @@
 
   async function doCreateUser() {
     userError = null;
+    const email = newUserEmail.trim();
+    const name = newUserName.trim();
+    if (!email) {
+      userError = 'Bitte eine E-Mail eingeben.';
+      return;
+    }
+    if (!email.includes('@')) {
+      userError = 'Bitte eine gültige E-Mail eingeben.';
+      return;
+    }
+    if (!name) {
+      userError = 'Bitte einen Namen eingeben.';
+      return;
+    }
     try {
-      const res = await inviteUser({ email: newUserEmail, name: newUserName, isAdmin: newUserIsAdmin });
+      const res = await inviteUser({ email, name, isAdmin: newUserIsAdmin });
       newUserEmail = '';
       newUserName = '';
       newUserIsAdmin = false;
@@ -1121,6 +1136,7 @@
       if (msg.includes('missing_public_app_url')) userError = 'PUBLIC_APP_URL fehlt (wird für Einladungslinks benötigt).';
       else if (msg.includes('email_in_use')) userError = 'Diese E-Mail wird bereits in einem anderen Kalender genutzt.';
       else if (msg.includes('already_active')) userError = 'Dieser Benutzer existiert bereits und hat schon ein Passwort gesetzt.';
+      else if (msg.includes('invalid_body')) userError = 'Bitte E-Mail und Name korrekt ausfüllen.';
       else userError = msg || 'Einladung konnte nicht gesendet werden.';
     }
   }
@@ -1130,6 +1146,17 @@
       const res = await createInviteLinkForUser(Number(u.id));
       await navigator.clipboard.writeText(res.link);
       showToast('Einladungslink kopiert');
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      showToast(msg.includes('missing_public_app_url') ? 'PUBLIC_APP_URL fehlt.' : 'Link konnte nicht kopiert werden.');
+    }
+  }
+
+  async function copyCalendarInviteLink() {
+    try {
+      const res = await createCalendarInviteLink();
+      await navigator.clipboard.writeText(res.link);
+      showToast('Familien-Einladungslink kopiert');
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       showToast(msg.includes('missing_public_app_url') ? 'PUBLIC_APP_URL fehlt.' : 'Link konnte nicht kopiert werden.');
@@ -1559,6 +1586,7 @@
         bind:deletingFor
         {doCreateUser}
         copyInviteLinkForUser={copyInviteLinkForUser}
+        copyCalendarInviteLink={copyCalendarInviteLink}
       />
     {/if}
   </div>

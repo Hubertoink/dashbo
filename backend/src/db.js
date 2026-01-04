@@ -480,6 +480,53 @@ async function initDb() {
   await p.query('CREATE INDEX IF NOT EXISTS auth_tokens_user_kind_idx ON auth_tokens (user_id, kind);');
   await p.query('CREATE INDEX IF NOT EXISTS auth_tokens_expires_idx ON auth_tokens (expires_at);');
 
+  // Calendar invite links (copy/share family invite)
+  await p.query(`
+    CREATE TABLE IF NOT EXISTS calendar_invites (
+      id BIGSERIAL PRIMARY KEY,
+      calendar_id BIGINT NOT NULL,
+      created_by_user_id BIGINT,
+      token_hash TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      expires_at TIMESTAMPTZ NOT NULL,
+      used_at TIMESTAMPTZ
+    );
+  `);
+
+  await p.query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'calendar_invites_calendar_id_fkey'
+      ) THEN
+        ALTER TABLE calendar_invites
+        ADD CONSTRAINT calendar_invites_calendar_id_fkey
+        FOREIGN KEY (calendar_id)
+        REFERENCES calendars(id)
+        ON DELETE CASCADE;
+      END IF;
+    END $$;
+  `);
+
+  await p.query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'calendar_invites_created_by_user_id_fkey'
+      ) THEN
+        ALTER TABLE calendar_invites
+        ADD CONSTRAINT calendar_invites_created_by_user_id_fkey
+        FOREIGN KEY (created_by_user_id)
+        REFERENCES users(id)
+        ON DELETE SET NULL;
+      END IF;
+    END $$;
+  `);
+
+  await p.query('CREATE UNIQUE INDEX IF NOT EXISTS calendar_invites_token_hash_uq ON calendar_invites (token_hash);');
+  await p.query('CREATE INDEX IF NOT EXISTS calendar_invites_calendar_id_idx ON calendar_invites (calendar_id);');
+  await p.query('CREATE INDEX IF NOT EXISTS calendar_invites_expires_idx ON calendar_invites (expires_at);');
+
   // Outlook (Microsoft Graph) per-user OAuth tokens (read-only)
   await p.query(`
     CREATE TABLE IF NOT EXISTS outlook_tokens (

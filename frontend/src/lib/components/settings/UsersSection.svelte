@@ -18,6 +18,7 @@
 
   export let doCreateUser: () => void | Promise<void>;
   export let copyInviteLinkForUser: (u: UserDto) => void | Promise<void> = () => {};
+  export let copyCalendarInviteLink: () => void | Promise<void> = () => {};
 </script>
 
 {#if authed}
@@ -28,6 +29,16 @@
       {#if isAdmin}
         <div class="font-medium mb-1">Neuer Benutzer</div>
         <div class="text-white/50 text-xs mb-3">Einladung per E-Mail senden (wenn SMTP konfiguriert) oder Link kopieren.</div>
+
+        <div class="flex items-center justify-between mb-3">
+          <div class="text-white/70 text-sm">Familienaccount einladen</div>
+          <button
+            class="h-8 px-3 rounded-lg bg-white/10 hover:bg-white/15 text-xs font-medium"
+            on:click={copyCalendarInviteLink}
+          >
+            Einladungslink kopieren
+          </button>
+        </div>
 
         <div class="grid grid-cols-3 gap-2 mb-2">
           <input
@@ -79,8 +90,11 @@
               {#if isAdmin}
                 <div class="flex gap-2">
                   {#if u.invited}
-                    <button class="text-xs text-white/50 hover:text-white" on:click={() => copyInviteLinkForUser(u)}>
-                      Link kopieren
+                    <button
+                      class="text-xs px-2 py-1 rounded bg-white/10 hover:bg-white/15"
+                      on:click={() => copyInviteLinkForUser(u)}
+                    >
+                      Einladungslink
                     </button>
                   {/if}
                   <button

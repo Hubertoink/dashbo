@@ -426,6 +426,17 @@ export async function createInviteLinkForUser(id: number): Promise<{ ok: true; l
   return api<{ ok: true; link: string }>(`/users/${id}/invite-link`, { method: 'POST' });
 }
 
+export async function createCalendarInviteLink(): Promise<{ ok: true; link: string }> {
+  return api<{ ok: true; link: string }>(`/users/calendar-invite-link`, { method: 'POST' });
+}
+
+export async function acceptCalendarInvite(
+  token: string,
+  input: { email: string; name: string; password: string }
+): Promise<{ ok: true }> {
+  return api<{ ok: true }>(`/auth/accept-calendar-invite`, { method: 'POST', body: JSON.stringify({ token, ...input }) });
+}
+
 export async function acceptInvite(token: string, input: { name: string; password: string }): Promise<{ ok: true }> {
   return api<{ ok: true }>('/auth/accept-invite', { method: 'POST', body: JSON.stringify({ token, ...input }) });
 }
