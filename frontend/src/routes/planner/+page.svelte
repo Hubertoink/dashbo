@@ -422,7 +422,8 @@
       try {
         const today = startOfLocalDay(new Date());
         const suggestFrom = startOfDay(addDays(today, -56));
-        const suggestTo = endOfDay(addDays(today, 21));
+        // Include enough future events so the pattern can be inferred from already scheduled occurrences.
+        const suggestTo = endOfDay(addDays(today, 60));
         const suggestEvents = await fetchEvents(suggestFrom, suggestTo);
         generateSuggestions(suggestEvents);
       } catch {
@@ -463,7 +464,9 @@
     });
 
     // Aggregate weekly patterns (12-week lookback) using 15-min buckets.
+    // Also allow learning from already scheduled near-future events so month view can show upcoming suggestions.
     const lookbackFrom = addDays(todayStart, -12 * 7);
+    const patternTo = addDays(todayStart, 60 + 1);
     const weeklyAgg = new Map<
       string,
       { dates: Date[]; sample: EventDto; weekday: number; startBucket: number; titleNorm: string }
@@ -472,7 +475,7 @@
     for (const e of candidates) {
       const start = new Date(e.startAt);
       if (Number.isNaN(start.getTime())) continue;
-      if (start < lookbackFrom || start >= todayStart) continue;
+      if (start < lookbackFrom || start >= patternTo) continue;
 
       const wd = weekdayMon0(start);
       const startMin = bucket15(minutesSinceMidnight(start));
