@@ -235,6 +235,11 @@
   let touchStartX: number | null = null;
   let touchStartY: number | null = null;
 
+  // Track slide direction for animation: 1 = forward (right to left), -1 = backward (left to right)
+  let slideDirection = 1;
+  // Unique key for triggering grid animation
+  $: monthKey = `${monthAnchor.getFullYear()}-${monthAnchor.getMonth()}`;
+
   function clampDateToMonth(d: Date, anchor: Date) {
     const year = anchor.getFullYear();
     const month = anchor.getMonth();
@@ -244,6 +249,7 @@
   }
 
   function shiftMonth(delta: number) {
+    slideDirection = delta > 0 ? 1 : -1;
     const nextAnchor = new Date(monthAnchor.getFullYear(), monthAnchor.getMonth() + delta, 1);
     const nextSelected = clampDateToMonth(selected, nextAnchor);
     onSelect(nextSelected);
@@ -275,7 +281,7 @@
 
 <div class="h-full min-h-0 flex flex-col" on:touchstart={onTouchStart} on:touchend={onTouchEnd}>
   {#key monthTitle}
-    <div class="px-8 pt-8 pb-4" in:fly={{ y: -10, duration: 160 }} out:fade={{ duration: 120 }}>
+    <div class="px-8 pt-8 pb-4" in:fly={{ x: slideDirection * 40, duration: 200, delay: 50 }} out:fly={{ x: slideDirection * -40, duration: 150 }}>
       <div class="flex items-center justify-between gap-4">
         <div class="grid items-center gap-3" style="grid-template-columns: 2rem auto 2rem;">
           {#if onMonthChange}
@@ -369,7 +375,8 @@
   </div>
 
   <div class="px-8 pt-4 flex-1 min-h-0 overflow-hidden">
-    <div class="h-full min-h-0 grid grid-rows-6 gap-4">
+    {#key monthKey}
+    <div class="h-full min-h-0 grid grid-rows-6 gap-4" in:fly={{ x: slideDirection * 60, duration: 220, delay: 30 }} out:fly={{ x: slideDirection * -60, duration: 150 }}>
       {#each weeks as week, wi}
         <div class="relative min-h-0">
           <div class="relative z-10 grid grid-cols-7 gap-4 h-full">
@@ -477,5 +484,6 @@
         </div>
       {/each}
     </div>
+    {/key}
   </div>
 </div>
