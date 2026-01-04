@@ -418,7 +418,7 @@
                 class={`relative h-full min-h-[58px] md:min-h-[72px] rounded-2xl text-left px-3 py-2 transition
                   ${inMonth ? 'text-white' : 'text-white/35'}
                   ${isSelected ? 'bg-white/15' : 'bg-white/0 hover:bg-white/10 active:bg-white/15'}
-                  ${isToday ? 'ring-2 ring-white/30' : ''}
+                  ${isToday ? 'ring-2 ring-inset ring-white/30' : ''}
                   active:scale-95
                 `}
                 on:click={() => onSelect(new Date(d))}
