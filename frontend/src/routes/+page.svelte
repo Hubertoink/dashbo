@@ -26,7 +26,8 @@
     type TagColorKey,
     fetchSettings,
     fetchOutlookStatus,
-    getStoredToken
+    getStoredToken,
+    dismissRecurringSuggestion
   } from '$lib/api';
   import { daysForMonthGrid } from '$lib/date';
   import { getEdgePlayerWidgetEnabledFromStorage } from '$lib/edge';
@@ -83,6 +84,35 @@
 
   let dashboardSuggestions: DashboardSuggestionDto[] = [];
   let dashboardSuggestionsLoaded = false;
+  let dismissedSuggestionKeys = new Set<string>();
+  let dismissedLoaded = false;
+
+  async function loadDismissedKeys() {
+    if (dismissedLoaded) return;
+    dismissedLoaded = true;
+    try {
+      const s = await fetchSettings();
+      const arr = Array.isArray((s as any)?.recurringSuggestionsDismissed)
+        ? (((s as any).recurringSuggestionsDismissed as any[]) ?? []).map((v) => String(v || '').trim()).filter(Boolean)
+        : [];
+      dismissedSuggestionKeys = new Set(arr.slice(0, 1000));
+    } catch {
+      dismissedSuggestionKeys = new Set();
+    }
+  }
+
+  async function dismissDashboardSuggestion(s: DashboardSuggestionDto) {
+    const key = String(s?.suggestionKey || '').trim();
+    if (!key) return;
+    // optimistic update
+    dismissedSuggestionKeys = new Set([key, ...Array.from(dismissedSuggestionKeys)]);
+    dashboardSuggestions = dashboardSuggestions.filter((x) => x.suggestionKey !== key);
+    try {
+      await dismissRecurringSuggestion(key);
+    } catch {
+      // keep optimistic; user may see suggestion again after reload if backend failed
+    }
+  }
 
   async function loadStandbyScribbles() {
     try {
@@ -274,11 +304,14 @@
     // keep UI in sync with clicked day
     onSelect(d);
 
+    const ps = s.persons && s.persons.length > 0 ? s.persons : s.person ? [s.person] : [];
     addEventPrefill = {
       title: s.title,
       allDay: Boolean(s.allDay),
       startTime: s.startTime,
-      endTime: s.endTime
+      endTime: s.endTime,
+      tagId: s.tag?.id ?? null,
+      personIds: ps.map((p) => p.id)
     };
     addEventPrefillKey = s.suggestionKey;
     eventToEdit = null;
@@ -773,6 +806,7 @@
             const dayDateKey = dateKey(day);
             const suggKey = `${sig}|${dayDateKey}`;
             if (addedKeys.has(suggKey)) continue;
+            if (dismissedSuggestionKeys.has(suggKey)) continue;
 
             // Check if event already exists on this day
             const hasExisting = (allEventsForAnalysis ?? []).some((ev) => {
@@ -808,6 +842,9 @@
               allDay: false,
               startTime: hhmmFromMinutes(agg.startBucket),
               endTime,
+              tag: agg.sample.tag,
+              person: agg.sample.person,
+              persons: agg.sample.persons,
             });
           }
         }
@@ -848,6 +885,7 @@
             const dayDateKey = dateKey(day);
             const suggKey = `birthday|${dayDateKey}|${titleNorm}`;
             if (addedKeys.has(suggKey)) continue;
+            if (dismissedSuggestionKeys.has(suggKey)) continue;
 
             // Check if event already exists
             const hasExisting = (allEventsForAnalysis ?? []).some((ev) => {
@@ -862,6 +900,9 @@
               title: e.title,
               date: new Date(day),
               allDay: true,
+              tag: e.tag,
+              person: e.person,
+              persons: e.persons,
             });
           }
         }
@@ -940,7 +981,8 @@
         recurringSuggestionsMonthly = (s as any)?.recurringSuggestionsMonthly !== false;
         recurringSuggestionsBirthdays = (s as any)?.recurringSuggestionsBirthdays !== false;
 
-        // Load dashboard suggestions after settings are known
+        // Load dismissed keys first, then suggestions
+        await loadDismissedKeys();
         void loadDashboardSuggestions();
 
         try {
@@ -1423,6 +1465,7 @@
               suggestions={dashboardSuggestions}
               onCreate={openAddEventModal}
               onCreateFromSuggestion={openAddEventModalFromSuggestion}
+              onDismissSuggestion={dismissDashboardSuggestion}
               onEdit={openEditEventModal}
             />
           </div>

@@ -10,6 +10,9 @@
     allDay: boolean;
     startTime?: string; // HH:MM (local)
     endTime?: string; // HH:MM (local)
+    tag?: import('$lib/api').EventDto['tag'];
+    person?: import('$lib/api').EventDto['person'];
+    persons?: import('$lib/api').EventDto['persons'];
   };
 
   export let monthAnchor: Date;
