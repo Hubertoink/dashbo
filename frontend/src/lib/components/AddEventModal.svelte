@@ -17,6 +17,17 @@
   export let onClose: () => void;
   export let onCreated: () => void;
   export let eventToEdit: EventDto | null = null;
+  export let prefill:
+    | {
+        title?: string;
+        allDay?: boolean;
+        startTime?: string;
+        endTime?: string;
+        tagId?: number | null;
+        personIds?: number[];
+      }
+    | null = null;
+  export let prefillKey: string | null = null;
 
   let title = '';
   let description = '';
@@ -34,6 +45,7 @@
   let saving = false;
 
   let prefilledForEventId: number | null = null;
+  let prefilledForKey: string | null = null;
 
   let tags: TagDto[] = [];
   let tagsLoadedForOpen = false;
@@ -98,6 +110,7 @@
     recurrenceMenuOpen = false;
     showDeleteConfirm = false;
     prefilledForEventId = null;
+    prefilledForKey = null;
   }
 
   function resetFormForNewEvent() {
@@ -122,6 +135,16 @@
     // On opening the modal for a NEW event, ensure we don't keep stale form values
     if (open && !prevOpen && !eventToEdit) {
       resetFormForNewEvent();
+
+      if (prefillKey && prefillKey !== prefilledForKey) {
+        prefilledForKey = prefillKey;
+        if (prefill?.title != null) title = prefill.title;
+        if (typeof prefill?.allDay === 'boolean') allDay = prefill.allDay;
+        if (prefill?.startTime) startTime = prefill.startTime;
+        if (prefill?.endTime != null) endTime = prefill.endTime;
+        if (prefill && 'tagId' in prefill) tagIdStr = prefill.tagId != null ? String(prefill.tagId) : '';
+        if (prefill?.personIds) personIds = Array.isArray(prefill.personIds) ? prefill.personIds : [];
+      }
     }
     prevOpen = open;
   }

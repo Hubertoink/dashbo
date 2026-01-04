@@ -8,6 +8,8 @@
     title: string;
     date: Date;
     allDay: boolean;
+    startTime?: string; // HH:MM (local)
+    endTime?: string; // HH:MM (local)
   };
 
   export let monthAnchor: Date;

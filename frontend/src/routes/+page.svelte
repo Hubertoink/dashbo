@@ -249,6 +249,13 @@
   let showAddEventModal = false;
   let eventToEdit: EventDto | null = null;
   let plannerOpen = false;
+  let addEventPrefill: {
+    title?: string;
+    allDay?: boolean;
+    startTime?: string;
+    endTime?: string;
+  } | null = null;
+  let addEventPrefillKey: string | null = null;
 
   $: bgOverlay =
     tone === 'dark'
@@ -256,6 +263,24 @@
       : 'linear-gradient(to right, rgba(0,0,0,0.55), rgba(0,0,0,0.78))';
 
   function openAddEventModal() {
+    addEventPrefill = null;
+    addEventPrefillKey = null;
+    eventToEdit = null;
+    showAddEventModal = true;
+  }
+
+  function openAddEventModalFromSuggestion(s: import('$lib/components/CalendarMonth.svelte').DashboardSuggestionDto) {
+    const d = new Date(s.date);
+    // keep UI in sync with clicked day
+    onSelect(d);
+
+    addEventPrefill = {
+      title: s.title,
+      allDay: Boolean(s.allDay),
+      startTime: s.startTime,
+      endTime: s.endTime
+    };
+    addEventPrefillKey = s.suggestionKey;
     eventToEdit = null;
     showAddEventModal = true;
   }
@@ -272,6 +297,8 @@
     if (e.source === 'outlook') return;
     // keep UI in sync with the clicked occurrence day
     onSelect(new Date(e.startAt));
+    addEventPrefill = null;
+    addEventPrefillKey = null;
     eventToEdit = e;
     showAddEventModal = true;
   }
@@ -279,6 +306,8 @@
   function closeAddEventModal() {
     showAddEventModal = false;
     eventToEdit = null;
+    addEventPrefill = null;
+    addEventPrefillKey = null;
   }
 
   function setViewMode(next: 'month' | 'week') {
@@ -717,6 +746,12 @@
           }
         }
 
+        const hhmmFromMinutes = (mins: number) => {
+          const h = Math.floor(mins / 60);
+          const m = mins % 60;
+          return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+        };
+
         // Generate suggestions for matching days in grid
         for (const [sig, agg] of weeklyAgg) {
           for (const day of gridDays) {
@@ -747,11 +782,32 @@
             if (hasExisting) continue;
 
             addedKeys.add(suggKey);
+
+            let endTime: string | undefined;
+            try {
+              const sampleStart = new Date(agg.sample.startAt);
+              const sampleEnd = agg.sample.endAt ? new Date(agg.sample.endAt) : null;
+              if (sampleEnd && !Number.isNaN(sampleStart.getTime()) && !Number.isNaN(sampleEnd.getTime())) {
+                const deltaMs = sampleEnd.getTime() - sampleStart.getTime();
+                const minMs = 15 * 60 * 1000;
+                const maxMs = 12 * 60 * 60 * 1000;
+                if (deltaMs >= minMs && deltaMs <= maxMs) {
+                  const durMins = Math.round(deltaMs / (60 * 1000));
+                  const endMins = agg.startBucket + durMins;
+                  if (endMins > 0 && endMins < 24 * 60) endTime = hhmmFromMinutes(endMins);
+                }
+              }
+            } catch {
+              // ignore duration issues
+            }
+
             suggestions.push({
               suggestionKey: suggKey,
               title: agg.sample.title,
               date: new Date(day),
               allDay: false,
+              startTime: hhmmFromMinutes(agg.startBucket),
+              endTime,
             });
           }
         }
@@ -1360,7 +1416,15 @@
             </div>
           </div>
           <div class={`${dashboardTextClasses} border-t border-white/10 ${dashboardGlassBlurEnabled ? 'glass-dashboard-blur' : 'glass-dashboard-flat'} h-full overflow-hidden`}>
-            <EventsPanel {selectedDate} {events} {holidays} suggestions={dashboardSuggestions} onCreate={openAddEventModal} onEdit={openEditEventModal} />
+            <EventsPanel
+              {selectedDate}
+              {events}
+              {holidays}
+              suggestions={dashboardSuggestions}
+              onCreate={openAddEventModal}
+              onCreateFromSuggestion={openAddEventModalFromSuggestion}
+              onEdit={openEditEventModal}
+            />
           </div>
         </div>
       {:else}
@@ -1604,7 +1668,15 @@
     </div>
   </div>
 
-  <AddEventModal open={showAddEventModal} {selectedDate} {eventToEdit} onClose={closeAddEventModal} onCreated={loadEvents} />
+  <AddEventModal
+    open={showAddEventModal}
+    {selectedDate}
+    {eventToEdit}
+    prefill={addEventPrefill}
+    prefillKey={addEventPrefillKey}
+    onClose={closeAddEventModal}
+    onCreated={loadEvents}
+  />
 
   <!-- Week Planner Overlay -->
   {#if plannerOpen}
