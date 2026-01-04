@@ -265,6 +265,12 @@
         ? [eventToEdit.person.id]
         : []) as number[];
     recurrence = eventToEdit.recurrence?.freq ?? null;
+
+    // Do not carry ToDo input between modal opens when editing.
+    todoText = '';
+    todoSaving = false;
+    todoError = null;
+    todoAccountMenuOpen = false;
   }
 
   $: if (open && !eventToEdit && !startDateStr) {
@@ -376,8 +382,8 @@
       if (eventToEdit) await updateEvent(eventToEdit.id, payload);
       else await createEvent(payload);
 
-      // Optional: create ToDos from textarea lines (new events only)
-      const todoLines = !eventToEdit && outlookConnected && todoEnabled ? parseTodos(todoText) : [];
+      // Optional: create ToDos from textarea lines (also allowed when editing)
+      const todoLines = outlookConnected && todoEnabled ? parseTodos(todoText) : [];
       if (todoLines.length > 0) {
         todoSaving = true;
         todoError = null;
@@ -489,7 +495,7 @@
   >
     <!-- Modal Panel -->
     <div
-      class="w-full sm:max-w-md max-h-[92vh] bg-neutral-900/95 backdrop-blur-xl border-t sm:border border-white/10 sm:rounded-2xl overflow-hidden flex flex-col"
+      class="w-full sm:max-w-2xl lg:max-w-3xl max-h-[92vh] bg-neutral-900/95 backdrop-blur-xl border-t sm:border border-white/10 sm:rounded-2xl overflow-hidden flex flex-col"
       in:fly={{ y: 100, duration: 250, delay: 50 }}
       out:fly={{ y: 100, duration: 200 }}
     >
@@ -525,9 +531,9 @@
       </div>
 
       <!-- Form -->
-      <form on:submit|preventDefault={submit} class="p-4 space-y-4 overflow-auto flex-1 min-h-0">
+      <form on:submit|preventDefault={submit} class="p-4 grid grid-cols-1 sm:grid-cols-2 gap-4 overflow-auto flex-1 min-h-0">
         <!-- Title -->
-        <div>
+        <div class="sm:col-span-2">
           <input
             type="text"
             bind:value={title}
@@ -538,7 +544,7 @@
         </div>
 
         <!-- Time Row -->
-        <div class="flex items-center gap-3">
+        <div class="flex items-center gap-3 sm:col-span-2">
           <label class="flex items-center gap-2 cursor-pointer">
             <input
               type="checkbox"
@@ -568,7 +574,7 @@
 
         <!-- Date Row (for multi-day events or editing) -->
         {#if eventToEdit || endDateStr}
-          <div class="flex items-center gap-3">
+          <div class="flex items-center gap-3 sm:col-span-2">
             <div class="text-xs text-white/50 w-16">Datum</div>
             <div class="flex items-center gap-2 flex-1">
               <input
@@ -637,7 +643,7 @@
         </div>
 
         <!-- Description -->
-        <div>
+        <div class="sm:col-span-2">
           <textarea
             bind:value={description}
             placeholder="Beschreibung (optional)"
@@ -710,113 +716,117 @@
         {/if}
 
         <!-- ToDos (optional, Outlook) -->
-        {#if outlookConnected && todoEnabled && !eventToEdit}
-          <div>
+        {#if outlookConnected && todoEnabled}
+          <div class="sm:col-span-2">
             <div class="text-xs text-white/50 mb-2">ToDos (optional)</div>
 
             {#if outlookConnections.length === 0}
               <div class="text-xs text-white/50">Keine Outlook-Verbindung gefunden.</div>
             {/if}
 
-            {#if outlookConnections.length > 1}
-              <div class="mb-3">
-                <div class="text-[11px] uppercase tracking-widest text-white/45 mb-1">Konto</div>
-                <div class="relative">
-                  <button
-                    type="button"
-                    class="w-full h-10 px-3 rounded-lg bg-white/10 border border-white/10 text-sm text-white/90 flex items-center gap-2 focus:outline-none focus:ring-2 focus:ring-white/10"
-                    on:click={() => (todoAccountMenuOpen = !todoAccountMenuOpen)}
-                  >
-                    <span
-                      class={`h-2.5 w-2.5 rounded-full flex-shrink-0 ${connectionColorClass(selectedTodoConnection?.color)}`}
-                    ></span>
-                    <span class="flex-1 text-left min-w-0">
-                      <span class="block truncate">{selectedTodoConnection ? connectionLabel(selectedTodoConnection) : 'Konto wählen'}</span>
-                      {#if selectedTodoConnection?.email}
-                        <span class="block truncate text-xs text-white/50">{selectedTodoConnection.email}</span>
-                      {/if}
-                    </span>
-                    <svg
-                      class={`h-4 w-4 text-white/50 transition-transform ${todoAccountMenuOpen ? 'rotate-180' : ''}`}
-                      viewBox="0 0 20 20"
-                      fill="currentColor"
-                    >
-                      <path
-                        fill-rule="evenodd"
-                        d="M5.23 7.21a.75.75 0 011.06.02L10 10.94l3.71-3.71a.75.75 0 111.06 1.06l-4.24 4.24a.75.75 0 01-1.06 0L5.21 8.29a.75.75 0 01.02-1.08z"
-                        clip-rule="evenodd"
-                      />
-                    </svg>
-                  </button>
-
-                  {#if todoAccountMenuOpen}
-                    <div class="absolute z-10 mt-1 w-full rounded-lg bg-neutral-800 border border-white/10 shadow-lg overflow-hidden">
-                      {#each outlookConnections as c (c.id)}
-                        <button
-                          type="button"
-                          class={`w-full px-3 py-2 flex items-center gap-2 text-sm text-white/90 hover:bg-white/10 transition-colors ${c.id === todoSelectedConnectionId ? 'bg-white/5' : ''}`}
-                          on:click={() => {
-                            todoSelectedConnectionId = c.id;
-                            todoAccountMenuOpen = false;
-                          }}
+            <div class="sm:grid sm:grid-cols-2 sm:gap-4">
+              <div>
+                {#if outlookConnections.length > 1}
+                  <div class="mb-3">
+                    <div class="text-[11px] uppercase tracking-widest text-white/45 mb-1">Konto</div>
+                    <div class="relative">
+                      <button
+                        type="button"
+                        class="w-full h-10 px-3 rounded-lg bg-white/10 border border-white/10 text-sm text-white/90 flex items-center gap-2 focus:outline-none focus:ring-2 focus:ring-white/10"
+                        on:click={() => (todoAccountMenuOpen = !todoAccountMenuOpen)}
+                      >
+                        <span
+                          class={`h-2.5 w-2.5 rounded-full flex-shrink-0 ${connectionColorClass(selectedTodoConnection?.color)}`}
+                        ></span>
+                        <span class="flex-1 text-left min-w-0">
+                          <span class="block truncate">{selectedTodoConnection ? connectionLabel(selectedTodoConnection) : 'Konto wählen'}</span>
+                          {#if selectedTodoConnection?.email}
+                            <span class="block truncate text-xs text-white/50">{selectedTodoConnection.email}</span>
+                          {/if}
+                        </span>
+                        <svg
+                          class={`h-4 w-4 text-white/50 transition-transform ${todoAccountMenuOpen ? 'rotate-180' : ''}`}
+                          viewBox="0 0 20 20"
+                          fill="currentColor"
                         >
-                          <span class={`h-2.5 w-2.5 rounded-full flex-shrink-0 ${connectionColorClass(c.color)}`}></span>
-                          <span class="flex-1 text-left min-w-0">
-                            <span class="block truncate">{connectionLabel(c)}</span>
-                            {#if c.email}
-                              <span class="block truncate text-xs text-white/50">{c.email}</span>
-                            {/if}
-                          </span>
-                        </button>
-                      {/each}
+                          <path
+                            fill-rule="evenodd"
+                            d="M5.23 7.21a.75.75 0 011.06.02L10 10.94l3.71-3.71a.75.75 0 111.06 1.06l-4.24 4.24a.75.75 0 01-1.06 0L5.21 8.29a.75.75 0 01.02-1.08z"
+                            clip-rule="evenodd"
+                          />
+                        </svg>
+                      </button>
+
+                      {#if todoAccountMenuOpen}
+                        <div class="absolute z-10 mt-1 w-full rounded-lg bg-neutral-800 border border-white/10 shadow-lg overflow-hidden">
+                          {#each outlookConnections as c (c.id)}
+                            <button
+                              type="button"
+                              class={`w-full px-3 py-2 flex items-center gap-2 text-sm text-white/90 hover:bg-white/10 transition-colors ${c.id === todoSelectedConnectionId ? 'bg-white/5' : ''}`}
+                              on:click={() => {
+                                todoSelectedConnectionId = c.id;
+                                todoAccountMenuOpen = false;
+                              }}
+                            >
+                              <span class={`h-2.5 w-2.5 rounded-full flex-shrink-0 ${connectionColorClass(c.color)}`}></span>
+                              <span class="flex-1 text-left min-w-0">
+                                <span class="block truncate">{connectionLabel(c)}</span>
+                                {#if c.email}
+                                  <span class="block truncate text-xs text-white/50">{c.email}</span>
+                                {/if}
+                              </span>
+                            </button>
+                          {/each}
+                        </div>
+                      {/if}
                     </div>
-                  {/if}
+                  </div>
+                {/if}
+
+                {#if todoListNames.length > 1}
+                  <div class="mb-3">
+                    <div class="text-[11px] uppercase tracking-widest text-white/45 mb-1">Liste</div>
+                    <div class="relative">
+                      <select
+                        class="w-full h-10 px-3 pr-10 rounded-lg bg-white/10 border border-white/10 text-sm text-white/90 appearance-none focus:outline-none focus:ring-2 focus:ring-white/10"
+                        bind:value={todoSelectedListName}
+                      >
+                        {#each todoListNames as ln}
+                          <option class="bg-neutral-900 text-white" value={ln}>{ln}</option>
+                        {/each}
+                      </select>
+                      <svg
+                        class="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-white/50"
+                        viewBox="0 0 20 20"
+                        fill="currentColor"
+                      >
+                        <path
+                          fill-rule="evenodd"
+                          d="M5.23 7.21a.75.75 0 011.06.02L10 10.94l3.71-3.71a.75.75 0 111.06 1.06l-4.24 4.24a.75.75 0 01-1.06 0L5.21 8.29a.75.75 0 01.02-1.08z"
+                          clip-rule="evenodd"
+                        />
+                      </svg>
+                    </div>
+                  </div>
+                {/if}
+              </div>
+
+              <div>
+                <div class="text-[11px] uppercase tracking-widest text-white/45 mb-1">Was muss gemacht werden?</div>
+                <textarea
+                  class="w-full min-h-[96px] px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-sm placeholder:text-white/40 focus:outline-none focus:ring-2 focus:ring-white/30"
+                  placeholder="Eine Zeile = ein ToDo\nz.B. Müll rausbringen\nEinkaufsliste schreiben"
+                  bind:value={todoText}
+                ></textarea>
+                <div class="mt-1 flex items-center justify-between">
+                  <div class="text-xs text-white/40">Fällig am ausgewählten Tag</div>
+                  <div class="text-xs text-white/50">{parseTodos(todoText).length} ToDo(s)</div>
                 </div>
-              </div>
-            {/if}
 
-            {#if todoListNames.length > 1}
-              <div class="mb-3">
-                <div class="text-[11px] uppercase tracking-widest text-white/45 mb-1">Liste</div>
-                <div class="relative">
-                  <select
-                    class="w-full h-10 px-3 pr-10 rounded-lg bg-white/10 border border-white/10 text-sm text-white/90 appearance-none focus:outline-none focus:ring-2 focus:ring-white/10"
-                    bind:value={todoSelectedListName}
-                  >
-                    {#each todoListNames as ln}
-                      <option class="bg-neutral-900 text-white" value={ln}>{ln}</option>
-                    {/each}
-                  </select>
-                  <svg
-                    class="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-white/50"
-                    viewBox="0 0 20 20"
-                    fill="currentColor"
-                  >
-                    <path
-                      fill-rule="evenodd"
-                      d="M5.23 7.21a.75.75 0 011.06.02L10 10.94l3.71-3.71a.75.75 0 111.06 1.06l-4.24 4.24a.75.75 0 01-1.06 0L5.21 8.29a.75.75 0 01.02-1.08z"
-                      clip-rule="evenodd"
-                    />
-                  </svg>
-                </div>
+                {#if todoError}
+                  <div class="mt-2 text-xs text-rose-300">{todoError}</div>
+                {/if}
               </div>
-            {/if}
-
-            <div>
-              <div class="text-[11px] uppercase tracking-widest text-white/45 mb-1">Was muss gemacht werden?</div>
-              <textarea
-                class="w-full min-h-[72px] px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-sm placeholder:text-white/40 focus:outline-none focus:ring-2 focus:ring-white/30"
-                placeholder="Eine Zeile = ein ToDo\nz.B. Müll rausbringen\nEinkaufsliste schreiben"
-                bind:value={todoText}
-              ></textarea>
-              <div class="mt-1 flex items-center justify-between">
-                <div class="text-xs text-white/40">Fällig am ausgewählten Tag</div>
-                <div class="text-xs text-white/50">{parseTodos(todoText).length} ToDo(s)</div>
-              </div>
-
-              {#if todoError}
-                <div class="mt-2 text-xs text-rose-300">{todoError}</div>
-              {/if}
             </div>
           </div>
         {/if}
@@ -825,7 +835,7 @@
         <button
           type="submit"
           disabled={!title.trim() || saving || todoSaving}
-          class="w-full py-3 rounded-xl font-semibold text-lg transition active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed bg-emerald-600 hover:bg-emerald-500 text-white"
+          class="w-full sm:col-span-2 py-3 rounded-xl font-semibold text-lg transition active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed bg-emerald-600 hover:bg-emerald-500 text-white"
         >
           {#if saving || todoSaving}
             <span class="inline-flex items-center gap-2">
