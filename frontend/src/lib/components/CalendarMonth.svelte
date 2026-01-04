@@ -280,24 +280,25 @@
 </script>
 
 <div class="h-full min-h-0 flex flex-col" on:touchstart={onTouchStart} on:touchend={onTouchEnd}>
-  {#key monthTitle}
-    <div class="px-8 pt-8 pb-4" in:fly={{ x: slideDirection * 40, duration: 200, delay: 50 }} out:fly={{ x: slideDirection * -40, duration: 150 }}>
-      <div class="flex items-center justify-between gap-4">
-        <div class="grid items-center gap-3" style="grid-template-columns: 2rem auto 2rem;">
-          {#if onMonthChange}
-            <button
-              type="button"
-              class="h-8 w-8 rounded-lg bg-white/5 hover:bg-white/10 active:bg-white/15 text-white/50 hover:text-white/80 transition-all grid place-items-center"
-              aria-label="Vorheriger Monat"
-              on:click={() => onMonthChange?.(-1)}
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M15 18l-6-6 6-6" />
-              </svg>
-            </button>
-          {:else}
-            <div class="h-8 w-8"></div>
-          {/if}
+  <div class="relative overflow-hidden">
+    {#key monthTitle}
+      <div class="px-8 pt-8 pb-4" in:fly={{ x: slideDirection * 40, duration: 180 }} out:fly|local={{ x: slideDirection * -40, duration: 180 }}>
+        <div class="flex items-center justify-between gap-4">
+          <div class="grid items-center gap-3" style="grid-template-columns: 2rem auto 2rem;">
+            {#if onMonthChange}
+              <button
+                type="button"
+                class="h-8 w-8 rounded-lg bg-white/5 hover:bg-white/10 active:bg-white/15 text-white/50 hover:text-white/80 transition-all grid place-items-center"
+                aria-label="Vorheriger Monat"
+                on:click={() => onMonthChange?.(-1)}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M15 18l-6-6 6-6" />
+                </svg>
+              </button>
+            {:else}
+              <div class="h-8 w-8"></div>
+            {/if}
 
           <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
           <div
@@ -365,6 +366,7 @@
       </div>
     </div>
   {/key}
+  </div>
 
   <div class="px-8">
     <div class="grid grid-cols-7 gap-4 text-white/70">
@@ -374,9 +376,9 @@
     </div>
   </div>
 
-  <div class="px-8 pt-4 flex-1 min-h-0 overflow-hidden">
+  <div class="px-8 pt-4 flex-1 min-h-0 overflow-hidden relative">
     {#key monthKey}
-    <div class="h-full min-h-0 grid grid-rows-6 gap-4" in:fly={{ x: slideDirection * 60, duration: 220, delay: 30 }} out:fly={{ x: slideDirection * -60, duration: 150 }}>
+    <div class="h-full min-h-0 grid grid-rows-6 gap-4" in:fly={{ x: slideDirection * 50, duration: 200 }} out:fly|local={{ x: slideDirection * -50, duration: 180 }}>
       {#each weeks as week, wi}
         <div class="relative min-h-0">
           <div class="relative z-10 grid grid-cols-7 gap-4 h-full">
