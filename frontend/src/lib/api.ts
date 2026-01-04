@@ -457,6 +457,7 @@ export type SettingsDto = {
   backgroundUrl: string | null;
   images: string[];
   recurringSuggestionsEnabled?: boolean;
+  recurringSuggestionsDismissed?: string[];
   backgroundRotateEnabled?: boolean;
   backgroundRotateImages?: string[];
   weatherLocation?: string | null;
@@ -525,6 +526,10 @@ export async function setBackgroundRotateImages(images: string[]): Promise<{ ok:
 
 export async function setRecurringSuggestionsEnabled(enabled: boolean): Promise<{ ok: true }> {
   return api<{ ok: true }>('/settings/recurring-suggestions', { method: 'POST', body: JSON.stringify({ enabled }) });
+}
+
+export async function dismissRecurringSuggestion(key: string): Promise<{ ok: true }> {
+  return api<{ ok: true }>('/settings/recurring-suggestions/dismiss', { method: 'POST', body: JSON.stringify({ key }) });
 }
 
 export function uploadBackgroundWithProgress(

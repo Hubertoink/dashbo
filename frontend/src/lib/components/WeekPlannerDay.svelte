@@ -25,6 +25,7 @@
   export let onAddEvent: () => void;
   export let onEditEvent: (e: EventDto) => void;
   export let onAcceptSuggestion: (s: EventSuggestionDto) => void;
+  export let onDismissSuggestion: (s: EventSuggestionDto) => void;
   export let onEventDeleted: () => void = () => {};
   export let onToggleTodo: (t: TodoItemDto) => void = () => {};
 
@@ -146,7 +147,7 @@
       <div class="relative">
         <button
           type="button"
-          class="w-full text-left rounded-xl px-2.5 py-2 pr-3 bg-white/5 border border-white/15 border-dashed hover:bg-white/10 active:bg-white/15 active:scale-[0.98] transition group touch-manipulation select-none opacity-70 hover:opacity-100"
+          class="w-full text-left rounded-xl px-2.5 py-2 pr-20 bg-white/5 border border-white/15 border-dashed hover:bg-white/10 active:bg-white/15 active:scale-[0.98] transition group touch-manipulation select-none opacity-70 hover:opacity-100"
           style="-webkit-touch-callout: none;"
           on:click|stopPropagation={() => onAcceptSuggestion(s)}
         >
@@ -191,6 +192,16 @@
               {/if}
             </div>
           </div>
+        </button>
+
+        <button
+          type="button"
+          class="absolute top-1/2 -translate-y-1/2 right-2 h-8 px-3 rounded-lg bg-white/5 hover:bg-white/10 active:bg-white/15 transition text-xs text-white/70"
+          on:click|stopPropagation={() => onDismissSuggestion(s)}
+          aria-label="Vorschlag ignorieren"
+          title="Ignorieren"
+        >
+          Ignorieren
         </button>
       </div>
     {/each}

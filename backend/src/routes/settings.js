@@ -52,6 +52,23 @@ settingsRouter.get('/', requireAuth, attachUserContext, async (_req, res) => {
     : null;
   const recurringSuggestionsEnabled = String(recurringSuggestionsEnabledRaw ?? '').toLowerCase() === 'true';
 
+  const recurringSuggestionsDismissedRaw = await getUserSetting({ userId, key: 'planner.recurringSuggestions.dismissed' });
+  /** @type {string[]} */
+  let recurringSuggestionsDismissed = [];
+  if (recurringSuggestionsDismissedRaw && String(recurringSuggestionsDismissedRaw).trim()) {
+    try {
+      const parsed = JSON.parse(String(recurringSuggestionsDismissedRaw));
+      if (Array.isArray(parsed)) {
+        recurringSuggestionsDismissed = parsed
+          .map((v) => String(v || '').trim())
+          .filter(Boolean)
+          .slice(0, 1000);
+      }
+    } catch {
+      // ignore
+    }
+  }
+
   const backgroundUrl = background ? `/media/${background}` : null;
 
   const holidaysEnabled = String(holidaysEnabledRaw ?? '').toLowerCase() === 'true';
@@ -146,6 +163,7 @@ settingsRouter.get('/', requireAuth, attachUserContext, async (_req, res) => {
     backgroundUrl,
     images,
     recurringSuggestionsEnabled,
+    recurringSuggestionsDismissed,
     backgroundRotateEnabled,
     ...(backgroundRotateImages ? { backgroundRotateImages } : {}),
     weatherLocation,
@@ -181,6 +199,31 @@ settingsRouter.post('/recurring-suggestions', requireAuth, attachUserContext, as
     value: parsed.data.enabled ? 'true' : 'false',
   });
 
+  return res.json({ ok: true });
+});
+
+settingsRouter.post('/recurring-suggestions/dismiss', requireAuth, async (req, res) => {
+  const schema = z.object({ key: z.string().trim().min(1).max(500) });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: 'invalid_body', details: parsed.error.flatten() });
+  }
+
+  const userId = Number(req.auth?.sub);
+  const raw = await getUserSetting({ userId, key: 'planner.recurringSuggestions.dismissed', fallbackToGlobal: false });
+  let arr = [];
+  if (raw && String(raw).trim()) {
+    try {
+      const p = JSON.parse(String(raw));
+      if (Array.isArray(p)) arr = p.map((v) => String(v || '').trim()).filter(Boolean);
+    } catch {
+      // ignore
+    }
+  }
+
+  const next = [parsed.data.key, ...arr].map((v) => String(v || '').trim()).filter(Boolean);
+  const unique = Array.from(new Set(next)).slice(0, 1000);
+  await setUserSetting({ userId, key: 'planner.recurringSuggestions.dismissed', value: JSON.stringify(unique) });
   return res.json({ ok: true });
 });
 

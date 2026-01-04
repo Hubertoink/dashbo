@@ -1494,6 +1494,10 @@
 
     <DashboardSection
       {authed}
+      {recurringSuggestionsEnabled}
+      {recurringSuggestionsSaving}
+      {recurringSuggestionsError}
+      saveRecurringSuggestionsEnabled={saveRecurringSuggestionsEnabled}
       {settings}
       bind:weatherLocation
       {weatherSaving}

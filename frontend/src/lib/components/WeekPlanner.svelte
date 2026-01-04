@@ -1,7 +1,7 @@
 <script lang="ts">
-  import { fetchEvents, fetchTodos, updateTodo, type EventDto, type HolidayDto, type TodoItemDto } from '$lib/api';
+  import { dismissRecurringSuggestion, fetchEvents, fetchSettings, fetchTodos, updateTodo, type EventDto, type HolidayDto, type TodoItemDto } from '$lib/api';
   import { formatGermanShortDate, sameDay } from '$lib/date';
-  import { onDestroy } from 'svelte';
+  import { onDestroy, onMount } from 'svelte';
   import { fade, fly } from 'svelte/transition';
   import WeekPlannerDay from './WeekPlannerDay.svelte';
   import QuickAddEventModal from './QuickAddEventModal.svelte';
@@ -49,6 +49,28 @@
   let suggestions: EventSuggestionDto[] = [];
   let suggestionsLoading = false;
   let suggestionsForWeekKey = '';
+  let dismissedSuggestionKeys = new Set<string>();
+  let dismissedLoaded = false;
+
+  async function loadDismissed() {
+    if (dismissedLoaded) return;
+    dismissedLoaded = true;
+    try {
+      const s = await fetchSettings();
+      const arr = Array.isArray((s as any)?.recurringSuggestionsDismissed)
+        ? (((s as any).recurringSuggestionsDismissed as any[]) ?? []).map((v) => String(v || '').trim()).filter(Boolean)
+        : [];
+      dismissedSuggestionKeys = new Set(arr.slice(0, 1000));
+    } catch {
+      dismissedSuggestionKeys = new Set();
+    }
+  }
+
+  onMount(() => {
+    if (recurringSuggestionsEnabled) {
+      void loadDismissed();
+    }
+  });
 
   function normalizeTitle(t: string): string {
     return String(t || '')
@@ -94,6 +116,10 @@
     if (!recurringSuggestionsEnabled) {
       suggestions = [];
       return;
+    }
+
+    if (!dismissedLoaded) {
+      await loadDismissed();
     }
 
     const weekKey = dateKey(weekStartLocal);
@@ -178,6 +204,7 @@
       const out: EventSuggestionDto[] = [];
 
       for (const [sig, agg] of bySig) {
+        if (dismissedSuggestionKeys.has(sig)) continue;
         if (agg.count < 3) continue;
         if (agg.weeks.size < 3) continue;
 
@@ -223,6 +250,19 @@
       suggestionsForWeekKey = weekKey;
     } finally {
       suggestionsLoading = false;
+    }
+  }
+
+  async function dismissSuggestion(s: EventSuggestionDto) {
+    const key = String(s?.suggestionKey || '').trim();
+    if (!key) return;
+    // optimistic
+    dismissedSuggestionKeys = new Set([key, ...Array.from(dismissedSuggestionKeys)]);
+    suggestions = suggestions.filter((x) => x.suggestionKey !== key);
+    try {
+      await dismissRecurringSuggestion(key);
+    } catch {
+      // keep optimistic behavior; worst case user will see it again after reload
     }
   }
 
@@ -539,6 +579,7 @@
             onAddEvent={() => openQuickAdd(day)}
             onEditEvent={onEditEvent}
             onAcceptSuggestion={acceptSuggestion}
+            onDismissSuggestion={dismissSuggestion}
             onEventDeleted={handleEventDeleted}
             onToggleTodo={toggleTodo}
           />
