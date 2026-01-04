@@ -361,44 +361,54 @@
       >
         <div class="p-6 md:p-8">
           <div class="flex items-center justify-between gap-4">
-            <div class="text-2xl font-semibold">{eventToEdit ? 'Termin bearbeiten' : 'Neuer Termin'}</div>
+            <div class="text-xl font-semibold">{eventToEdit ? 'Termin bearbeiten' : 'Neuer Termin'}</div>
             <button
               type="button"
-              class="h-12 px-4 rounded-xl bg-white/10 hover:bg-white/15"
+              class="h-10 w-10 rounded-xl bg-white/10 hover:bg-white/15 grid place-items-center"
+              title="Schließen"
               on:click={onClose}
             >
-              Schließen
+              <svg class="w-5 h-5 text-white/70" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
             </button>
           </div>
         </div>
 
         <div class="px-6 md:px-8 pb-6 md:pb-8 overflow-auto flex-1 min-h-0">
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <input class="h-14 rounded-xl bg-black/30 border-white/10 text-lg" placeholder="Titel" bind:value={title} />
-            <input class="h-14 rounded-xl bg-black/30 border-white/10 text-lg" placeholder="Ort" bind:value={location} />
+          <div class="space-y-4">
+            <!-- Title -->
+            <div class="flex items-center gap-3">
+              <svg class="w-5 h-5 text-white/50 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+              <input class="flex-1 h-12 rounded-xl bg-black/30 border border-white/10 px-4 text-base placeholder:text-white/40" placeholder="Titel" bind:value={title} />
+            </div>
 
-            <div class="md:col-span-2">
-              <label class="inline-flex items-center gap-3 select-none">
-                <input type="checkbox" class="h-5 w-5" bind:checked={allDay} />
-                <span class="text-white/65 text-lg">Ganztägig</span>
+            <!-- Location -->
+            <div class="flex items-center gap-3">
+              <svg class="w-5 h-5 text-white/50 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+              <input class="flex-1 h-12 rounded-xl bg-black/30 border border-white/10 px-4 text-base placeholder:text-white/40" placeholder="Ort" bind:value={location} />
+            </div>
+
+            <!-- All-day toggle -->
+            <div class="flex items-center gap-3 pl-8">
+              <label class="inline-flex items-center gap-3 select-none cursor-pointer">
+                <input type="checkbox" class="h-5 w-5 rounded bg-black/30 border border-white/10" bind:checked={allDay} />
+                <span class="text-white/60 text-sm">Ganztägig</span>
               </label>
             </div>
 
-            <div>
-              <div class="text-white/70 text-sm mb-2">Startdatum</div>
-              <input class="h-14 w-full rounded-xl bg-black/30 border-white/10 text-lg px-4" type="date" bind:value={startDateStr} />
-            </div>
-
-            <div>
-              <div class="text-white/70 text-sm mb-2">Enddatum (optional)</div>
-              <input class="h-14 w-full rounded-xl bg-black/30 border-white/10 text-lg px-4" type="date" bind:value={endDateStr} />
+            <!-- Dates -->
+            <div class="flex items-start gap-3">
+              <svg class="w-5 h-5 text-white/50 shrink-0 mt-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+              <div class="flex-1 grid grid-cols-2 gap-3">
+                <input class="h-12 w-full rounded-xl bg-black/30 border border-white/10 px-4 text-base" type="date" bind:value={startDateStr} />
+                <input class="h-12 w-full rounded-xl bg-black/30 border border-white/10 px-4 text-base" type="date" bind:value={endDateStr} placeholder="Ende" />
+              </div>
             </div>
 
             {#if tags.length > 0}
-              <div class="md:col-span-2">
-                <div class="text-white/70 text-sm mb-2">Tag</div>
-
-                <div class="relative" on:click|stopPropagation>
+              <!-- Tag -->
+              <div class="flex items-center gap-3">
+                <svg class="w-5 h-5 text-white/50 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M7 7h.01M7 3h5a1.99 1.99 0 011.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"/></svg>
+                <div class="flex-1 relative" on:click|stopPropagation>
                   <button
                     type="button"
                     class="h-14 w-full rounded-xl bg-black/30 border border-white/10 text-lg px-4 flex items-center justify-between gap-3 hover:bg-black/35 active:bg-black/40 transition"
@@ -461,10 +471,10 @@
             {/if}
 
             {#if persons.length > 0}
-              <div class="md:col-span-2">
-                <div class="text-white/70 text-sm mb-2">Personen</div>
-
-                <div class="relative" on:click|stopPropagation>
+              <!-- Persons -->
+              <div class="flex items-center gap-3">
+                <svg class="w-5 h-5 text-white/50 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
+                <div class="flex-1 relative" on:click|stopPropagation>
                   <button
                     type="button"
                     class="h-14 w-full rounded-xl bg-black/30 border border-white/10 text-lg px-4 flex items-center justify-between gap-3 hover:bg-black/35 active:bg-black/40 transition"
@@ -537,18 +547,21 @@
               </div>
             {/if}
 
+            <!-- Times -->
             {#if !allDay}
-              <input class="h-14 rounded-xl bg-black/30 border-white/10 text-lg" type="time" bind:value={startTime} />
-              <input class="h-14 rounded-xl bg-black/30 border-white/10 text-lg" type="time" bind:value={endTime} />
-            {:else}
-              <div class="h-14 rounded-xl bg-black/20 border border-white/10 grid place-items-center text-white/60">—</div>
-              <div class="h-14 rounded-xl bg-black/20 border border-white/10 grid place-items-center text-white/60">—</div>
+              <div class="flex items-center gap-3">
+                <svg class="w-5 h-5 text-white/50 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                <div class="flex-1 grid grid-cols-2 gap-3">
+                  <input class="h-12 rounded-xl bg-black/30 border border-white/10 px-4 text-base" type="time" bind:value={startTime} />
+                  <input class="h-12 rounded-xl bg-black/30 border border-white/10 px-4 text-base" type="time" bind:value={endTime} />
+                </div>
+              </div>
             {/if}
 
-            <div class="md:col-span-2">
-              <div class="text-white/70 text-sm mb-2">Wiederholung</div>
-
-              <div class="relative" on:click|stopPropagation>
+            <!-- Recurrence -->
+            <div class="flex items-center gap-3">
+              <svg class="w-5 h-5 text-white/50 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+              <div class="flex-1 relative" on:click|stopPropagation>
                 <button
                   type="button"
                   class="h-14 w-full rounded-xl bg-black/30 border border-white/10 text-lg px-4 flex items-center justify-between gap-3 hover:bg-black/35 active:bg-black/40 transition"
@@ -608,40 +621,48 @@
               </div>
             </div>
 
-            <textarea
-              class="min-h-[120px] md:col-span-2 rounded-xl bg-black/30 border-white/10 text-lg"
-              placeholder="Beschreibung"
-              bind:value={description}
-            ></textarea>
+            <!-- Description -->
+            <div class="flex items-start gap-3">
+              <svg class="w-5 h-5 text-white/50 shrink-0 mt-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h7"/></svg>
+              <textarea
+                class="flex-1 min-h-[100px] rounded-xl bg-black/30 border border-white/10 px-4 py-3 text-base placeholder:text-white/40 resize-none"
+                placeholder="Beschreibung"
+                bind:value={description}
+              ></textarea>
+            </div>
           </div>
         </div>
 
-        <div class="px-6 md:px-8 py-5 border-t border-white/10 flex flex-col md:flex-row gap-3 md:justify-end shrink-0">
+        <div class="px-6 md:px-8 py-4 border-t border-white/10 flex items-center gap-3 justify-end shrink-0">
           {#if eventToEdit}
             <button
               type="button"
-              class="h-14 px-6 rounded-xl bg-rose-500/15 hover:bg-rose-500/20 active:bg-rose-500/25 text-lg w-full md:w-auto"
+              class="h-11 w-11 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 grid place-items-center"
+              title="Termin löschen"
               on:click={() => (showDeleteConfirm = true)}
               disabled={saving}
             >
-              Termin löschen
+              <svg class="w-5 h-5 text-rose-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
             </button>
           {/if}
 
+          <div class="flex-1"></div>
+
           <button
             type="button"
-            class="h-14 px-6 rounded-xl bg-white/20 hover:bg-white/25 active:bg-white/30 text-lg font-semibold disabled:opacity-40 w-full md:w-auto"
-            on:click={submit}
-            disabled={saving}
-          >
-            {eventToEdit ? 'Änderungen speichern' : 'Termin speichern'}
-          </button>
-          <button
-            type="button"
-            class="h-14 px-6 rounded-xl bg-white/10 hover:bg-white/15 active:bg-white/20 text-lg w-full md:w-auto"
+            class="h-11 px-5 rounded-xl bg-white/10 hover:bg-white/15 text-sm"
             on:click={onClose}
           >
             Abbrechen
+          </button>
+          <button
+            type="button"
+            class="h-11 px-5 rounded-xl bg-white/20 hover:bg-white/25 text-sm font-semibold disabled:opacity-40 flex items-center gap-2"
+            on:click={submit}
+            disabled={saving}
+          >
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+            {eventToEdit ? 'Speichern' : 'Erstellen'}
           </button>
         </div>
 
