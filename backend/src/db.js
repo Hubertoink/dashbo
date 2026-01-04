@@ -679,6 +679,12 @@ async function initDb() {
     );
   `);
 
+  // Ensure calendar_id exists for older installations where scribbles pre-dated calendars
+  await p.query(`
+    ALTER TABLE scribbles
+    ADD COLUMN IF NOT EXISTS calendar_id BIGINT;
+  `);
+
   // Backfill calendar_id for existing scribbles (idempotent)
   await p.query(`
     UPDATE scribbles s
