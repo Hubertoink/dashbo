@@ -544,56 +544,59 @@
         </div>
 
         <!-- Time Row -->
-        <div class="flex items-center gap-3 sm:col-span-2">
-          <label class="flex items-center gap-2 cursor-pointer">
-            <input
-              type="checkbox"
-              bind:checked={allDay}
-              class="w-5 h-5 rounded bg-white/10 border-white/20 text-emerald-500 focus:ring-emerald-500/50"
-            />
-            <span class="text-sm">Ganztägig</span>
-          </label>
+        <div class="sm:col-span-2">
+          <div class="flex flex-wrap items-center gap-3">
+            <label class="flex items-center gap-2 cursor-pointer shrink-0">
+              <input
+                type="checkbox"
+                bind:checked={allDay}
+                class="w-5 h-5 rounded bg-white/10 border-white/20 text-emerald-500 focus:ring-emerald-500/50"
+              />
+              <span class="text-sm">Ganztägig</span>
+            </label>
 
-          {#if !allDay}
-            <div class="flex items-center gap-2 flex-1" transition:fade={{ duration: 150 }}>
-              <input
-                type="time"
-                bind:value={startTime}
-                class="flex-1 px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-sm focus:outline-none focus:ring-2 focus:ring-white/30"
-              />
-              <span class="text-white/40">–</span>
-              <input
-                type="time"
-                bind:value={endTime}
-                placeholder="Ende"
-                class="flex-1 px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-sm focus:outline-none focus:ring-2 focus:ring-white/30"
-              />
-            </div>
-          {/if}
+            {#if !allDay}
+              <div class="flex items-center gap-2 flex-1 min-w-[200px]" transition:fade={{ duration: 150 }}>
+                <input
+                  type="time"
+                  bind:value={startTime}
+                  class="w-24 px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-sm focus:outline-none focus:ring-2 focus:ring-white/30"
+                />
+                <span class="text-white/40">–</span>
+                <input
+                  type="time"
+                  bind:value={endTime}
+                  placeholder="Ende"
+                  class="w-24 px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-sm placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-white/30"
+                />
+              </div>
+            {/if}
+          </div>
         </div>
 
         <!-- Date Row (for multi-day events or editing) -->
         {#if eventToEdit || endDateStr}
-          <div class="flex items-center gap-3 sm:col-span-2">
-            <div class="text-xs text-white/50 w-16">Datum</div>
-            <div class="flex items-center gap-2 flex-1">
+          <div class="sm:col-span-2">
+            <div class="text-xs text-white/50 mb-2">Datum</div>
+            <div class="flex items-center gap-2">
               <input
                 type="date"
                 bind:value={startDateStr}
-                class="flex-1 px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-sm focus:outline-none focus:ring-2 focus:ring-white/30"
+                class="flex-1 min-w-0 px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-sm focus:outline-none focus:ring-2 focus:ring-white/30"
               />
-              <span class="text-white/40">–</span>
+              <span class="text-white/40 shrink-0">–</span>
               <input
                 type="date"
                 bind:value={endDateStr}
-                class="flex-1 px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-sm focus:outline-none focus:ring-2 focus:ring-white/30"
+                placeholder="Ende"
+                class="flex-1 min-w-0 px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-sm placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-white/30"
               />
             </div>
           </div>
         {/if}
 
         <!-- Location -->
-        <div>
+        <div class="sm:col-span-2">
           <input
             type="text"
             bind:value={location}
@@ -603,9 +606,9 @@
         </div>
 
         <!-- Recurrence -->
-        <div>
+        <div class="sm:col-span-2">
           <div class="text-xs text-white/50 mb-2">Wiederholung</div>
-          <div class="flex gap-2">
+          <div class="flex flex-wrap gap-2">
             <button
               type="button"
               class={`px-3 py-1.5 rounded-full text-sm font-medium border transition active:scale-95 ${
@@ -654,7 +657,7 @@
 
         <!-- Person Chips -->
         {#if persons.length > 0}
-          <div>
+          <div class="sm:col-span-2">
             <div class="text-xs text-white/50 mb-2">Personen</div>
             <div class="flex flex-wrap gap-2">
               {#each persons as p (p.id)}
@@ -688,7 +691,7 @@
 
         <!-- Tag Selection (optional) -->
         {#if tags.length > 0}
-          <div>
+          <div class="sm:col-span-2">
             <div class="text-xs text-white/50 mb-2">Kategorie (optional)</div>
             <div class="flex flex-wrap gap-2">
               {#each tags as t (t.id)}
