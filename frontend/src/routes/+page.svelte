@@ -774,6 +774,15 @@
 
           if (existing) {
             existing.dates.push(start);
+
+            // Keep the most recent sample so person(s)/tag reflect the latest real event
+            // (matches WeekPlanner behaviour and fixes missing-person cases like "Merle").
+            const existingSampleStart = new Date(existing.sample.startAt);
+            const existingSampleMs = existingSampleStart.getTime();
+            const currentMs = start.getTime();
+            if (Number.isNaN(existingSampleMs) || currentMs > existingSampleMs) {
+              existing.sample = e;
+            }
           } else {
             weeklyAgg.set(sig, { dates: [start], sample: e, weekday: wd, startBucket: startMin, titleNorm });
           }
@@ -1715,6 +1724,8 @@
     open={showAddEventModal}
     {selectedDate}
     {eventToEdit}
+    {outlookConnected}
+    {todoEnabled}
     prefill={addEventPrefill}
     prefillKey={addEventPrefillKey}
     onClose={closeAddEventModal}
