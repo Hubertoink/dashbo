@@ -636,12 +636,26 @@
     void refreshAgenda();
   }
 
+  // Build a map of suggestions by day key for quick lookup
+  let agendaSuggestionsByDay = new Map<string, PlannerSuggestionDto[]>();
+  $: {
+    const m = new Map<string, PlannerSuggestionDto[]>();
+    for (const s of suggestionsAll) {
+      const k = dateKeyLocal(s.date);
+      const arr = m.get(k) ?? [];
+      arr.push(s);
+      m.set(k, arr);
+    }
+    agendaSuggestionsByDay = m;
+  }
+
   $: agendaGroups = (() => {
-    const groups: { day: Date; items: EventDto[] }[] = [];
+    const groups: { day: Date; items: EventDto[]; suggestions: PlannerSuggestionDto[] }[] = [];
     for (let i = 0; i <= 7; i++) {
       const day = startOfLocalDay(addDays(selectedDate, i));
       const items = agendaEvents.filter((e) => sameDay(new Date(e.startAt), day));
-      groups.push({ day, items });
+      const daySuggestions = agendaSuggestionsByDay.get(dateKeyLocal(day)) ?? [];
+      groups.push({ day, items, suggestions: daySuggestions });
     }
     return groups;
   })();
@@ -908,69 +922,6 @@
           </button>
         </div>
 
-        <!-- Suggestions Section -->
-        {#if suggestions.length > 0}
-          <div class="mb-4">
-            <div class="text-xs text-white/50 uppercase tracking-wide mb-2">Vorschläge</div>
-            <div class="space-y-2">
-              {#each suggestions as s (s.signature)}
-                {@const sPersons = persons.filter((p) => s.personIds.includes(p.id))}
-                {@const sTag = tags.find((t) => t.id === s.tagId)}
-                <div class="bg-gradient-to-r from-indigo-500/20 to-purple-500/20 border border-indigo-400/30 rounded-xl p-3">
-                  <div class="flex items-start justify-between gap-2">
-                    <div class="min-w-0 flex-1">
-                      <div class="text-sm font-medium truncate">{s.title}</div>
-                      <div class="text-xs text-white/60 mt-0.5">
-                        {s.date.toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit' })}
-                        {#if !s.allDay && s.startTime}
-                          · {s.startTime}{s.endTime ? ` – ${s.endTime}` : ''}
-                        {:else if s.allDay}
-                          · Ganztägig
-                        {/if}
-                      </div>
-                      {#if sPersons.length > 0 || sTag}
-                        <div class="flex items-center gap-2 mt-1 flex-wrap">
-                          {#if sTag}
-                            <span class="text-xs px-2 py-0.5 rounded-full bg-white/10 text-white/70">{sTag.name}</span>
-                          {/if}
-                          {#each sPersons as p (p.id)}
-                            <span
-                              class="text-xs px-2 py-0.5 rounded-full bg-white/10"
-                              style={isHexColor(p.color) ? `color: ${p.color}` : ''}
-                            >{p.name}</span>
-                          {/each}
-                        </div>
-                      {/if}
-                    </div>
-                    <div class="flex items-center gap-1 shrink-0">
-                      <button
-                        type="button"
-                        class="p-1.5 rounded-lg hover:bg-white/10 text-white/60 hover:text-white transition"
-                        title="Vorschlag übernehmen"
-                        on:click={() => acceptSuggestion(s)}
-                      >
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
-                        </svg>
-                      </button>
-                      <button
-                        type="button"
-                        class="p-1.5 rounded-lg hover:bg-white/10 text-white/60 hover:text-white transition"
-                        title="Vorschlag ignorieren"
-                        on:click={() => dismissSuggestion(s)}
-                      >
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                        </svg>
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              {/each}
-            </div>
-          </div>
-        {/if}
-
         {#if agendaError}
           <div class="text-red-400 text-sm mb-2">{agendaError}</div>
         {/if}
@@ -1002,7 +953,7 @@
                 </button>
               </div>
 
-              {#if g.items.length === 0}
+              {#if g.items.length === 0 && g.suggestions.length === 0}
                 <div class="text-white/40 text-sm mt-2">Keine Termine</div>
               {:else}
                 <div class="mt-2 space-y-2">
@@ -1052,6 +1003,65 @@
                       {/if}
                       </div>
                     </button>
+                  {/each}
+
+                  <!-- Inline suggestions for this day -->
+                  {#each g.suggestions as s (s.signature)}
+                    {@const sPersons = persons.filter((p) => s.personIds.includes(p.id))}
+                    {@const sTag = tags.find((t) => t.id === s.tagId)}
+                    <div class="bg-gradient-to-r from-indigo-500/15 to-purple-500/15 border border-dashed border-indigo-400/40 rounded-lg px-2 py-2 -mx-2">
+                      <div class="flex items-start justify-between gap-2">
+                        <div class="min-w-0 flex items-start gap-2 flex-1">
+                          <div class="mt-1 h-2.5 w-2.5 rounded-full shrink-0 border-2 border-violet-400 border-dashed bg-transparent"></div>
+                          <div class="min-w-0">
+                            <div class="text-sm font-medium truncate text-white/80">{s.title}</div>
+                            <div class="text-xs text-white/50 truncate">
+                              {#if !s.allDay && s.startTime}
+                                {s.startTime}{s.endTime ? ` – ${s.endTime}` : ''}
+                              {:else if s.allDay}
+                                Ganztägig
+                              {/if}
+                              <span class="ml-1 text-violet-300/70">Vorschlag</span>
+                            </div>
+                            {#if sPersons.length > 0 || sTag}
+                              <div class="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                                {#if sTag}
+                                  <span class="text-xs px-1.5 py-0.5 rounded-full bg-white/10 text-white/60">{sTag.name}</span>
+                                {/if}
+                                {#each sPersons as p (p.id)}
+                                  <span
+                                    class="text-xs px-1.5 py-0.5 rounded-full bg-white/10"
+                                    style={isHexColor(p.color) ? `color: ${p.color}` : ''}
+                                  >{p.name}</span>
+                                {/each}
+                              </div>
+                            {/if}
+                          </div>
+                        </div>
+                        <div class="flex items-center gap-0.5 shrink-0">
+                          <button
+                            type="button"
+                            class="p-1 rounded hover:bg-white/10 text-white/50 hover:text-white transition"
+                            title="Vorschlag übernehmen"
+                            on:click={() => acceptSuggestion(s)}
+                          >
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                            </svg>
+                          </button>
+                          <button
+                            type="button"
+                            class="p-1 rounded hover:bg-white/10 text-white/50 hover:text-white transition"
+                            title="Vorschlag ignorieren"
+                            on:click={() => dismissSuggestion(s)}
+                          >
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
                   {/each}
                 </div>
               {/if}
