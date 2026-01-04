@@ -35,9 +35,6 @@
   <div class="w-full max-w-lg rounded-3xl glass border border-white/10 p-6 md:p-8">
     <div class="text-3xl font-semibold">Login</div>
     <div class="text-white/70 mt-1">Bitte anmelden, um Dashbo zu nutzen.</div>
-    <div class="text-white/60 mt-2 text-sm">
-      Hinweis: Einstellungen findest du unter <a class="text-white/80 hover:text-white underline" href="/settings">/settings</a>.
-    </div>
 
     <div class="mt-6 grid grid-cols-1 gap-3">
       <input
@@ -68,7 +65,6 @@
       <div class="flex items-center justify-between mt-2">
         <a class="text-white/70 hover:text-white text-sm" href="/forgot-password">Passwort vergessen?</a>
         <a class="text-white/70 hover:text-white text-sm" href="/register">Registrieren</a>
-        <a class="text-white/70 hover:text-white text-sm" href="/settings">Einstellungen</a>
       </div>
     </div>
   </div>
