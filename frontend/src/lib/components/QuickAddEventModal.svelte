@@ -27,11 +27,14 @@
   export let onCreated: () => void;
 
   let title = '';
+  let location = '';
+  let description = '';
   let startTime = '12:00';
   let endTime = '';
   let allDay = false;
   let personIds: number[] = [];
   let tagId: number | null = null;
+  let recurrence: 'weekly' | 'monthly' | null = null;
   let saving = false;
 
   // Optional ToDos created alongside the event
@@ -186,11 +189,14 @@
 
   function resetForm() {
     title = '';
+    location = '';
+    description = '';
     startTime = '12:00';
     endTime = '';
     allDay = false;
     personIds = [];
     tagId = null;
+    recurrence = null;
     saving = false;
     todoText = '';
     todoSaving = false;
@@ -290,14 +296,14 @@
 
       await createEvent({
         title: title.trim(),
-        description: null,
-        location: null,
+        description: description.trim() || null,
+        location: location.trim() || null,
         startAt: startAtIso,
         endAt: endAtIso,
         allDay,
         tagId,
         personIds: personIds.length > 0 ? personIds : null,
-        recurrence: null
+        recurrence
       });
 
       // Optional: create ToDos from textarea lines
@@ -434,6 +440,66 @@
               />
             </div>
           {/if}
+        </div>
+
+        <!-- Location -->
+        <div>
+          <input
+            type="text"
+            bind:value={location}
+            placeholder="Ort (optional)"
+            class="w-full px-4 py-2.5 rounded-xl bg-white/5 border border-white/10 text-sm placeholder:text-white/40 focus:outline-none focus:ring-2 focus:ring-white/30 transition"
+          />
+        </div>
+
+        <!-- Recurrence -->
+        <div>
+          <div class="text-xs text-white/50 mb-2">Wiederholung</div>
+          <div class="flex gap-2">
+            <button
+              type="button"
+              class={`px-3 py-1.5 rounded-full text-sm font-medium border transition active:scale-95 ${
+                recurrence === null
+                  ? 'bg-white/20 border-white/40 text-white'
+                  : 'bg-white/5 border-white/10 text-white/60 hover:bg-white/10'
+              }`}
+              on:click={() => recurrence = null}
+            >
+              Keine
+            </button>
+            <button
+              type="button"
+              class={`px-3 py-1.5 rounded-full text-sm font-medium border transition active:scale-95 ${
+                recurrence === 'weekly'
+                  ? 'bg-white/20 border-white/40 text-white'
+                  : 'bg-white/5 border-white/10 text-white/60 hover:bg-white/10'
+              }`}
+              on:click={() => recurrence = 'weekly'}
+            >
+              Wöchentlich
+            </button>
+            <button
+              type="button"
+              class={`px-3 py-1.5 rounded-full text-sm font-medium border transition active:scale-95 ${
+                recurrence === 'monthly'
+                  ? 'bg-white/20 border-white/40 text-white'
+                  : 'bg-white/5 border-white/10 text-white/60 hover:bg-white/10'
+              }`}
+              on:click={() => recurrence = 'monthly'}
+            >
+              Monatlich
+            </button>
+          </div>
+        </div>
+
+        <!-- Description -->
+        <div>
+          <textarea
+            bind:value={description}
+            placeholder="Beschreibung (optional)"
+            rows="2"
+            class="w-full px-4 py-2.5 rounded-xl bg-white/5 border border-white/10 text-sm placeholder:text-white/40 focus:outline-none focus:ring-2 focus:ring-white/30 resize-none transition"
+          ></textarea>
         </div>
 
         <!-- Person Chips -->
