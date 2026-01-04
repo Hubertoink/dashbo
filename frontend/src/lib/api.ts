@@ -131,6 +131,19 @@ export function setToken(token: string | null) {
   else localStorage.setItem('dashbo_token', token);
 }
 
+export function decodeJwtPayload<T = any>(token: string): T | null {
+  try {
+    const parts = String(token).split('.');
+    if (parts.length < 2) return null;
+    const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    const padded = base64.padEnd(Math.ceil(base64.length / 4) * 4, '=');
+    const json = atob(padded);
+    return JSON.parse(json) as T;
+  } catch {
+    return null;
+  }
+}
+
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const token = getToken();
   const resp = await fetch(`${API_BASE}${path}`, {

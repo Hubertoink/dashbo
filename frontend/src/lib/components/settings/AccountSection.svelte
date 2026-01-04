@@ -49,8 +49,10 @@
   {:else}
     <div class="bg-white/5 rounded-xl p-4 text-white/70 text-sm">
       {#if me}
-        Eingeloggt als <span class="text-white/90 font-medium">{me.name}</span>
-        <span class="text-white/50">({me.email})</span>
+        Eingeloggt als <span class="text-white/90 font-medium">{me.name || me.email}</span>
+        {#if me.email}
+          <span class="text-white/50">({me.email})</span>
+        {/if}
         {#if me.role === 'admin' || isAdmin}
           <span class="text-xs bg-white/10 rounded px-1.5 py-0.5 ml-2">Admin</span>
         {/if}

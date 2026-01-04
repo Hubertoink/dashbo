@@ -49,6 +49,7 @@
     , type OutlookConnectionDto
     , type MeDto
     , fetchMe
+    , decodeJwtPayload
   } from '$lib/api';
 
   import { normalizeClockStyle, type ClockStyle } from '$lib/clockStyle';
@@ -811,12 +812,21 @@
       setToken(res.token);
       authed = true;
 
+      // Immediate UI feedback even if /auth/me is slow/unavailable
+      me = {
+        id: res.user.id,
+        email: res.user.email,
+        name: res.user.name,
+        isAdmin: !!res.user.isAdmin,
+        role: res.user.isAdmin ? 'admin' : 'member',
+        calendarId: null
+      };
+
       try {
         me = await fetchMe();
         isAdmin = !!me.isAdmin;
       } catch {
         // Fallback to login response if /auth/me isn't reachable yet
-        me = null;
         isAdmin = !!res.user?.isAdmin;
       }
 
@@ -1133,6 +1143,22 @@
     loadEdgeConfig();
     const existing = getStoredToken();
     if (existing) {
+      // Try to show identity immediately from token (useful with SW cache / slow backend)
+      const payload = decodeJwtPayload<any>(existing);
+      if (payload && (payload.email || payload.name || payload.sub)) {
+        const id = Number(payload.sub);
+        const email = String(payload.email || '');
+        const name = String(payload.name || payload.email || '');
+        const isAdminFromToken = Boolean(payload.isAdmin);
+        me = {
+          id: Number.isFinite(id) ? id : 0,
+          email,
+          name,
+          isAdmin: isAdminFromToken,
+          role: String(payload.role || (isAdminFromToken ? 'admin' : 'member')),
+          calendarId: payload.calendarId != null ? Number(payload.calendarId) : null
+        };
+      }
       try {
         me = await fetchMe();
         authed = true;

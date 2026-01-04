@@ -17,7 +17,10 @@ function signToken(user) {
   const payload = {
     sub: String(user.id),
     email: user.email,
+    name: user.name,
     isAdmin: Boolean(user.is_admin),
+    role: user.role ?? (Boolean(user.is_admin) ? 'admin' : 'member'),
+    calendarId: user.calendar_id != null ? Number(user.calendar_id) : null,
   };
 
   return jwt.sign(payload, secret, { expiresIn: '30d' });
