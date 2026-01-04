@@ -9,7 +9,7 @@
   import ForecastWidget from '$lib/components/ForecastWidget.svelte';
   import MusicWidget from '$lib/components/MusicWidget.svelte';
   import ScribbleWidget from '$lib/components/ScribbleWidget.svelte';
-  import CalendarMonth from '$lib/components/CalendarMonth.svelte';
+  import CalendarMonth, { type DashboardSuggestionDto } from '$lib/components/CalendarMonth.svelte';
   import WeekView from '$lib/components/WeekView.svelte';
   import WeekPlanner from '$lib/components/WeekPlanner.svelte';
   import EventsPanel from '$lib/components/EventsPanel.svelte';
@@ -80,6 +80,9 @@
   let recurringSuggestionsBiweekly = true;
   let recurringSuggestionsMonthly = true;
   let recurringSuggestionsBirthdays = true;
+
+  let dashboardSuggestions: DashboardSuggestionDto[] = [];
+  let dashboardSuggestionsLoaded = false;
 
   async function loadStandbyScribbles() {
     try {
@@ -640,12 +643,181 @@
     }
   }
 
+  // Dashboard suggestions: compute patterns for current month view
+  async function loadDashboardSuggestions() {
+    if (!recurringSuggestionsEnabled) {
+      dashboardSuggestions = [];
+      return;
+    }
+
+    try {
+      // Get grid range for current month
+      const gridDays = daysForMonthGrid(monthAnchor);
+      const gridStart = gridDays[0] ?? new Date(monthAnchor.getFullYear(), monthAnchor.getMonth(), 1);
+      const gridEnd = gridDays[gridDays.length - 1] ?? new Date(monthAnchor.getFullYear(), monthAnchor.getMonth() + 1, 0);
+
+      // Lookback for patterns (12 weeks)
+      const lookbackFrom = new Date(gridStart);
+      lookbackFrom.setDate(lookbackFrom.getDate() - 12 * 7);
+      lookbackFrom.setHours(0, 0, 0, 0);
+
+      const lookbackTo = new Date(gridStart);
+      lookbackTo.setHours(0, 0, 0, 0);
+
+      const history = await fetchEvents(lookbackFrom, lookbackTo);
+
+      // Build pattern suggestions (simplified version for dashboard)
+      const suggestions: DashboardSuggestionDto[] = [];
+      const addedKeys = new Set<string>();
+
+      // Helper functions
+      const normalizeTitle = (t: string) => String(t || '').trim().toLowerCase().replace(/\s+/g, ' ');
+      const weekdayMon0 = (d: Date) => (d.getDay() + 6) % 7;
+      const dateKey = (d: Date) => `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+      const bucket15 = (mins: number) => Math.round(mins / 15) * 15;
+      const minutesSinceMidnight = (d: Date) => d.getHours() * 60 + d.getMinutes();
+      const isBirthdayEvent = (e: EventDto) => /\b(geburtstag|birthday)\b/i.test(normalizeTitle(e.title) + ' ' + normalizeTitle(e.tag?.name ?? ''));
+
+      // Filter candidates
+      const candidates = (history ?? []).filter((e) => {
+        if (e.source === 'outlook') return false;
+        if (e.allDay) return false;
+        if (e.recurrence) return false;
+        if (!e.title || !String(e.title).trim()) return false;
+        return true;
+      });
+
+      // Weekly pattern aggregation
+      if (recurringSuggestionsWeekly) {
+        const weeklyAgg = new Map<string, { count: number; weeks: Set<string>; sample: EventDto; weekday: number; startBucket: number; titleNorm: string }>();
+
+        for (const e of candidates) {
+          const start = new Date(e.startAt);
+          if (Number.isNaN(start.getTime())) continue;
+          const wd = weekdayMon0(start);
+          const startMin = bucket15(minutesSinceMidnight(start));
+          const titleNorm = normalizeTitle(e.title);
+          if (!titleNorm) continue;
+
+          const sig = `weekly|${wd}|${startMin}|${titleNorm}`;
+          const existing = weeklyAgg.get(sig);
+          const weekId = dateKey(new Date(start.getFullYear(), start.getMonth(), start.getDate() - weekdayMon0(start)));
+
+          if (existing) {
+            existing.count++;
+            existing.weeks.add(weekId);
+          } else {
+            weeklyAgg.set(sig, { count: 1, weeks: new Set([weekId]), sample: e, weekday: wd, startBucket: startMin, titleNorm });
+          }
+        }
+
+        // Generate suggestions for matching days in grid
+        for (const [sig, agg] of weeklyAgg) {
+          if (agg.count < 3 || agg.weeks.size < 3) continue;
+
+          for (const day of gridDays) {
+            if (weekdayMon0(day) !== agg.weekday) continue;
+
+            const dayDateKey = dateKey(day);
+            const suggKey = `${sig}|${dayDateKey}`;
+            if (addedKeys.has(suggKey)) continue;
+
+            // Check if event already exists on this day
+            const hasExisting = events.some((ev) => {
+              const evStart = new Date(ev.startAt);
+              return dateKey(evStart) === dayDateKey && normalizeTitle(ev.title) === agg.titleNorm;
+            });
+            if (hasExisting) continue;
+
+            addedKeys.add(suggKey);
+            suggestions.push({
+              suggestionKey: suggKey,
+              title: agg.sample.title,
+              date: new Date(day),
+              allDay: false,
+            });
+          }
+        }
+      }
+
+      // Birthday suggestions (yearly)
+      if (recurringSuggestionsBirthdays) {
+        const birthdayLookbackFrom = new Date(gridStart);
+        birthdayLookbackFrom.setDate(birthdayLookbackFrom.getDate() - 370);
+        const birthdayHistory = await fetchEvents(birthdayLookbackFrom, lookbackTo);
+
+        const birthdayCandidates = (birthdayHistory ?? []).filter((e) => {
+          if (e.source === 'outlook') return false;
+          if (e.recurrence) return false;
+          if (!e.title) return false;
+          return isBirthdayEvent(e);
+        });
+
+        for (const e of birthdayCandidates) {
+          const eventStart = new Date(e.startAt);
+          if (Number.isNaN(eventStart.getTime())) continue;
+
+          const srcMonth = eventStart.getMonth();
+          const srcDay = eventStart.getDate();
+          const titleNorm = normalizeTitle(e.title);
+
+          for (const day of gridDays) {
+            const year = day.getFullYear();
+            const isLeap = (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
+            const effDay = srcMonth === 1 && srcDay === 29 && !isLeap ? 28 : srcDay;
+
+            if (day.getMonth() !== srcMonth || day.getDate() !== effDay) continue;
+
+            const dayDateKey = dateKey(day);
+            const suggKey = `birthday|${dayDateKey}|${titleNorm}`;
+            if (addedKeys.has(suggKey)) continue;
+
+            // Check if event already exists
+            const hasExisting = events.some((ev) => {
+              const evStart = new Date(ev.startAt);
+              return dateKey(evStart) === dayDateKey && normalizeTitle(ev.title) === titleNorm;
+            });
+            if (hasExisting) continue;
+
+            addedKeys.add(suggKey);
+            suggestions.push({
+              suggestionKey: suggKey,
+              title: e.title,
+              date: new Date(day),
+              allDay: true,
+            });
+          }
+        }
+      }
+
+      dashboardSuggestions = suggestions;
+      dashboardSuggestionsLoaded = true;
+    } catch {
+      dashboardSuggestions = [];
+    }
+  }
+
+  function handleMonthChange(delta: number) {
+    const nextAnchor = new Date(monthAnchor.getFullYear(), monthAnchor.getMonth() + delta, 1);
+    const lastDayOfNextMonth = new Date(nextAnchor.getFullYear(), nextAnchor.getMonth() + 1, 0).getDate();
+    const clampedDay = Math.min(selectedDate.getDate(), lastDayOfNextMonth);
+    const nextSelected = new Date(nextAnchor.getFullYear(), nextAnchor.getMonth(), clampedDay);
+
+    selectedDate = nextSelected;
+    monthAnchor = nextAnchor;
+    void loadEvents();
+    void loadDashboardSuggestions();
+  }
+
   function onSelect(d: Date) {
     const newAnchor = new Date(d.getFullYear(), d.getMonth(), 1);
     const anchorChanged = newAnchor.getTime() !== monthAnchor.getTime();
     selectedDate = d;
     if (anchorChanged) monthAnchor = newAnchor;
-    if (!upcomingMode && (viewMode === 'week' || anchorChanged)) void loadEvents();
+    if (!upcomingMode && (viewMode === 'week' || anchorChanged)) {
+      void loadEvents();
+      void loadDashboardSuggestions();
+    }
   }
 
   onMount(() => {
@@ -679,6 +851,9 @@
         recurringSuggestionsBiweekly = (s as any)?.recurringSuggestionsBiweekly !== false;
         recurringSuggestionsMonthly = (s as any)?.recurringSuggestionsMonthly !== false;
         recurringSuggestionsBirthdays = (s as any)?.recurringSuggestionsBirthdays !== false;
+
+        // Load dashboard suggestions after settings are known
+        void loadDashboardSuggestions();
 
         try {
           const st = await fetchOutlookStatus();
@@ -1141,6 +1316,8 @@
                 onSelect={onSelect}
                 {events}
                 {holidays}
+                suggestions={dashboardSuggestions}
+                onMonthChange={handleMonthChange}
                 {viewMode}
                 onSetViewMode={setViewMode}
                 {upcomingMode}

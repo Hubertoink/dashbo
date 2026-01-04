@@ -3,11 +3,21 @@
   import type { EventDto, HolidayDto, TagColorKey } from '$lib/api';
   import { fade, fly } from 'svelte/transition';
 
+  export type DashboardSuggestionDto = {
+    suggestionKey: string;
+    title: string;
+    date: Date;
+    allDay: boolean;
+  };
+
   export let monthAnchor: Date;
   export let selected: Date;
   export let onSelect: (d: Date) => void;
   export let events: EventDto[] = [];
   export let holidays: HolidayDto[] = [];
+  export let suggestions: DashboardSuggestionDto[] = [];
+  export let onMonthChange: ((delta: number) => void) | null = null;
+  export let onAcceptSuggestion: ((s: DashboardSuggestionDto) => void) | null = null;
   export let viewMode: 'month' | 'week' = 'month';
   export let onSetViewMode: (m: 'month' | 'week') => void;
   export let upcomingMode: boolean = false;
@@ -118,6 +128,18 @@
       m.set(k, arr);
     }
     holidaysByDay = m;
+  }
+
+  let suggestionsByDay: Map<string, DashboardSuggestionDto[]> = new Map();
+  $: {
+    const m = new Map<string, DashboardSuggestionDto[]>();
+    for (const s of suggestions) {
+      const k = dateKey(s.date);
+      const arr = m.get(k) ?? [];
+      arr.push(s);
+      m.set(k, arr);
+    }
+    suggestionsByDay = m;
   }
 
   const weekDays = [
@@ -249,7 +271,33 @@
   {#key monthTitle}
     <div class="px-8 pt-8 pb-4" in:fly={{ y: -10, duration: 160 }} out:fade={{ duration: 120 }}>
       <div class="flex items-center justify-between gap-4">
-        <div class="text-4xl font-semibold tracking-wide">{monthTitle}</div>
+        <div class="flex items-center gap-3">
+          {#if onMonthChange}
+            <button
+              type="button"
+              class="h-8 w-8 rounded-lg bg-white/5 hover:bg-white/10 active:bg-white/15 text-white/50 hover:text-white/80 transition-all grid place-items-center"
+              aria-label="Vorheriger Monat"
+              on:click={() => onMonthChange?.(-1)}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M15 18l-6-6 6-6" />
+              </svg>
+            </button>
+          {/if}
+          <div class="text-4xl font-semibold tracking-wide">{monthTitle}</div>
+          {#if onMonthChange}
+            <button
+              type="button"
+              class="h-8 w-8 rounded-lg bg-white/5 hover:bg-white/10 active:bg-white/15 text-white/50 hover:text-white/80 transition-all grid place-items-center"
+              aria-label="Nächster Monat"
+              on:click={() => onMonthChange?.(1)}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M9 18l6-6-6-6" />
+              </svg>
+            </button>
+          {/if}
+        </div>
 
         <div class="flex items-center gap-2">
           <button
@@ -312,6 +360,7 @@
               {@const dayEvents = eventsByDay.get(dateKey(d)) ?? []}
               {@const singleDayEvents = dayEvents.filter((ev) => !isMultiDay(ev))}
               {@const dayHolidays = holidaysByDay.get(dateKey(d)) ?? []}
+              {@const daySuggestions = suggestionsByDay.get(dateKey(d)) ?? []}
               {@const maxEventDots = dayHolidays.length > 0 ? 2 : 3}
 
               <button
@@ -347,7 +396,7 @@
                     <div class="text-xs md:text-sm font-semibold leading-tight line-clamp-2 whitespace-normal break-words text-white/70">{dayHolidays[0]?.title}</div>
                   {/if}
                 </div>
-                {#if singleDayEvents.length > 0 || dayHolidays.length > 0}
+                {#if singleDayEvents.length > 0 || dayHolidays.length > 0 || daySuggestions.length > 0}
                   <div class="absolute right-4 bottom-3 flex flex-col items-end gap-1">
                     {#if dayHolidays.length > 0}
                       <div class="h-2.5 w-2.5 rounded-full border border-white/60 bg-white/0"></div>
@@ -365,6 +414,12 @@
                               : 'bg-white/25'
                         }`}
                         style={ev.tag && isHexColor(ev.tag.color) ? `background-color: ${ev.tag.color}` : ''}
+                      ></div>
+                    {/each}
+                    {#each daySuggestions.slice(0, 1) as sg (sg.suggestionKey)}
+                      <div
+                        class="h-2.5 w-2.5 rounded-full border border-dashed border-violet-400/60 bg-violet-500/30"
+                        title="Vorschlag: {sg.title}"
                       ></div>
                     {/each}
                   </div>
