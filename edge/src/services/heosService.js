@@ -428,6 +428,26 @@ async function playStream(pid, url, name, opts) {
   return sendWithHostsFallback('browse', 'play_stream', attrs, { hosts });
 }
 
+async function playNext(pid, opts) {
+  const p = typeof pid === 'number' ? pid : Number(pid);
+  if (!Number.isFinite(p) || p === 0) throw new Error('Invalid pid');
+
+  const targetHost = await findHostForPid(p, opts?.hosts);
+  const hosts = targetHost ? [targetHost] : opts?.hosts;
+
+  return sendWithHostsFallback('player', 'play_next', { pid: p }, { hosts });
+}
+
+async function playPrevious(pid, opts) {
+  const p = typeof pid === 'number' ? pid : Number(pid);
+  if (!Number.isFinite(p) || p === 0) throw new Error('Invalid pid');
+
+  const targetHost = await findHostForPid(p, opts?.hosts);
+  const hosts = targetHost ? [targetHost] : opts?.hosts;
+
+  return sendWithHostsFallback('player', 'play_previous', { pid: p }, { hosts });
+}
+
 async function setPlayState(pid, state, opts) {
   const s = String(state || '').toLowerCase();
   if (!['play', 'pause', 'stop'].includes(s)) {
@@ -640,6 +660,8 @@ module.exports = {
   scanPlayers,
   getStatus,
   playStream,
+  playNext,
+  playPrevious,
   setPlayState,
   getPlayState,
   getVolume,

@@ -5,6 +5,8 @@ const {
   scanPlayers,
   getStatus,
   playStream,
+  playNext,
+  playPrevious,
   setPlayState,
   getPlayState,
   getVolume,
@@ -169,6 +171,32 @@ heosRouter.post('/play_stream', (req, res) => {
     const hosts = parseHeosHostsHeader(req);
     const r = await playStream(pid, rewrittenUrl, name, { hosts });
     res.json({ ok: true, response: r, debug: sanitizeUrlForDebug(rewrittenUrl) });
+  })().catch((err) => {
+    const error = normalizeHeosError(err);
+    res.status(502).json({ ok: false, error });
+  });
+});
+
+heosRouter.post('/next', (req, res) => {
+  (async () => {
+    const pid = Number(req?.body?.pid);
+    if (!Number.isFinite(pid) || pid === 0) return res.status(400).json({ ok: false, error: 'pid_required' });
+    const hosts = parseHeosHostsHeader(req);
+    const r = await playNext(pid, { hosts });
+    res.json({ ok: true, response: r });
+  })().catch((err) => {
+    const error = normalizeHeosError(err);
+    res.status(502).json({ ok: false, error });
+  });
+});
+
+heosRouter.post('/prev', (req, res) => {
+  (async () => {
+    const pid = Number(req?.body?.pid);
+    if (!Number.isFinite(pid) || pid === 0) return res.status(400).json({ ok: false, error: 'pid_required' });
+    const hosts = parseHeosHostsHeader(req);
+    const r = await playPrevious(pid, { hosts });
+    res.json({ ok: true, response: r });
   })().catch((err) => {
     const error = normalizeHeosError(err);
     res.status(502).json({ ok: false, error });

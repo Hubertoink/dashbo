@@ -107,6 +107,7 @@
     personIds: number[];
     signature: string;
   }
+  let suggestionsAll: PlannerSuggestionDto[] = [];
   let suggestions: PlannerSuggestionDto[] = [];
   let dismissedSuggestions: string[] = [];
 
@@ -347,6 +348,21 @@
     monthEventsByDay = m;
   }
 
+  let monthSuggestionsByDay = new Map<string, PlannerSuggestionDto[]>();
+  $: {
+    const m = new Map<string, PlannerSuggestionDto[]>();
+    for (const s of suggestionsAll) {
+      const k = dateKeyLocal(s.date);
+      const arr = m.get(k) ?? [];
+      arr.push(s);
+      m.set(k, arr);
+    }
+    for (const arr of m.values()) {
+      arr.sort((a, b) => a.date.getTime() - b.date.getTime());
+    }
+    monthSuggestionsByDay = m;
+  }
+
   function eventPersons(e: EventDto): Array<{ id: number; name: string; color: string }> {
     if (e.persons && e.persons.length > 0) return e.persons as any;
     if (e.person) return [e.person as any];
@@ -477,9 +493,9 @@
       }
     }
 
-    // Generate suggestions for the next 3 weeks.
+    // Generate suggestions for the next ~2 months (month grid should show them too).
     const upcomingDays: Date[] = [];
-    for (let i = 0; i <= 21; i++) upcomingDays.push(addDays(todayStart, i));
+    for (let i = 0; i <= 60; i++) upcomingDays.push(addDays(todayStart, i));
 
     const result: PlannerSuggestionDto[] = [];
     const addedKeys = new Set<string>();
@@ -547,11 +563,13 @@
     }
 
     result.sort((a, b) => a.date.getTime() - b.date.getTime());
+    suggestionsAll = result;
     suggestions = result.slice(0, 5);
   }
 
   async function dismissSuggestion(s: PlannerSuggestionDto) {
     dismissedSuggestions = [...dismissedSuggestions, s.signature];
+    suggestionsAll = suggestionsAll.filter((x) => x.signature !== s.signature);
     suggestions = suggestions.filter((x) => x.signature !== s.signature);
     try {
       await dismissRecurringSuggestion(s.signature);
@@ -571,6 +589,7 @@
     newPersonIds = s.personIds.slice();
     quickAddOpen = true;
     // Remove from suggestions
+    suggestionsAll = suggestionsAll.filter((x) => x.signature !== s.signature);
     suggestions = suggestions.filter((x) => x.signature !== s.signature);
   }
 
@@ -1080,6 +1099,9 @@
             {#each monthDays as d (d.toISOString())}
               {@const k = dateKeyLocal(d)}
               {@const dayEvents = monthEventsByDay.get(k) ?? []}
+              {@const daySuggestions = monthSuggestionsByDay.get(k) ?? []}
+              {@const showSuggestion = daySuggestions.length > 0}
+              {@const maxEventDots = showSuggestion ? 2 : 3}
               <button
                 type="button"
                 class={cx(
@@ -1090,14 +1112,23 @@
                 on:click={() => setSelected(d)}
               >
                 <div class="leading-none">{d.getDate()}</div>
-                {#if dayEvents.length > 0}
+                {#if dayEvents.length > 0 || showSuggestion}
                   <div class="mt-1 flex items-center justify-center gap-0.5">
-                    {#each dayEvents.slice(0, 3) as ev (eventKey(ev))}
+                    {#each dayEvents.slice(0, maxEventDots) as ev (eventKey(ev))}
                       {@const d0 = eventDot(ev)}
                       <div class={`h-1.5 w-1.5 rounded-full ${d0.cls}`} style={d0.style}></div>
                     {/each}
-                    {#if dayEvents.length > 3}
-                      <div class="text-[10px] text-white/60 leading-none">+{dayEvents.length - 3}</div>
+                    {#if showSuggestion}
+                      <div
+                        class="h-1.5 w-1.5 rounded-full border border-dashed border-violet-400/70 bg-violet-500/30"
+                        title={daySuggestions[0]?.title ? `Vorschlag: ${daySuggestions[0].title}` : 'Vorschlag'}
+                      ></div>
+                    {/if}
+                    {#if dayEvents.length > maxEventDots || (showSuggestion && daySuggestions.length > 1)}
+                      {@const extra = (dayEvents.length > maxEventDots ? dayEvents.length - maxEventDots : 0) + (showSuggestion ? Math.max(0, daySuggestions.length - 1) : 0)}
+                      {#if extra > 0}
+                        <div class="text-[10px] text-white/60 leading-none">+{extra}</div>
+                      {/if}
                     {/if}
                   </div>
                 {:else}
