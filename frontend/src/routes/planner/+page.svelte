@@ -423,78 +423,131 @@
   // --- Suggestion generation (weekly recurring pattern detection) ---
   function generateSuggestions(events: EventDto[]) {
     const now = new Date();
-    const today = startOfLocalDay(now);
-    const maxFuture = addDays(today, 21); // look 3 weeks ahead
+    const todayStart = startOfLocalDay(now);
+    const normalizeTitle = (t: string) => String(t || '').trim().toLowerCase().replace(/\s+/g, ' ');
+    const weekdayMon0 = (d: Date) => (d.getDay() + 6) % 7;
+    const dateKey = (d: Date) => `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+    const bucket15 = (mins: number) => Math.round(mins / 15) * 15;
+    const minutesSinceMidnight = (d: Date) => d.getHours() * 60 + d.getMinutes();
+    const hhmmFromMinutes = (mins: number) => {
+      const h = Math.floor(mins / 60);
+      const m = mins % 60;
+      return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+    };
 
-    // Build weekly pattern map from past events (last 8 weeks)
-    const pastStart = addDays(today, -56);
-    const patterns = new Map<string, { sample: EventDto; dates: Date[] }>();
+    const dismissedSet = new Set(dismissedSuggestions);
 
-    for (const e of events) {
-      const d = new Date(e.startAt);
-      if (d < pastStart || d >= today) continue; // only past
+    // Filter out sources/records that create noisy suggestions.
+    const candidates = (events ?? []).filter((e) => {
+      if (e.source === 'outlook') return false;
+      if (e.allDay) return false;
+      if (e.recurrence) return false;
+      if (!e.title || !String(e.title).trim()) return false;
+      return true;
+    });
 
-      const dow = d.getDay();
-      const hhmm = e.allDay ? 'allday' : formatTime(d);
-      const sig = `w:${dow}:${hhmm}:${e.title.trim().toLowerCase()}`;
+    // Aggregate weekly patterns (12-week lookback) using 15-min buckets.
+    const lookbackFrom = addDays(todayStart, -12 * 7);
+    const weeklyAgg = new Map<
+      string,
+      { dates: Date[]; sample: EventDto; weekday: number; startBucket: number; titleNorm: string }
+    >();
 
-      const existing = patterns.get(sig);
+    for (const e of candidates) {
+      const start = new Date(e.startAt);
+      if (Number.isNaN(start.getTime())) continue;
+      if (start < lookbackFrom || start >= todayStart) continue;
+
+      const wd = weekdayMon0(start);
+      const startMin = bucket15(minutesSinceMidnight(start));
+      const titleNorm = normalizeTitle(e.title);
+      if (!titleNorm) continue;
+
+      const sig = `weekly|${wd}|${startMin}|${titleNorm}`;
+      const existing = weeklyAgg.get(sig);
       if (existing) {
-        existing.dates.push(d);
-        // keep newest sample
-        if (d.getTime() > new Date(existing.sample.startAt).getTime()) {
+        existing.dates.push(start);
+        const existingSampleStart = new Date(existing.sample.startAt).getTime();
+        const currentMs = start.getTime();
+        if (!Number.isNaN(existingSampleStart) && currentMs > existingSampleStart) {
           existing.sample = e;
         }
       } else {
-        patterns.set(sig, { sample: e, dates: [d] });
+        weeklyAgg.set(sig, { dates: [start], sample: e, weekday: wd, startBucket: startMin, titleNorm });
       }
     }
 
-    // Generate suggestions for patterns with ≥2 occurrences
+    // Generate suggestions for the next 3 weeks.
+    const upcomingDays: Date[] = [];
+    for (let i = 0; i <= 21; i++) upcomingDays.push(addDays(todayStart, i));
+
     const result: PlannerSuggestionDto[] = [];
-    for (const [sig, { sample, dates }] of patterns) {
-      if (dates.length < 2) continue;
+    const addedKeys = new Set<string>();
 
-      // Find next occurrence
-      const dow = new Date(sample.startAt).getDay();
-      let next = new Date(today);
-      while (next.getDay() !== dow) {
-        next = addDays(next, 1);
+    for (const [sig, agg] of weeklyAgg) {
+      for (const day of upcomingDays) {
+        const dayStart = startOfLocalDay(day);
+        if (dayStart < todayStart) continue;
+        if (weekdayMon0(dayStart) !== agg.weekday) continue;
+
+        const datesBefore = agg.dates.filter((d) => d.getTime() < dayStart.getTime());
+        if (datesBefore.length < 3) continue;
+        const weeksBefore = new Set(
+          datesBefore.map((d) => {
+            const weekStart = new Date(d.getFullYear(), d.getMonth(), d.getDate() - weekdayMon0(d));
+            return dateKey(weekStart);
+          })
+        );
+        if (weeksBefore.size < 3) continue;
+
+        const dayDateKey = dateKey(dayStart);
+        const suggKey = `${sig}|${dayDateKey}`;
+        if (addedKeys.has(suggKey)) continue;
+        if (dismissedSet.has(suggKey)) continue;
+
+        // Check if event already exists on that day.
+        const hasExisting = (events ?? []).some((ev) => {
+          const evStart = new Date(ev.startAt);
+          return dateKey(evStart) === dayDateKey && normalizeTitle(ev.title) === agg.titleNorm;
+        });
+        if (hasExisting) continue;
+
+        addedKeys.add(suggKey);
+
+        let endTime: string | null = null;
+        try {
+          const sampleStart = new Date(agg.sample.startAt);
+          const sampleEnd = agg.sample.endAt ? new Date(agg.sample.endAt) : null;
+          if (sampleEnd && !Number.isNaN(sampleStart.getTime()) && !Number.isNaN(sampleEnd.getTime())) {
+            const deltaMs = sampleEnd.getTime() - sampleStart.getTime();
+            const minMs = 15 * 60 * 1000;
+            const maxMs = 12 * 60 * 60 * 1000;
+            if (deltaMs >= minMs && deltaMs <= maxMs) {
+              const durMins = Math.round(deltaMs / (60 * 1000));
+              const endMins = agg.startBucket + durMins;
+              if (endMins > 0 && endMins < 24 * 60) endTime = hhmmFromMinutes(endMins);
+            }
+          }
+        } catch {
+          // ignore
+        }
+
+        const ps = eventPersons(agg.sample);
+        result.push({
+          title: agg.sample.title,
+          date: new Date(dayStart),
+          allDay: false,
+          startTime: hhmmFromMinutes(agg.startBucket),
+          endTime,
+          tagId: agg.sample.tag?.id ?? null,
+          personIds: ps.map((p) => p.id),
+          signature: suggKey
+        });
       }
-
-      // Check if already exists or is in the past
-      if (next < today || next > maxFuture) continue;
-
-      const nextKey = dateKeyLocal(next);
-      const alreadyExists = events.some((ev) => {
-        const evKey = dateKeyLocal(new Date(ev.startAt));
-        return evKey === nextKey && ev.title.trim().toLowerCase() === sample.title.trim().toLowerCase();
-      });
-      if (alreadyExists) continue;
-
-      // Check if dismissed
-      const dismissKey = `${sig}:${toDateInputValue(next)}`;
-      if (dismissedSuggestions.includes(dismissKey)) continue;
-
-      const startD = new Date(sample.startAt);
-      const endD = sample.endAt ? new Date(sample.endAt) : null;
-      const ps = eventPersons(sample);
-
-      result.push({
-        title: sample.title,
-        date: next,
-        startTime: sample.allDay ? null : formatTime(startD),
-        endTime: sample.allDay || !endD ? null : formatTime(endD),
-        allDay: Boolean(sample.allDay),
-        tagId: sample.tag?.id ?? null,
-        personIds: ps.map((p) => p.id),
-        signature: dismissKey
-      });
     }
 
-    // Sort by date
     result.sort((a, b) => a.date.getTime() - b.date.getTime());
-    suggestions = result.slice(0, 5); // limit to 5
+    suggestions = result.slice(0, 5);
   }
 
   async function dismissSuggestion(s: PlannerSuggestionDto) {
@@ -741,6 +794,8 @@
         metaError = err instanceof Error ? err.message : 'Fehler beim Laden.';
       } finally {
         metaLoading = false;
+        // Recompute suggestions after settings (dismissed keys) are loaded.
+        void refreshAgenda();
       }
     })();
 
@@ -1494,6 +1549,20 @@
 
 <!-- Floating Buttons - hidden when any modal is open -->
 {#if !anyModalOpen}
+  <!-- Floating button on desktop: back to dashboard -->
+  <a
+    href="/"
+    class="fixed bottom-6 left-6 z-50 hidden md:flex items-center gap-2 px-4 py-3 rounded-full bg-white/20 backdrop-blur-md border border-white/10 shadow-lg text-white text-sm font-medium hover:bg-white/30 transition-colors"
+    aria-label="Zum Dashboard"
+    in:fly={{ y: 50, duration: 300 }}
+    out:fade={{ duration: 150 }}
+  >
+    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+    </svg>
+    Dashboard
+  </a>
+
   <!-- Floating Add Event Button -->
   <button
     type="button"
