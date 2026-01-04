@@ -130,12 +130,27 @@ async function initDb() {
       id BIGSERIAL PRIMARY KEY,
       email TEXT NOT NULL UNIQUE,
       name TEXT NOT NULL,
-      password_hash TEXT NOT NULL,
+      password_hash TEXT,
       is_admin BOOLEAN NOT NULL DEFAULT FALSE,
       email_verified_at TIMESTAMPTZ,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
+
+    -- Invitation flow: allow users without a password_hash until they accept the invite.
+    DO $$
+    BEGIN
+      IF EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'users'
+          AND column_name = 'password_hash'
+          AND is_nullable = 'NO'
+      ) THEN
+        ALTER TABLE users ALTER COLUMN password_hash DROP NOT NULL;
+      END IF;
+    END $$;
   `);
 
   // Older installations: add email_verified_at if missing

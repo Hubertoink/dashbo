@@ -2,7 +2,7 @@ const express = require('express');
 const { z } = require('zod');
 
 const { requireAuth, attachUserContext } = require('../middleware/auth');
-const { login } = require('../services/authService');
+const { login, signToken } = require('../services/authService');
 const { createAuthToken, consumeAuthToken } = require('../services/authTokenService');
 const { sendMail, isEnabled: isMailEnabled } = require('../services/mailService');
 const bcrypt = require('bcryptjs');
@@ -25,6 +25,59 @@ authRouter.post('/login', async (req, res) => {
   if (!result) return res.status(401).json({ error: 'invalid_credentials' });
 
   return res.json(result);
+});
+
+authRouter.post('/register', async (req, res) => {
+  const schema = z.object({
+    email: z.string().email().max(200),
+    name: z.string().min(1).max(200),
+    password: z.string().min(6).max(200),
+  });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: 'invalid_body' });
+
+  const pool = getPool();
+  const email = String(parsed.data.email).trim().toLowerCase();
+  const name = String(parsed.data.name).trim();
+  const passwordHash = await bcrypt.hash(String(parsed.data.password), 10);
+
+  try {
+    await pool.query('BEGIN');
+    const cal = await pool.query('INSERT INTO calendars (name) VALUES ($1) RETURNING id;', [name]);
+    const calendarId = Number(cal.rows[0].id);
+
+    const u = await pool.query(
+      `
+      INSERT INTO users (email, name, password_hash, is_admin, role, calendar_id)
+      VALUES ($1, $2, $3, TRUE, 'admin', $4)
+      RETURNING *;
+      `,
+      [email, name, passwordHash, calendarId]
+    );
+
+    await pool.query('COMMIT');
+    const user = u.rows[0];
+    const token = signToken(user);
+    return res.status(201).json({
+      token,
+      user: {
+        id: Number(user.id),
+        email: user.email,
+        name: user.name,
+        isAdmin: Boolean(user.is_admin),
+        createdAt: user.created_at,
+        updatedAt: user.updated_at,
+      },
+    });
+  } catch (e) {
+    try {
+      await pool.query('ROLLBACK');
+    } catch {
+      // ignore
+    }
+    // Likely duplicate email
+    return res.status(409).json({ error: 'email_in_use' });
+  }
 });
 
 // GET /auth/me - Return the authenticated user's identity/context
@@ -139,6 +192,27 @@ authRouter.post('/verify-email', async (req, res) => {
 
   const pool = getPool();
   await pool.query('UPDATE users SET email_verified_at = COALESCE(email_verified_at, NOW()), updated_at = NOW() WHERE id = $1;', [consumed.userId]);
+  return res.json({ ok: true });
+});
+
+authRouter.post('/accept-invite', async (req, res) => {
+  const schema = z.object({
+    token: z.string().min(10).max(500),
+    password: z.string().min(6).max(200),
+    name: z.string().min(1).max(200),
+  });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: 'invalid_body' });
+
+  const consumed = await consumeAuthToken({ kind: 'accept_invite', token: parsed.data.token });
+  if (!consumed) return res.status(400).json({ error: 'invalid_token' });
+
+  const pool = getPool();
+  const passwordHash = await bcrypt.hash(String(parsed.data.password), 10);
+  await pool.query(
+    'UPDATE users SET password_hash = $1, name = $2, email_verified_at = COALESCE(email_verified_at, NOW()), updated_at = NOW() WHERE id = $3;',
+    [passwordHash, String(parsed.data.name), consumed.userId]
+  );
   return res.json({ ok: true });
 });
 

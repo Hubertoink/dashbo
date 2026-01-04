@@ -345,6 +345,10 @@ export async function login(email: string, password: string): Promise<LoginRespo
   return api<LoginResponse>('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) });
 }
 
+export async function register(email: string, name: string, password: string): Promise<LoginResponse> {
+  return api<LoginResponse>('/auth/register', { method: 'POST', body: JSON.stringify({ email, name, password }) });
+}
+
 export type MeDto = {
   id: number;
   email: string;
@@ -382,6 +386,7 @@ export type UserDto = {
   isAdmin: boolean;
   role?: string;
   calendarId?: number | null;
+  invited?: boolean;
   createdAt?: string;
   updatedAt?: string;
 };
@@ -404,6 +409,25 @@ export async function listUserRoster(): Promise<UserRosterDto[]> {
 
 export async function createUser(input: { email: string; name: string; password: string; isAdmin?: boolean }): Promise<UserDto> {
   return api<UserDto>('/users', { method: 'POST', body: JSON.stringify(input) });
+}
+
+export async function inviteUser(input: {
+  email: string;
+  name: string;
+  isAdmin?: boolean;
+}): Promise<{ ok: true; user: UserDto; mailSent: boolean; link: string }> {
+  return api<{ ok: true; user: UserDto; mailSent: boolean; link: string }>('/users/invite', {
+    method: 'POST',
+    body: JSON.stringify(input)
+  });
+}
+
+export async function createInviteLinkForUser(id: number): Promise<{ ok: true; link: string }> {
+  return api<{ ok: true; link: string }>(`/users/${id}/invite-link`, { method: 'POST' });
+}
+
+export async function acceptInvite(token: string, input: { name: string; password: string }): Promise<{ ok: true }> {
+  return api<{ ok: true }>('/auth/accept-invite', { method: 'POST', body: JSON.stringify({ token, ...input }) });
 }
 
 export async function deleteUser(id: number): Promise<void> {

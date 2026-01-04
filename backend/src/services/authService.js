@@ -44,6 +44,7 @@ async function login({ email, password }) {
   if (result.rowCount === 0) return null;
 
   const user = result.rows[0];
+  if (!user.password_hash) return null;
   const ok = await bcrypt.compare(String(password), user.password_hash);
   if (!ok) return null;
 
@@ -62,4 +63,4 @@ async function login({ email, password }) {
   };
 }
 
-module.exports = { login, verifyToken };
+module.exports = { login, verifyToken, signToken };

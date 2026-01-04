@@ -19,6 +19,8 @@
     listUsers,
     listUserRoster,
     createUser,
+    inviteUser,
+    createInviteLinkForUser,
     deleteUser,
     resetUserPassword,
     setWeatherLocation,
@@ -221,7 +223,6 @@
 
   let newUserEmail = '';
   let newUserName = '';
-  let newUserPassword = '';
   let newUserIsAdmin = false;
   let userError: string | null = null;
 
@@ -1104,20 +1105,34 @@
   async function doCreateUser() {
     userError = null;
     try {
-      await createUser({
-        email: newUserEmail,
-        name: newUserName,
-        password: newUserPassword,
-        isAdmin: newUserIsAdmin
-      });
+      const res = await inviteUser({ email: newUserEmail, name: newUserName, isAdmin: newUserIsAdmin });
       newUserEmail = '';
       newUserName = '';
-      newUserPassword = '';
       newUserIsAdmin = false;
       await refreshUsers();
-      showToast('Benutzer angelegt');
+      try {
+        await navigator.clipboard.writeText(res.link);
+        showToast(res.mailSent ? 'Einladung gesendet (Link kopiert)' : 'Link kopiert');
+      } catch {
+        showToast(res.mailSent ? 'Einladung gesendet' : 'Einladungslink erstellt');
+      }
     } catch (err) {
-      userError = err instanceof Error ? err.message : 'User konnte nicht angelegt werden.';
+      const msg = err instanceof Error ? err.message : '';
+      if (msg.includes('missing_public_app_url')) userError = 'PUBLIC_APP_URL fehlt (wird für Einladungslinks benötigt).';
+      else if (msg.includes('email_in_use')) userError = 'Diese E-Mail wird bereits in einem anderen Kalender genutzt.';
+      else if (msg.includes('already_active')) userError = 'Dieser Benutzer existiert bereits und hat schon ein Passwort gesetzt.';
+      else userError = msg || 'Einladung konnte nicht gesendet werden.';
+    }
+  }
+
+  async function copyInviteLinkForUser(u: any) {
+    try {
+      const res = await createInviteLinkForUser(Number(u.id));
+      await navigator.clipboard.writeText(res.link);
+      showToast('Einladungslink kopiert');
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      showToast(msg.includes('missing_public_app_url') ? 'PUBLIC_APP_URL fehlt.' : 'Link konnte nicht kopiert werden.');
     }
   }
 
@@ -1536,7 +1551,6 @@
         {users}
         bind:newUserEmail
         bind:newUserName
-        bind:newUserPassword
         bind:newUserIsAdmin
         {userError}
         bind:resetFor
@@ -1544,6 +1558,7 @@
         bind:resetError
         bind:deletingFor
         {doCreateUser}
+        copyInviteLinkForUser={copyInviteLinkForUser}
       />
     {/if}
   </div>
