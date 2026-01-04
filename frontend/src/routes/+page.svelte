@@ -681,6 +681,10 @@
         }
 
         const uploaded = (s.images ?? []).map((img: string) => `/api/media/${img}`);
+        const rotateSubset = Array.isArray((s as any)?.backgroundRotateImages)
+          ? ((s as any).backgroundRotateImages as string[]).map((img) => `/api/media/${img}`).filter((u) => uploaded.includes(u))
+          : [];
+
         uploadedBackgroundUrls = uploaded;
 
         if (bgRotateInterval) {
@@ -691,19 +695,20 @@
         const rotateEnabled = Boolean(s.backgroundRotateEnabled);
 
         if (uploadedBackgroundUrls.length > 0) {
+          const rotateCandidates = rotateEnabled && rotateSubset.length > 0 ? rotateSubset : uploadedBackgroundUrls;
           if (rotateEnabled) {
             // Rotation enabled: start on a random uploaded image.
-            bgIndex = Math.floor(Math.random() * uploadedBackgroundUrls.length);
-            await applyBackground(uploadedBackgroundUrls[bgIndex] ?? '/background.jpg');
+            bgIndex = Math.floor(Math.random() * rotateCandidates.length);
+            await applyBackground(rotateCandidates[bgIndex] ?? '/background.jpg');
 
-            if (uploadedBackgroundUrls.length > 1) {
+            if (rotateCandidates.length > 1) {
               bgRotateInterval = setInterval(() => {
                 // pick a random next index (avoid immediate repeat when possible)
-                const max = uploadedBackgroundUrls.length;
+                const max = rotateCandidates.length;
                 let nextIndex = Math.floor(Math.random() * max);
                 if (max > 1 && nextIndex === bgIndex) nextIndex = (nextIndex + 1) % max;
                 bgIndex = nextIndex;
-                const next = uploadedBackgroundUrls[bgIndex];
+                const next = rotateCandidates[bgIndex];
                 if (next) void applyBackground(next);
               }, BG_ROTATE_MS);
             }

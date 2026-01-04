@@ -33,6 +33,7 @@
     setClockStyle,
     uploadBackgroundWithProgress,
     setBackgroundRotateEnabled,
+    setBackgroundRotateImages,
     listTags,
     createTag,
     deleteTag,
@@ -183,6 +184,10 @@
   let backgroundRotateEnabled = false;
   let rotateSaving = false;
   let rotateError: string | null = null;
+
+  let backgroundRotateImages: string[] = [];
+  let rotateImagesSaving = false;
+  let rotateImagesError: string | null = null;
 
   let folderConfirmOpen = false;
   let pendingFolderFiles: File[] = [];
@@ -698,6 +703,9 @@
       : 20;
     scribblePaperLook = settings?.scribblePaperLook !== false;
     backgroundRotateEnabled = Boolean(settings?.backgroundRotateEnabled);
+    backgroundRotateImages = Array.isArray((settings as any)?.backgroundRotateImages)
+      ? ((settings as any).backgroundRotateImages as string[]).map((s) => String(s || '').trim()).filter(Boolean)
+      : [];
 
     const listNames = Array.isArray(settings?.todoListNames) ? settings!.todoListNames! : [];
     todoListNamesText = listNames.length ? listNames.join('\n') : settings?.todoListName ?? '';
@@ -769,6 +777,28 @@
       rotateError = 'Speichern fehlgeschlagen.';
     } finally {
       rotateSaving = false;
+    }
+  }
+
+  function toggleBackgroundRotateImage(img: string) {
+    const filename = String(img || '').trim();
+    if (!filename) return;
+    const set = new Set(backgroundRotateImages);
+    if (set.has(filename)) set.delete(filename);
+    else set.add(filename);
+    backgroundRotateImages = Array.from(set);
+  }
+
+  async function saveBackgroundRotateImages() {
+    rotateImagesError = null;
+    rotateImagesSaving = true;
+    try {
+      await setBackgroundRotateImages(backgroundRotateImages);
+      await refreshSettings();
+    } catch {
+      rotateImagesError = 'Speichern fehlgeschlagen.';
+    } finally {
+      rotateImagesSaving = false;
     }
   }
 
@@ -1066,6 +1096,7 @@
       newUserPassword = '';
       newUserIsAdmin = false;
       await refreshUsers();
+      showToast('Benutzer angelegt');
     } catch (err) {
       userError = err instanceof Error ? err.message : 'User konnte nicht angelegt werden.';
     }
@@ -1450,6 +1481,11 @@
       {rotateSaving}
       {rotateError}
       {saveBackgroundRotate}
+      bind:backgroundRotateImages
+      {rotateImagesSaving}
+      {rotateImagesError}
+      {toggleBackgroundRotateImage}
+      {saveBackgroundRotateImages}
       {uploadFiles}
       {savingBg}
       {uploadProgress}

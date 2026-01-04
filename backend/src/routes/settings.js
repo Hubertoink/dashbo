@@ -33,6 +33,7 @@ settingsRouter.get('/', requireAuth, async (_req, res) => {
   const backgroundRaw = await getUserSetting({ userId, key: 'background' });
   const background = backgroundRaw && String(backgroundRaw).trim() ? backgroundRaw : null;
   const rotateEnabledRaw = await getUserSetting({ userId, key: 'background.rotate' });
+  const rotateImagesRaw = await getUserSetting({ userId, key: 'background.rotateImages' });
   const weatherLocation = await getUserSetting({ userId, key: 'weather.location' });
   const holidaysEnabledRaw = await getUserSetting({ userId, key: 'holidays.enabled' });
   const todoEnabledRaw = await getUserSetting({ userId, key: 'todo.enabled' });
@@ -49,6 +50,23 @@ settingsRouter.get('/', requireAuth, async (_req, res) => {
 
   const holidaysEnabled = String(holidaysEnabledRaw ?? '').toLowerCase() === 'true';
   const backgroundRotateEnabled = String(rotateEnabledRaw ?? '').toLowerCase() === 'true';
+
+  let backgroundRotateImages = null;
+  if (rotateImagesRaw && String(rotateImagesRaw).trim()) {
+    try {
+      const parsed = JSON.parse(String(rotateImagesRaw));
+      if (Array.isArray(parsed)) {
+        const normalized = parsed
+          .map((v) => String(v || '').trim())
+          .filter(Boolean)
+          .filter((v) => images.includes(v));
+        const unique = Array.from(new Set(normalized));
+        if (unique.length > 0) backgroundRotateImages = unique;
+      }
+    } catch {
+      // ignore
+    }
+  }
   // Default to true for backwards compatibility
   const todoEnabled = todoEnabledRaw === null ? true : String(todoEnabledRaw).toLowerCase() === 'true';
   // Default to false
@@ -122,6 +140,7 @@ settingsRouter.get('/', requireAuth, async (_req, res) => {
     backgroundUrl,
     images,
     backgroundRotateEnabled,
+    ...(backgroundRotateImages ? { backgroundRotateImages } : {}),
     weatherLocation,
     holidaysEnabled,
     todoEnabled,
@@ -161,6 +180,25 @@ settingsRouter.post('/background/rotate', requireAuth, async (req, res) => {
   return res.json({ ok: true });
 });
 
+settingsRouter.post('/background/rotate-images', requireAuth, async (req, res) => {
+  const schema = z.object({ images: z.array(z.string().min(1).max(500)).max(500).default([]) });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: 'invalid_body', details: parsed.error.flatten() });
+  }
+
+  const userId = Number(req.auth?.sub);
+  const available = listImages({ userId });
+  const unique = Array.from(new Set(parsed.data.images.map((s) => String(s || '').trim()).filter(Boolean))).filter((v) =>
+    available.includes(v)
+  );
+
+  // Empty selection means "no restriction" (use all images) for backwards compatibility.
+  const value = unique.length > 0 ? JSON.stringify(unique) : '';
+  await setUserSetting({ userId, key: 'background.rotateImages', value });
+  return res.json({ ok: true });
+});
+
 // NOTE: Background ids are returned as `u<userId>/<filename>`.
 // Some proxies/servers decode `%2F` before routing; a simple `:filename` param would not match.
 // Use a wildcard to capture the full remainder including slashes.
@@ -193,6 +231,22 @@ settingsRouter.delete('/background/*', requireAuth, async (req, res) => {
 
   const currentBgRaw = await getUserSetting({ userId, key: 'background' });
   const currentBg = currentBgRaw && String(currentBgRaw).trim() ? String(currentBgRaw) : null;
+
+  // Keep rotate-images selection in sync
+  const rotateImagesRaw = await getUserSetting({ userId, key: 'background.rotateImages' });
+  if (rotateImagesRaw && String(rotateImagesRaw).trim()) {
+    try {
+      const parsed = JSON.parse(String(rotateImagesRaw));
+      if (Array.isArray(parsed)) {
+        const normalized = parsed.map((v) => String(v || '').trim()).filter(Boolean);
+        const next = normalized.filter((v) => v !== filename);
+        const unique = Array.from(new Set(next));
+        await setUserSetting({ userId, key: 'background.rotateImages', value: unique.length > 0 ? JSON.stringify(unique) : '' });
+      }
+    } catch {
+      // ignore
+    }
+  }
   const imagesAfter = listImages({ userId });
   if (currentBg && currentBg === parsed.data) {
     const next = imagesAfter[0] || '';

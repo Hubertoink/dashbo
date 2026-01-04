@@ -405,6 +405,7 @@ export type SettingsDto = {
   backgroundUrl: string | null;
   images: string[];
   backgroundRotateEnabled?: boolean;
+  backgroundRotateImages?: string[];
   weatherLocation?: string | null;
   holidaysEnabled?: boolean;
   todoEnabled?: boolean;
@@ -463,6 +464,10 @@ export async function uploadBackground(file: File): Promise<{ filename: string; 
 
 export async function setBackgroundRotateEnabled(enabled: boolean): Promise<{ ok: true }> {
   return api<{ ok: true }>('/settings/background/rotate', { method: 'POST', body: JSON.stringify({ enabled }) });
+}
+
+export async function setBackgroundRotateImages(images: string[]): Promise<{ ok: true }> {
+  return api<{ ok: true }>('/settings/background/rotate-images', { method: 'POST', body: JSON.stringify({ images }) });
 }
 
 export function uploadBackgroundWithProgress(
