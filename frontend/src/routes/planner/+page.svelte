@@ -402,8 +402,16 @@
       agendaEvents = items
         .slice()
         .sort((a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime());
-      // Generate suggestions after loading events
-      generateSuggestions(items);
+      // Generate suggestions based on a wider window (needs past events to detect patterns)
+      try {
+        const today = startOfLocalDay(new Date());
+        const suggestFrom = startOfDay(addDays(today, -56));
+        const suggestTo = endOfDay(addDays(today, 21));
+        const suggestEvents = await fetchEvents(suggestFrom, suggestTo);
+        generateSuggestions(suggestEvents);
+      } catch {
+        suggestions = [];
+      }
     } catch (err) {
       agendaError = err instanceof Error ? err.message : 'Fehler beim Laden.';
       agendaEvents = [];
