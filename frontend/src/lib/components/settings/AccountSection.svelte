@@ -12,6 +12,26 @@
 
   export let doLogin: () => void;
   export let logout: () => void;
+
+  export let requestEmailVerification: () => void | Promise<void> = () => {};
+
+  let verifyBusy = false;
+  let verifyError: string | null = null;
+  let verifySent = false;
+
+  async function doRequestEmailVerification() {
+    verifyError = null;
+    verifySent = false;
+    verifyBusy = true;
+    try {
+      await requestEmailVerification();
+      verifySent = true;
+    } catch (e) {
+      verifyError = e instanceof Error ? e.message : String(e);
+    } finally {
+      verifyBusy = false;
+    }
+  }
 </script>
 
 <section class="mb-8" id="section-account">
@@ -55,6 +75,29 @@
         {/if}
         {#if me.role === 'admin' || isAdmin}
           <span class="text-xs bg-white/10 rounded px-1.5 py-0.5 ml-2">Admin</span>
+        {/if}
+
+        {#if typeof me.emailVerified !== 'undefined'}
+          <div class="mt-2 flex items-center gap-2">
+            {#if me.emailVerified}
+              <span class="text-xs bg-white/10 rounded px-1.5 py-0.5">E-Mail bestätigt</span>
+            {:else}
+              <span class="text-xs bg-white/10 rounded px-1.5 py-0.5">E-Mail nicht bestätigt</span>
+              <button
+                class="text-xs px-2 py-1 rounded bg-white/10 hover:bg-white/15 disabled:opacity-50"
+                on:click={doRequestEmailVerification}
+                disabled={verifyBusy}
+              >
+                {verifyBusy ? 'Sende…' : 'Bestätigungs-Mail senden'}
+              </button>
+              {#if verifySent}
+                <span class="text-xs text-white/60">gesendet</span>
+              {/if}
+            {/if}
+          </div>
+          {#if verifyError}
+            <div class="mt-1 text-xs text-red-400">{verifyError}</div>
+          {/if}
         {/if}
       {:else}
         Eingeloggt{isAdmin ? ' als Admin' : ''}.

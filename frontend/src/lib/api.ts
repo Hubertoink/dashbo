@@ -352,10 +352,27 @@ export type MeDto = {
   isAdmin: boolean;
   role: 'admin' | 'member' | string;
   calendarId: number | null;
+  emailVerified?: boolean;
 };
 
 export async function fetchMe(): Promise<MeDto> {
   return api<MeDto>('/auth/me');
+}
+
+export async function requestPasswordReset(email: string): Promise<{ ok: true }> {
+  return api<{ ok: true }>('/auth/request-password-reset', { method: 'POST', body: JSON.stringify({ email }) });
+}
+
+export async function resetPasswordWithToken(token: string, password: string): Promise<{ ok: true }> {
+  return api<{ ok: true }>('/auth/reset-password', { method: 'POST', body: JSON.stringify({ token, password }) });
+}
+
+export async function verifyEmailWithToken(token: string): Promise<{ ok: true }> {
+  return api<{ ok: true }>('/auth/verify-email', { method: 'POST', body: JSON.stringify({ token }) });
+}
+
+export async function requestEmailVerification(): Promise<{ ok: true }> {
+  return api<{ ok: true }>('/auth/request-email-verification', { method: 'POST' });
 }
 
 export type UserDto = {

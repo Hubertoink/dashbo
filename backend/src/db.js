@@ -132,9 +132,16 @@ async function initDb() {
       name TEXT NOT NULL,
       password_hash TEXT NOT NULL,
       is_admin BOOLEAN NOT NULL DEFAULT FALSE,
+      email_verified_at TIMESTAMPTZ,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
+  `);
+
+  // Older installations: add email_verified_at if missing
+  await p.query(`
+    ALTER TABLE users
+    ADD COLUMN IF NOT EXISTS email_verified_at TIMESTAMPTZ;
   `);
 
   // Calendars (aka families / tenants)
@@ -424,6 +431,39 @@ async function initDb() {
   await p.query(`
     CREATE INDEX IF NOT EXISTS user_settings_user_id_idx ON user_settings (user_id);
   `);
+
+  // Auth tokens (email verification, password reset)
+  await p.query(`
+    CREATE TABLE IF NOT EXISTS auth_tokens (
+      id BIGSERIAL PRIMARY KEY,
+      user_id BIGINT NOT NULL,
+      kind TEXT NOT NULL,
+      token_hash TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      expires_at TIMESTAMPTZ NOT NULL,
+      used_at TIMESTAMPTZ,
+      meta JSONB
+    );
+  `);
+
+  await p.query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'auth_tokens_user_id_fkey'
+      ) THEN
+        ALTER TABLE auth_tokens
+        ADD CONSTRAINT auth_tokens_user_id_fkey
+        FOREIGN KEY (user_id)
+        REFERENCES users(id)
+        ON DELETE CASCADE;
+      END IF;
+    END $$;
+  `);
+
+  await p.query('CREATE UNIQUE INDEX IF NOT EXISTS auth_tokens_token_hash_uq ON auth_tokens (token_hash);');
+  await p.query('CREATE INDEX IF NOT EXISTS auth_tokens_user_kind_idx ON auth_tokens (user_id, kind);');
+  await p.query('CREATE INDEX IF NOT EXISTS auth_tokens_expires_idx ON auth_tokens (expires_at);');
 
   // Outlook (Microsoft Graph) per-user OAuth tokens (read-only)
   await p.query(`

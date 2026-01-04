@@ -51,6 +51,7 @@
     , type MeDto
     , fetchMe
     , decodeJwtPayload
+    , requestEmailVerification
   } from '$lib/api';
 
   import { normalizeClockStyle, type ClockStyle } from '$lib/clockStyle';
@@ -873,6 +874,24 @@
     }
   }
 
+  async function doRequestEmailVerification() {
+    if (!authed) return;
+    try {
+      await requestEmailVerification();
+      showToast('Bestätigungs-Mail wurde gesendet.');
+      try {
+        me = await fetchMe();
+        isAdmin = !!me.isAdmin;
+      } catch {
+        // ignore
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      showToast(msg.includes('API') ? 'Bestätigungs-Mail konnte nicht gesendet werden.' : msg);
+      throw e;
+    }
+  }
+
   function logout() {
     setToken(null);
     authed = false;
@@ -1346,7 +1365,17 @@
       <a class="text-white/60 hover:text-white text-sm" href={returnUrl}>← Zurück</a>
     </div>
 
-    <AccountSection {authed} {isAdmin} {me} bind:email bind:password {authError} {doLogin} {logout} />
+    <AccountSection
+      {authed}
+      {isAdmin}
+      {me}
+      bind:email
+      bind:password
+      {authError}
+      {doLogin}
+      {logout}
+      requestEmailVerification={doRequestEmailVerification}
+    />
 
     {#if showFirstRunWizard}
       <FirstRunSection
