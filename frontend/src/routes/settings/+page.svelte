@@ -1455,7 +1455,7 @@
 
     <CalendarSection
       {authed}
-      {recurringSuggestionsEnabled}
+      bind:recurringSuggestionsEnabled
       {recurringSuggestionsSaving}
       {recurringSuggestionsError}
       {saveRecurringSuggestionsEnabled}
