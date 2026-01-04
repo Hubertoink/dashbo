@@ -17,6 +17,7 @@
   export let recurringSuggestionsWeekly = true;
   export let recurringSuggestionsBiweekly = true;
   export let recurringSuggestionsMonthly = true;
+  export let recurringSuggestionsBirthdays = true;
   export let onSelect: (d: Date) => void;
   export let onEditEvent: (e: EventDto) => void;
   export let onBack: () => void;
@@ -134,6 +135,17 @@
     return Math.floor(diff / msPerWeek);
   }
 
+  function isLeapYear(y: number): boolean {
+    return (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0;
+  }
+
+  function isBirthdayEvent(e: EventDto): boolean {
+    const titleNorm = normalizeTitle(e.title);
+    const tagNorm = normalizeTitle(e.tag?.name ?? '');
+    const re = /\b(geburtstag|birthday)\b/i;
+    return re.test(titleNorm) || re.test(tagNorm);
+  }
+
   async function loadSuggestionsForWeek(weekStartLocal: Date, weekEndLocal: Date) {
     if (!recurringSuggestionsEnabled) {
       suggestions = [];
@@ -157,7 +169,17 @@
       const to = new Date(weekStartLocal);
       to.setHours(0, 0, 0, 0);
 
-      const history = await fetchEvents(from, to);
+      const historyPromise = fetchEvents(from, to);
+
+      const historyBirthdaysPromise = (() => {
+        if (!recurringSuggestionsBirthdays) return Promise.resolve([] as EventDto[]);
+        const fromBirthdays = new Date(weekStartLocal);
+        fromBirthdays.setDate(fromBirthdays.getDate() - 370);
+        fromBirthdays.setHours(0, 0, 0, 0);
+        return fetchEvents(fromBirthdays, to);
+      })();
+
+      const [history, historyBirthdays] = await Promise.all([historyPromise, historyBirthdaysPromise]);
 
       const candidates = (history ?? []).filter((e) => {
         if (e.source === 'outlook') return false;
@@ -166,6 +188,15 @@
         if (!e.title || !String(e.title).trim()) return false;
         return true;
       });
+
+      const birthdayCandidates = recurringSuggestionsBirthdays
+        ? (historyBirthdays ?? []).filter((e) => {
+        if (e.source === 'outlook') return false;
+        if (e.recurrence) return false;
+        if (!e.title || !String(e.title).trim()) return false;
+        return isBirthdayEvent(e);
+        })
+        : [];
 
       const currentWeekEvents = (events ?? []).filter((e) => {
         const s = new Date(e.startAt);
@@ -380,7 +411,65 @@
         }
       }
 
-      out.sort((a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime());
+      // 4. Birthdays: yearly all-day suggestion based on title/tag
+      if (recurringSuggestionsBirthdays) {
+        const birthdaySeenForDay = new Set<string>();
+        for (const e of birthdayCandidates) {
+          const baseTitleNorm = normalizeTitle(e.title);
+          if (!baseTitleNorm) continue;
+
+          const eventStart = new Date(e.startAt);
+          if (Number.isNaN(eventStart.getTime())) continue;
+
+          const srcMonth = eventStart.getMonth();
+          const srcDay = eventStart.getDate();
+
+          for (let i = 0; i < 7; i++) {
+            const day = new Date(weekStartLocal);
+            day.setDate(weekStartLocal.getDate() + i);
+            day.setHours(0, 0, 0, 0);
+
+            const year = day.getFullYear();
+            const month = day.getMonth();
+            const date = day.getDate();
+
+            const effDay = srcMonth === 1 && srcDay === 29 && !isLeapYear(year) ? 28 : srcDay;
+            if (month !== srcMonth || date !== effDay) continue;
+
+            const sig = `birthday|${dateKey(day)}|${baseTitleNorm}`;
+            if (dismissedSuggestionKeys.has(sig)) continue;
+
+            const dayKey = `${dateKey(day)}|${baseTitleNorm}`;
+            if (birthdaySeenForDay.has(dayKey)) continue;
+
+            // Avoid duplicates if event already exists that day (same title)
+            const alreadyExists = currentWeekEvents.some((x) => {
+              const xs = new Date(x.startAt);
+              if (Number.isNaN(xs.getTime())) return false;
+              return sameDay(xs, day) && normalizeTitle(x.title) === baseTitleNorm;
+            });
+            if (alreadyExists) continue;
+
+            birthdaySeenForDay.add(dayKey);
+            out.push({
+              suggestionKey: sig,
+              title: e.title,
+              startAt: isoNoonLocal(day),
+              endAt: null,
+              allDay: true,
+              tag: e.tag,
+              person: e.person,
+              persons: e.persons,
+            });
+            break;
+          }
+        }
+      }
+
+      out.sort((a, b) => {
+        if (a.allDay !== b.allDay) return a.allDay ? -1 : 1;
+        return new Date(a.startAt).getTime() - new Date(b.startAt).getTime();
+      });
 
       suggestions = out.slice(0, 10);
       suggestionsForWeekKey = weekKey;

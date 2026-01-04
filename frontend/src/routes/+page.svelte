@@ -79,6 +79,7 @@
   let recurringSuggestionsWeekly = true;
   let recurringSuggestionsBiweekly = true;
   let recurringSuggestionsMonthly = true;
+  let recurringSuggestionsBirthdays = true;
 
   async function loadStandbyScribbles() {
     try {
@@ -677,6 +678,7 @@
         recurringSuggestionsWeekly = (s as any)?.recurringSuggestionsWeekly !== false;
         recurringSuggestionsBiweekly = (s as any)?.recurringSuggestionsBiweekly !== false;
         recurringSuggestionsMonthly = (s as any)?.recurringSuggestionsMonthly !== false;
+        recurringSuggestionsBirthdays = (s as any)?.recurringSuggestionsBirthdays !== false;
 
         try {
           const st = await fetchOutlookStatus();
@@ -1406,6 +1408,7 @@
       {recurringSuggestionsWeekly}
       {recurringSuggestionsBiweekly}
       {recurringSuggestionsMonthly}
+      {recurringSuggestionsBirthdays}
       onSelect={onSelect}
       onEditEvent={openEditEventModal}
       onBack={closePlanner}

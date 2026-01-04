@@ -50,6 +50,7 @@
   export let recurringSuggestionsWeekly: boolean;
   export let recurringSuggestionsBiweekly: boolean;
   export let recurringSuggestionsMonthly: boolean;
+  export let recurringSuggestionsBirthdays: boolean;
   export let recurringSuggestionsSaving: boolean;
   export let recurringSuggestionsError: string | null;
   export let saveRecurringSuggestionsSettings: () => void | Promise<void>;
@@ -115,6 +116,16 @@
             />
             <span>Monatlich</span>
             <span class="text-xs text-white/40">(z.B. jeder 3. Mittwoch)</span>
+          </label>
+          <label class="flex items-center gap-2 text-sm text-white/80 cursor-pointer">
+            <input
+              type="checkbox"
+              class="rounded bg-white/10 border-0 cursor-pointer"
+              bind:checked={recurringSuggestionsBirthdays}
+              disabled={!authed || recurringSuggestionsSaving}
+            />
+            <span>Geburtstage</span>
+            <span class="text-xs text-white/40">(jährlich, per Titel/Tag)</span>
           </label>
         </div>
       {/if}

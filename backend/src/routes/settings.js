@@ -62,10 +62,14 @@ settingsRouter.get('/', requireAuth, attachUserContext, async (_req, res) => {
   const monthlyPatternRaw = Number.isFinite(calendarId) && calendarId > 0
     ? await getCalendarSetting({ calendarId, key: 'planner.recurringSuggestions.monthly', fallbackToGlobal: false })
     : null;
+  const birthdayPatternRaw = Number.isFinite(calendarId) && calendarId > 0
+    ? await getCalendarSetting({ calendarId, key: 'planner.recurringSuggestions.birthdays', fallbackToGlobal: false })
+    : null;
   // Default to true if not explicitly set
   const recurringSuggestionsWeekly = weeklyPatternRaw === null ? true : String(weeklyPatternRaw).toLowerCase() === 'true';
   const recurringSuggestionsBiweekly = biweeklyPatternRaw === null ? true : String(biweeklyPatternRaw).toLowerCase() === 'true';
   const recurringSuggestionsMonthly = monthlyPatternRaw === null ? true : String(monthlyPatternRaw).toLowerCase() === 'true';
+  const recurringSuggestionsBirthdays = birthdayPatternRaw === null ? true : String(birthdayPatternRaw).toLowerCase() === 'true';
 
   const recurringSuggestionsDismissedRaw = await getUserSetting({ userId, key: 'planner.recurringSuggestions.dismissed' });
   /** @type {string[]} */
@@ -181,6 +185,7 @@ settingsRouter.get('/', requireAuth, attachUserContext, async (_req, res) => {
     recurringSuggestionsWeekly,
     recurringSuggestionsBiweekly,
     recurringSuggestionsMonthly,
+    recurringSuggestionsBirthdays,
     recurringSuggestionsDismissed,
     backgroundRotateEnabled,
     ...(backgroundRotateImages ? { backgroundRotateImages } : {}),
@@ -205,6 +210,7 @@ settingsRouter.post('/recurring-suggestions', requireAuth, attachUserContext, as
     weekly: z.boolean().optional(),
     biweekly: z.boolean().optional(),
     monthly: z.boolean().optional(),
+    birthdays: z.boolean().optional(),
   });
   const parsed = schema.safeParse(req.body);
   if (!parsed.success) {
@@ -216,7 +222,7 @@ settingsRouter.post('/recurring-suggestions', requireAuth, attachUserContext, as
     return res.status(400).json({ error: 'missing_calendar' });
   }
 
-  const { enabled, weekly, biweekly, monthly } = parsed.data;
+  const { enabled, weekly, biweekly, monthly, birthdays } = parsed.data;
 
   if (typeof enabled === 'boolean') {
     await setCalendarSetting({
@@ -244,6 +250,14 @@ settingsRouter.post('/recurring-suggestions', requireAuth, attachUserContext, as
       calendarId,
       key: 'planner.recurringSuggestions.monthly',
       value: monthly ? 'true' : 'false',
+    });
+  }
+
+  if (typeof birthdays === 'boolean') {
+    await setCalendarSetting({
+      calendarId,
+      key: 'planner.recurringSuggestions.birthdays',
+      value: birthdays ? 'true' : 'false',
     });
   }
 

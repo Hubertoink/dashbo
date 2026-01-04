@@ -460,6 +460,7 @@ export type SettingsDto = {
   recurringSuggestionsWeekly?: boolean;
   recurringSuggestionsBiweekly?: boolean;
   recurringSuggestionsMonthly?: boolean;
+  recurringSuggestionsBirthdays?: boolean;
   recurringSuggestionsDismissed?: string[];
   backgroundRotateEnabled?: boolean;
   backgroundRotateImages?: string[];
@@ -532,6 +533,7 @@ export type RecurringSuggestionsOptions = {
   weekly?: boolean;
   biweekly?: boolean;
   monthly?: boolean;
+  birthdays?: boolean;
 };
 
 export async function setRecurringSuggestionsSettings(options: RecurringSuggestionsOptions): Promise<{ ok: true }> {

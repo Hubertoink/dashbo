@@ -198,6 +198,7 @@
   let recurringSuggestionsWeekly = true;
   let recurringSuggestionsBiweekly = true;
   let recurringSuggestionsMonthly = true;
+  let recurringSuggestionsBirthdays = true;
   let recurringSuggestionsSaving = false;
   let recurringSuggestionsError: string | null = null;
 
@@ -730,6 +731,7 @@
     recurringSuggestionsWeekly = (settings as any)?.recurringSuggestionsWeekly !== false;
     recurringSuggestionsBiweekly = (settings as any)?.recurringSuggestionsBiweekly !== false;
     recurringSuggestionsMonthly = (settings as any)?.recurringSuggestionsMonthly !== false;
+    recurringSuggestionsBirthdays = (settings as any)?.recurringSuggestionsBirthdays !== false;
   }
 
   async function saveRecurringSuggestionsSettings() {
@@ -741,6 +743,7 @@
         weekly: recurringSuggestionsWeekly,
         biweekly: recurringSuggestionsBiweekly,
         monthly: recurringSuggestionsMonthly,
+        birthdays: recurringSuggestionsBirthdays,
       });
       await refreshSettings();
       showToast('Gespeichert');
@@ -1470,6 +1473,7 @@
       bind:recurringSuggestionsWeekly
       bind:recurringSuggestionsBiweekly
       bind:recurringSuggestionsMonthly
+      bind:recurringSuggestionsBirthdays
       {recurringSuggestionsSaving}
       {recurringSuggestionsError}
       {saveRecurringSuggestionsSettings}
