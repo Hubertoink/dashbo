@@ -52,6 +52,21 @@ settingsRouter.get('/', requireAuth, attachUserContext, async (_req, res) => {
     : null;
   const recurringSuggestionsEnabled = String(recurringSuggestionsEnabledRaw ?? '').toLowerCase() === 'true';
 
+  // Pattern type settings (default all to true if main toggle is enabled)
+  const weeklyPatternRaw = Number.isFinite(calendarId) && calendarId > 0
+    ? await getCalendarSetting({ calendarId, key: 'planner.recurringSuggestions.weekly', fallbackToGlobal: false })
+    : null;
+  const biweeklyPatternRaw = Number.isFinite(calendarId) && calendarId > 0
+    ? await getCalendarSetting({ calendarId, key: 'planner.recurringSuggestions.biweekly', fallbackToGlobal: false })
+    : null;
+  const monthlyPatternRaw = Number.isFinite(calendarId) && calendarId > 0
+    ? await getCalendarSetting({ calendarId, key: 'planner.recurringSuggestions.monthly', fallbackToGlobal: false })
+    : null;
+  // Default to true if not explicitly set
+  const recurringSuggestionsWeekly = weeklyPatternRaw === null ? true : String(weeklyPatternRaw).toLowerCase() === 'true';
+  const recurringSuggestionsBiweekly = biweeklyPatternRaw === null ? true : String(biweeklyPatternRaw).toLowerCase() === 'true';
+  const recurringSuggestionsMonthly = monthlyPatternRaw === null ? true : String(monthlyPatternRaw).toLowerCase() === 'true';
+
   const recurringSuggestionsDismissedRaw = await getUserSetting({ userId, key: 'planner.recurringSuggestions.dismissed' });
   /** @type {string[]} */
   let recurringSuggestionsDismissed = [];
@@ -163,6 +178,9 @@ settingsRouter.get('/', requireAuth, attachUserContext, async (_req, res) => {
     backgroundUrl,
     images,
     recurringSuggestionsEnabled,
+    recurringSuggestionsWeekly,
+    recurringSuggestionsBiweekly,
+    recurringSuggestionsMonthly,
     recurringSuggestionsDismissed,
     backgroundRotateEnabled,
     ...(backgroundRotateImages ? { backgroundRotateImages } : {}),
@@ -182,7 +200,12 @@ settingsRouter.get('/', requireAuth, attachUserContext, async (_req, res) => {
 });
 
 settingsRouter.post('/recurring-suggestions', requireAuth, attachUserContext, async (req, res) => {
-  const schema = z.object({ enabled: z.boolean() });
+  const schema = z.object({
+    enabled: z.boolean().optional(),
+    weekly: z.boolean().optional(),
+    biweekly: z.boolean().optional(),
+    monthly: z.boolean().optional(),
+  });
   const parsed = schema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ error: 'invalid_body', details: parsed.error.flatten() });
@@ -193,11 +216,36 @@ settingsRouter.post('/recurring-suggestions', requireAuth, attachUserContext, as
     return res.status(400).json({ error: 'missing_calendar' });
   }
 
-  await setCalendarSetting({
-    calendarId,
-    key: 'planner.recurringSuggestions',
-    value: parsed.data.enabled ? 'true' : 'false',
-  });
+  const { enabled, weekly, biweekly, monthly } = parsed.data;
+
+  if (typeof enabled === 'boolean') {
+    await setCalendarSetting({
+      calendarId,
+      key: 'planner.recurringSuggestions',
+      value: enabled ? 'true' : 'false',
+    });
+  }
+  if (typeof weekly === 'boolean') {
+    await setCalendarSetting({
+      calendarId,
+      key: 'planner.recurringSuggestions.weekly',
+      value: weekly ? 'true' : 'false',
+    });
+  }
+  if (typeof biweekly === 'boolean') {
+    await setCalendarSetting({
+      calendarId,
+      key: 'planner.recurringSuggestions.biweekly',
+      value: biweekly ? 'true' : 'false',
+    });
+  }
+  if (typeof monthly === 'boolean') {
+    await setCalendarSetting({
+      calendarId,
+      key: 'planner.recurringSuggestions.monthly',
+      value: monthly ? 'true' : 'false',
+    });
+  }
 
   return res.json({ ok: true });
 });

@@ -14,6 +14,9 @@
   export let outlookConnected = false;
   export let todoEnabled = true;
   export let recurringSuggestionsEnabled = false;
+  export let recurringSuggestionsWeekly = true;
+  export let recurringSuggestionsBiweekly = true;
+  export let recurringSuggestionsMonthly = true;
   export let onSelect: (d: Date) => void;
   export let onEditEvent: (e: EventDto) => void;
   export let onBack: () => void;
@@ -112,6 +115,25 @@
     return a0 <= b1 && b0 <= a1;
   }
 
+  // Get the nth weekday occurrence in a month (1-based: 1st, 2nd, 3rd, 4th, 5th)
+  function getNthWeekdayOfMonth(d: Date): number {
+    const dayOfMonth = d.getDate();
+    return Math.ceil(dayOfMonth / 7);
+  }
+
+  // Check if target date is the nth weekday of its month
+  function isNthWeekdayOfMonth(target: Date, nth: number, weekday: number): boolean {
+    if (weekdayMon0(target) !== weekday) return false;
+    return getNthWeekdayOfMonth(target) === nth;
+  }
+
+  // Get week number within the lookback period (for biweekly detection)
+  function getWeekIndex(d: Date, referenceStart: Date): number {
+    const msPerWeek = 7 * 24 * 60 * 60 * 1000;
+    const diff = d.getTime() - referenceStart.getTime();
+    return Math.floor(diff / msPerWeek);
+  }
+
   async function loadSuggestionsForWeek(weekStartLocal: Date, weekEndLocal: Date) {
     if (!recurringSuggestionsEnabled) {
       suggestions = [];
@@ -127,7 +149,7 @@
     suggestionsLoading = true;
 
     try {
-      const lookbackWeeks = 10;
+      const lookbackWeeks = 12; // Extended for monthly patterns
       const from = new Date(weekStartLocal);
       from.setDate(from.getDate() - lookbackWeeks * 7);
       from.setHours(0, 0, 0, 0);
@@ -151,17 +173,27 @@
         return s.getTime() >= weekStartLocal.getTime() && s.getTime() <= weekEndLocal.getTime();
       });
 
+      // ===== PATTERN TYPES =====
+      // 1. Weekly: same weekday + time + title (existing)
+      // 2. Biweekly: same weekday + time + title, but every 2 weeks
+      // 3. Monthly: same nth-weekday + time + title (e.g., "3rd Wednesday")
+
       type PatternAgg = {
         count: number;
         weeks: Set<string>;
+        dates: Date[];
         sample: EventDto;
         weekday: number;
         startBucket: number;
         durationBucket: number | null;
         titleNorm: string;
+        patternType: 'weekly' | 'biweekly' | 'monthly';
+        monthlyNth?: number;
       };
 
-      const bySig = new Map<string, PatternAgg>();
+      const weeklyBySig = new Map<string, PatternAgg>();
+      const biweeklyBySig = new Map<string, PatternAgg>();
+      const monthlyBySig = new Map<string, PatternAgg>();
 
       for (const e of candidates) {
         const start = new Date(e.startAt);
@@ -178,47 +210,101 @@
 
         const weekOfEvent = mondayStart(start);
         const weekId = dateKey(weekOfEvent);
+        const nthWeekday = getNthWeekdayOfMonth(start);
 
-        const sig = `${wd}|${startMin}|${durationBucket ?? 'x'}|${titleNorm}`;
-        const existing = bySig.get(sig);
-        if (existing) {
-          existing.count++;
-          existing.weeks.add(weekId);
-          // Prefer the most recent sample (roughly)
-          if (new Date(existing.sample.startAt).getTime() < start.getTime()) {
-            existing.sample = e;
+        // Weekly signature
+        const weeklySig = `weekly|${wd}|${startMin}|${durationBucket ?? 'x'}|${titleNorm}`;
+        const existingWeekly = weeklyBySig.get(weeklySig);
+        if (existingWeekly) {
+          existingWeekly.count++;
+          existingWeekly.weeks.add(weekId);
+          existingWeekly.dates.push(start);
+          if (new Date(existingWeekly.sample.startAt).getTime() < start.getTime()) {
+            existingWeekly.sample = e;
           }
         } else {
-          bySig.set(sig, {
+          weeklyBySig.set(weeklySig, {
             count: 1,
             weeks: new Set([weekId]),
+            dates: [start],
             sample: e,
             weekday: wd,
             startBucket: startMin,
             durationBucket,
             titleNorm,
+            patternType: 'weekly',
+          });
+        }
+
+        // Biweekly signature (group by odd/even week index)
+        const weekIdx = getWeekIndex(start, from);
+        const biweeklyParity = weekIdx % 2;
+        const biweeklySig = `biweekly|${wd}|${startMin}|${durationBucket ?? 'x'}|${titleNorm}|${biweeklyParity}`;
+        const existingBiweekly = biweeklyBySig.get(biweeklySig);
+        if (existingBiweekly) {
+          existingBiweekly.count++;
+          existingBiweekly.weeks.add(weekId);
+          existingBiweekly.dates.push(start);
+          if (new Date(existingBiweekly.sample.startAt).getTime() < start.getTime()) {
+            existingBiweekly.sample = e;
+          }
+        } else {
+          biweeklyBySig.set(biweeklySig, {
+            count: 1,
+            weeks: new Set([weekId]),
+            dates: [start],
+            sample: e,
+            weekday: wd,
+            startBucket: startMin,
+            durationBucket,
+            titleNorm,
+            patternType: 'biweekly',
+          });
+        }
+
+        // Monthly signature (nth weekday of month)
+        const monthlySig = `monthly|${nthWeekday}|${wd}|${startMin}|${durationBucket ?? 'x'}|${titleNorm}`;
+        const existingMonthly = monthlyBySig.get(monthlySig);
+        if (existingMonthly) {
+          existingMonthly.count++;
+          existingMonthly.weeks.add(weekId);
+          existingMonthly.dates.push(start);
+          if (new Date(existingMonthly.sample.startAt).getTime() < start.getTime()) {
+            existingMonthly.sample = e;
+          }
+        } else {
+          monthlyBySig.set(monthlySig, {
+            count: 1,
+            weeks: new Set([weekId]),
+            dates: [start],
+            sample: e,
+            weekday: wd,
+            startBucket: startMin,
+            durationBucket,
+            titleNorm,
+            patternType: 'monthly',
+            monthlyNth: nthWeekday,
           });
         }
       }
 
       const out: EventSuggestionDto[] = [];
+      const addedSigBases = new Set<string>(); // Prevent duplicates across pattern types
 
-      for (const [sig, agg] of bySig) {
-        if (dismissedSuggestionKeys.has(sig)) continue;
-        if (agg.count < 3) continue;
-        if (agg.weeks.size < 3) continue;
+      // Helper to check conflicts and add suggestion
+      const tryAddSuggestion = (sig: string, agg: PatternAgg, targetDay: Date) => {
+        const sigBase = `${agg.weekday}|${agg.startBucket}|${agg.durationBucket ?? 'x'}|${agg.titleNorm}`;
+        if (addedSigBases.has(sigBase)) return;
+        if (dismissedSuggestionKeys.has(sig)) return;
 
-        const day = new Date(weekStartLocal);
-        day.setDate(day.getDate() + agg.weekday);
-        day.setHours(0, 0, 0, 0);
-
-        const start = new Date(day);
+        const start = new Date(targetDay);
         const hhmm = hhmmFromMinutes(agg.startBucket);
         const [hh, mm] = hhmm.split(':').map((x) => Number(x));
         start.setHours(hh || 0, mm || 0, 0, 0);
 
         const end = agg.durationBucket != null ? new Date(start.getTime() + agg.durationBucket * 60000) : null;
 
+        // Check for conflicts with existing events
         const conflicts = currentWeekEvents.some((e) => {
           const es = new Date(e.startAt);
           if (Number.isNaN(es.getTime())) return false;
@@ -227,8 +313,9 @@
           return overlaps(start, end, es, ee);
         });
 
-        if (conflicts) continue;
+        if (conflicts) return;
 
+        addedSigBases.add(sigBase);
         out.push({
           suggestionKey: sig,
           title: agg.sample.title,
@@ -239,6 +326,58 @@
           person: agg.sample.person,
           persons: agg.sample.persons,
         });
+      };
+
+      // 1. Process weekly patterns (need 3+ occurrences in 3+ different weeks)
+      if (recurringSuggestionsWeekly) {
+        for (const [sig, agg] of weeklyBySig) {
+          if (agg.count < 3 || agg.weeks.size < 3) continue;
+
+          const targetDay = new Date(weekStartLocal);
+          targetDay.setDate(targetDay.getDate() + agg.weekday);
+          targetDay.setHours(0, 0, 0, 0);
+
+          tryAddSuggestion(sig, agg, targetDay);
+        }
+      }
+
+      // 2. Process biweekly patterns (need 2+ occurrences, check if this week matches parity)
+      if (recurringSuggestionsBiweekly) {
+        const currentWeekIdx = getWeekIndex(weekStartLocal, from);
+        for (const [sig, agg] of biweeklyBySig) {
+          if (agg.count < 2 || agg.weeks.size < 2) continue;
+
+          // Check if this week has the right parity
+          const sigParts = sig.split('|');
+          const expectedParity = Number(sigParts[sigParts.length - 1]);
+          if (currentWeekIdx % 2 !== expectedParity) continue;
+
+          const targetDay = new Date(weekStartLocal);
+          targetDay.setDate(targetDay.getDate() + agg.weekday);
+          targetDay.setHours(0, 0, 0, 0);
+
+          tryAddSuggestion(sig, agg, targetDay);
+        }
+      }
+
+      // 3. Process monthly patterns (need 2+ occurrences, check if target week has nth weekday)
+      if (recurringSuggestionsMonthly) {
+        for (const [sig, agg] of monthlyBySig) {
+          if (agg.count < 2 || agg.weeks.size < 2) continue;
+          if (agg.monthlyNth == null) continue;
+
+          // Find if any day in the target week is the nth weekday
+          for (let i = 0; i < 7; i++) {
+            const day = new Date(weekStartLocal);
+            day.setDate(weekStartLocal.getDate() + i);
+            day.setHours(0, 0, 0, 0);
+
+            if (isNthWeekdayOfMonth(day, agg.monthlyNth, agg.weekday)) {
+              tryAddSuggestion(sig, agg, day);
+              break;
+            }
+          }
+        }
       }
 
       out.sort((a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime());

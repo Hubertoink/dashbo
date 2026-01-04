@@ -144,41 +144,43 @@
       {@const ps = s.persons && s.persons.length > 0 ? s.persons : s.person ? [s.person] : []}
       {@const p0 = ps[0]}
       {@const tagColor = s.tag?.color}
-      <div class="relative">
+      <div class="relative group/sugg">
+        <!-- Suggestion card with distinct styling -->
         <button
           type="button"
-          class="w-full text-left rounded-xl px-2.5 py-2 pr-20 bg-white/5 border border-white/15 border-dashed hover:bg-white/10 active:bg-white/15 active:scale-[0.98] transition group touch-manipulation select-none opacity-70 hover:opacity-100"
+          class="w-full text-left rounded-xl px-2.5 py-2 pr-20 bg-gradient-to-r from-violet-500/10 to-fuchsia-500/10 border-2 border-dashed border-violet-400/40 hover:border-violet-400/60 hover:from-violet-500/15 hover:to-fuchsia-500/15 active:scale-[0.98] transition-all group touch-manipulation select-none"
           style="-webkit-touch-callout: none;"
           on:click|stopPropagation={() => onAcceptSuggestion(s)}
         >
           <div class="flex gap-2 items-start">
-            <div
-              class={`mt-1 h-2.5 w-2.5 rounded-full shrink-0 ${
-                tagColor
-                  ? isHexColor(tagColor)
-                    ? ''
-                    : dotBg[tagColor as TagColorKey] ?? 'bg-white/40'
-                  : p0
-                    ? dotBg[p0.color as TagColorKey] ?? 'bg-white/40'
-                    : 'bg-white/40'
-              }`}
-              style={tagColor && isHexColor(tagColor) ? `background-color: ${tagColor}` : ''}
-            ></div>
+            <!-- Suggestion indicator icon -->
+            <div class="mt-0.5 shrink-0 text-violet-400/80">
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+              </svg>
+            </div>
 
             <div class="min-w-0 flex-1">
-              <div class="text-sm font-medium leading-tight truncate group-hover:text-white transition">
+              <div class="text-sm font-medium leading-tight truncate text-white/90 group-hover:text-white transition">
                 {s.title}
-                <span class="text-white/40 text-xs font-normal"> · Vorschlag</span>
               </div>
-              <div class="text-xs text-white/60 leading-tight mt-0.5">
-                {#if s.allDay}
-                  Ganztägig
-                {:else}
-                  {fmtTimeRange(s.startAt, s.endAt)}
-                {/if}
+              <div class="flex items-center gap-1.5 mt-0.5">
+                <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-violet-500/20 text-[10px] font-medium text-violet-300 uppercase tracking-wide">
+                  <svg class="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                  </svg>
+                  Vorschlag
+                </span>
+                <span class="text-xs text-white/50">
+                  {#if s.allDay}
+                    Ganztägig
+                  {:else}
+                    {fmtTimeRange(s.startAt, s.endAt)}
+                  {/if}
+                </span>
               </div>
               {#if ps.length > 0}
-                <div class="text-xs mt-0.5">
+                <div class="text-xs mt-1">
                   {#each ps as p, i (p.id)}
                     {@const pc = p.color as string}
                     <span
@@ -194,14 +196,17 @@
           </div>
         </button>
 
+        <!-- Dismiss button -->
         <button
           type="button"
-          class="absolute top-1/2 -translate-y-1/2 right-2 h-8 px-3 rounded-lg bg-white/5 hover:bg-white/10 active:bg-white/15 transition text-xs text-white/70"
+          class="absolute top-1/2 -translate-y-1/2 right-2 h-7 w-7 rounded-full bg-white/5 hover:bg-red-500/20 active:bg-red-500/30 transition flex items-center justify-center text-white/40 hover:text-red-400 opacity-0 group-hover/sugg:opacity-100"
           on:click|stopPropagation={() => onDismissSuggestion(s)}
           aria-label="Vorschlag ignorieren"
           title="Ignorieren"
         >
-          Ignorieren
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+          </svg>
         </button>
       </div>
     {/each}

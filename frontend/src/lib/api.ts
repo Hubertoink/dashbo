@@ -457,6 +457,9 @@ export type SettingsDto = {
   backgroundUrl: string | null;
   images: string[];
   recurringSuggestionsEnabled?: boolean;
+  recurringSuggestionsWeekly?: boolean;
+  recurringSuggestionsBiweekly?: boolean;
+  recurringSuggestionsMonthly?: boolean;
   recurringSuggestionsDismissed?: string[];
   backgroundRotateEnabled?: boolean;
   backgroundRotateImages?: string[];
@@ -524,8 +527,20 @@ export async function setBackgroundRotateImages(images: string[]): Promise<{ ok:
   return api<{ ok: true }>('/settings/background/rotate-images', { method: 'POST', body: JSON.stringify({ images }) });
 }
 
+export type RecurringSuggestionsOptions = {
+  enabled?: boolean;
+  weekly?: boolean;
+  biweekly?: boolean;
+  monthly?: boolean;
+};
+
+export async function setRecurringSuggestionsSettings(options: RecurringSuggestionsOptions): Promise<{ ok: true }> {
+  return api<{ ok: true }>('/settings/recurring-suggestions', { method: 'POST', body: JSON.stringify(options) });
+}
+
+/** @deprecated Use setRecurringSuggestionsSettings instead */
 export async function setRecurringSuggestionsEnabled(enabled: boolean): Promise<{ ok: true }> {
-  return api<{ ok: true }>('/settings/recurring-suggestions', { method: 'POST', body: JSON.stringify({ enabled }) });
+  return setRecurringSuggestionsSettings({ enabled });
 }
 
 export async function dismissRecurringSuggestion(key: string): Promise<{ ok: true }> {

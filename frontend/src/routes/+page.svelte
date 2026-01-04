@@ -76,6 +76,9 @@
   let standbyScribbleRotateInterval: ReturnType<typeof setInterval> | null = null;
 
   let recurringSuggestionsEnabled = false;
+  let recurringSuggestionsWeekly = true;
+  let recurringSuggestionsBiweekly = true;
+  let recurringSuggestionsMonthly = true;
 
   async function loadStandbyScribbles() {
     try {
@@ -671,6 +674,9 @@
         clockStyle = normalizeClockStyle((s as any)?.clockStyle);
 
         recurringSuggestionsEnabled = Boolean((s as any)?.recurringSuggestionsEnabled);
+        recurringSuggestionsWeekly = (s as any)?.recurringSuggestionsWeekly !== false;
+        recurringSuggestionsBiweekly = (s as any)?.recurringSuggestionsBiweekly !== false;
+        recurringSuggestionsMonthly = (s as any)?.recurringSuggestionsMonthly !== false;
 
         try {
           const st = await fetchOutlookStatus();
@@ -1397,6 +1403,9 @@
       {outlookConnected}
       {todoEnabled}
       {recurringSuggestionsEnabled}
+      {recurringSuggestionsWeekly}
+      {recurringSuggestionsBiweekly}
+      {recurringSuggestionsMonthly}
       onSelect={onSelect}
       onEditEvent={openEditEventModal}
       onBack={closePlanner}

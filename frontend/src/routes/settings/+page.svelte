@@ -55,7 +55,7 @@
     , fetchMe
     , decodeJwtPayload
     , requestEmailVerification
-    , setRecurringSuggestionsEnabled
+    , setRecurringSuggestionsSettings
   } from '$lib/api';
 
   import { normalizeClockStyle, type ClockStyle } from '$lib/clockStyle';
@@ -195,6 +195,9 @@
   let rotateImagesError: string | null = null;
 
   let recurringSuggestionsEnabled = false;
+  let recurringSuggestionsWeekly = true;
+  let recurringSuggestionsBiweekly = true;
+  let recurringSuggestionsMonthly = true;
   let recurringSuggestionsSaving = false;
   let recurringSuggestionsError: string | null = null;
 
@@ -724,13 +727,21 @@
     clockStyle = normalizeClockStyle((settings as any)?.clockStyle);
 
     recurringSuggestionsEnabled = Boolean((settings as any)?.recurringSuggestionsEnabled);
+    recurringSuggestionsWeekly = (settings as any)?.recurringSuggestionsWeekly !== false;
+    recurringSuggestionsBiweekly = (settings as any)?.recurringSuggestionsBiweekly !== false;
+    recurringSuggestionsMonthly = (settings as any)?.recurringSuggestionsMonthly !== false;
   }
 
-  async function saveRecurringSuggestionsEnabled() {
+  async function saveRecurringSuggestionsSettings() {
     recurringSuggestionsError = null;
     recurringSuggestionsSaving = true;
     try {
-      await setRecurringSuggestionsEnabled(recurringSuggestionsEnabled);
+      await setRecurringSuggestionsSettings({
+        enabled: recurringSuggestionsEnabled,
+        weekly: recurringSuggestionsWeekly,
+        biweekly: recurringSuggestionsBiweekly,
+        monthly: recurringSuggestionsMonthly,
+      });
       await refreshSettings();
       showToast('Gespeichert');
     } catch {
@@ -1456,9 +1467,12 @@
     <CalendarSection
       {authed}
       bind:recurringSuggestionsEnabled
+      bind:recurringSuggestionsWeekly
+      bind:recurringSuggestionsBiweekly
+      bind:recurringSuggestionsMonthly
       {recurringSuggestionsSaving}
       {recurringSuggestionsError}
-      {saveRecurringSuggestionsEnabled}
+      {saveRecurringSuggestionsSettings}
       {tags}
       bind:newTagName
       bind:newTagColor
@@ -1494,10 +1508,6 @@
 
     <DashboardSection
       {authed}
-      {recurringSuggestionsEnabled}
-      {recurringSuggestionsSaving}
-      {recurringSuggestionsError}
-      saveRecurringSuggestionsEnabled={saveRecurringSuggestionsEnabled}
       {settings}
       bind:weatherLocation
       {weatherSaving}
