@@ -1,6 +1,9 @@
 <script lang="ts">
+  import type { MeDto } from '$lib/api';
+
   export let authed: boolean;
   export let isAdmin: boolean;
+  export let me: MeDto | null = null;
 
   export let email: string;
   export let password: string;
@@ -44,6 +47,16 @@
       {/if}
     </div>
   {:else}
-    <div class="bg-white/5 rounded-xl p-4 text-white/70 text-sm">Eingeloggt{isAdmin ? ' als Admin' : ''}.</div>
+    <div class="bg-white/5 rounded-xl p-4 text-white/70 text-sm">
+      {#if me}
+        Eingeloggt als <span class="text-white/90 font-medium">{me.name}</span>
+        <span class="text-white/50">({me.email})</span>
+        {#if me.role === 'admin' || isAdmin}
+          <span class="text-xs bg-white/10 rounded px-1.5 py-0.5 ml-2">Admin</span>
+        {/if}
+      {:else}
+        Eingeloggt{isAdmin ? ' als Admin' : ''}.
+      {/if}
+    </div>
   {/if}
 </section>

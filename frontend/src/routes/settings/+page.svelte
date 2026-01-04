@@ -17,6 +17,7 @@
     disconnectOutlookConnection,
     setOutlookConnectionColor,
     listUsers,
+    listUserRoster,
     createUser,
     deleteUser,
     resetUserPassword,
@@ -46,6 +47,8 @@
     type PersonColorKey,
     type OutlookStatusDto
     , type OutlookConnectionDto
+    , type MeDto
+    , fetchMe
   } from '$lib/api';
 
   import { normalizeClockStyle, type ClockStyle } from '$lib/clockStyle';
@@ -83,6 +86,7 @@
   let authError: string | null = null;
   let authed = false;
   let isAdmin = false;
+  let me: MeDto | null = null;
 
   // Return URL from query params (for mobile navigation from planner)
   $: returnUrl = $page.url.searchParams.get('from') || '/';
@@ -768,7 +772,11 @@
   }
 
   async function refreshUsers() {
-    users = await listUsers();
+    if (!authed) {
+      users = [];
+      return;
+    }
+    users = isAdmin ? await listUsers() : await listUserRoster();
   }
 
   async function refreshTags() {
@@ -802,9 +810,18 @@
       const res = await login(email, password);
       setToken(res.token);
       authed = true;
-      isAdmin = !!res.user?.isAdmin;
+
+      try {
+        me = await fetchMe();
+        isAdmin = !!me.isAdmin;
+      } catch {
+        // Fallback to login response if /auth/me isn't reachable yet
+        me = null;
+        isAdmin = !!res.user?.isAdmin;
+      }
+
       await refreshSettings();
-      if (isAdmin) await refreshUsers();
+      await refreshUsers();
       await refreshTags();
       await refreshPersons();
       await refreshOutlook();
@@ -812,6 +829,7 @@
       authError = 'Login fehlgeschlagen';
       authed = false;
       isAdmin = false;
+      me = null;
     }
   }
 
@@ -819,6 +837,7 @@
     setToken(null);
     authed = false;
     isAdmin = false;
+    me = null;
     users = [];
     persons = [];
     outlookStatus = null;
@@ -1114,29 +1133,27 @@
     loadEdgeConfig();
     const existing = getStoredToken();
     if (existing) {
-      authed = true;
+      try {
+        me = await fetchMe();
+        authed = true;
+        isAdmin = !!me.isAdmin;
 
-      await refreshSettings();
-      await refreshTags();
-      try {
+        await refreshSettings();
+        await refreshTags();
         await refreshUsers();
-        isAdmin = true;
-      } catch {
-        isAdmin = false;
-        users = [];
-      }
-      try {
         await refreshPersons();
+        await refreshOutlook();
       } catch {
         authed = false;
         isAdmin = false;
+        me = null;
+        users = [];
         persons = [];
       }
-
-      await refreshOutlook();
     } else {
       authed = false;
       isAdmin = false;
+      me = null;
     }
   });
 
@@ -1272,7 +1289,7 @@
       <a class="text-white/60 hover:text-white text-sm" href={returnUrl}>← Zurück</a>
     </div>
 
-    <AccountSection {authed} {isAdmin} bind:email bind:password {authError} {doLogin} {logout} />
+    <AccountSection {authed} {isAdmin} {me} bind:email bind:password {authError} {doLogin} {logout} />
 
     {#if showFirstRunWizard}
       <FirstRunSection

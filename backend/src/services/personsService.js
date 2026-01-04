@@ -11,36 +11,36 @@ function toPerson(row) {
   };
 }
 
-async function listPersons({ userId }) {
+async function listPersons({ calendarId }) {
   const pool = getPool();
   const result = await pool.query(
     `
     SELECT *
     FROM persons
-    WHERE user_id = $1
+    WHERE calendar_id = $1
     ORDER BY sort_order ASC, name ASC;
     `,
-    [userId]
+    [calendarId]
   );
   return result.rows.map(toPerson);
 }
 
-async function createPerson({ userId, name, color, sortOrder }) {
+async function createPerson({ calendarId, userId, name, color, sortOrder }) {
   const pool = getPool();
   const result = await pool.query(
     `
-    INSERT INTO persons (user_id, name, color, sort_order)
-    VALUES ($1, $2, $3, $4)
+    INSERT INTO persons (calendar_id, user_id, name, color, sort_order)
+    VALUES ($1, $2, $3, $4, $5)
     RETURNING *;
     `,
-    [userId, name, color, Number.isFinite(sortOrder) ? Number(sortOrder) : 0]
+    [calendarId, userId ?? null, name, color, Number.isFinite(sortOrder) ? Number(sortOrder) : 0]
   );
   return toPerson(result.rows[0]);
 }
 
-async function deletePerson({ userId, id }) {
+async function deletePerson({ calendarId, id }) {
   const pool = getPool();
-  const result = await pool.query('DELETE FROM persons WHERE id = $1 AND user_id = $2;', [id, userId]);
+  const result = await pool.query('DELETE FROM persons WHERE id = $1 AND calendar_id = $2;', [id, calendarId]);
   return result.rowCount > 0;
 }
 

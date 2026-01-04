@@ -1,7 +1,7 @@
 const express = require('express');
 const { z } = require('zod');
 
-const { requireAuth } = require('../middleware/auth');
+const { requireAuth, attachUserContext } = require('../middleware/auth');
 const { listTags, createTag, updateTag, deleteTag } = require('../services/tagsService');
 
 const tagsRouter = express.Router();
@@ -37,34 +37,39 @@ function validateBody(schema) {
   };
 }
 
-tagsRouter.get('/', requireAuth, async (_req, res) => {
-  const userId = Number(_req.auth?.sub);
-  const tags = await listTags({ userId });
+tagsRouter.get('/', requireAuth, attachUserContext, async (req, res) => {
+  const calendarId = Number(req.ctx?.calendarId);
+  if (!Number.isFinite(calendarId) || calendarId <= 0) return res.status(400).json({ error: 'missing_calendar' });
+  const tags = await listTags({ calendarId });
   res.json(tags);
 });
 
-tagsRouter.post('/', requireAuth, validateBody(createSchema), async (req, res) => {
-  const userId = Number(req.auth?.sub);
-  const created = await createTag({ userId, ...req.validatedBody });
+tagsRouter.post('/', requireAuth, attachUserContext, validateBody(createSchema), async (req, res) => {
+  const calendarId = Number(req.ctx?.calendarId);
+  if (!Number.isFinite(calendarId) || calendarId <= 0) return res.status(400).json({ error: 'missing_calendar' });
+  const userId = Number(req.ctx?.userId);
+  const created = await createTag({ calendarId, userId, ...req.validatedBody });
   res.status(201).json(created);
 });
 
-tagsRouter.put('/:id', requireAuth, validateBody(updateSchema), async (req, res) => {
+tagsRouter.put('/:id', requireAuth, attachUserContext, validateBody(updateSchema), async (req, res) => {
   const parsedId = idSchema.safeParse(req.params.id);
   if (!parsedId.success) return res.status(400).json({ error: 'invalid_id' });
 
-  const userId = Number(req.auth?.sub);
-  const updated = await updateTag({ userId, id: parsedId.data, patch: req.validatedBody });
+  const calendarId = Number(req.ctx?.calendarId);
+  if (!Number.isFinite(calendarId) || calendarId <= 0) return res.status(400).json({ error: 'missing_calendar' });
+  const updated = await updateTag({ calendarId, id: parsedId.data, patch: req.validatedBody });
   if (!updated) return res.status(404).json({ error: 'not_found' });
   res.json(updated);
 });
 
-tagsRouter.delete('/:id', requireAuth, async (req, res) => {
+tagsRouter.delete('/:id', requireAuth, attachUserContext, async (req, res) => {
   const parsedId = idSchema.safeParse(req.params.id);
   if (!parsedId.success) return res.status(400).json({ error: 'invalid_id' });
 
-  const userId = Number(req.auth?.sub);
-  const ok = await deleteTag({ userId, id: parsedId.data });
+  const calendarId = Number(req.ctx?.calendarId);
+  if (!Number.isFinite(calendarId) || calendarId <= 0) return res.status(400).json({ error: 'missing_calendar' });
+  const ok = await deleteTag({ calendarId, id: parsedId.data });
   if (!ok) return res.status(404).json({ error: 'not_found' });
   res.status(204).end();
 });

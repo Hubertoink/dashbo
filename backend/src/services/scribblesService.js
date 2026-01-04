@@ -6,22 +6,22 @@ const MAX_SCRIBBLES_PER_USER = 10;
  * List all active scribbles for a user (newest first).
  * Automatically cleans up expired scribbles.
  */
-async function listScribbles({ userId, limit = 10 }) {
+async function listScribbles({ calendarId, limit = 10 }) {
   const pool = getPool();
 
   // Clean up expired scribbles first
   await pool.query(
-    `DELETE FROM scribbles WHERE user_id = $1 AND expires_at IS NOT NULL AND expires_at < NOW()`,
-    [userId]
+    `DELETE FROM scribbles WHERE calendar_id = $1 AND expires_at IS NOT NULL AND expires_at < NOW()`,
+    [calendarId]
   );
 
   const result = await pool.query(
     `SELECT id, user_id, image_data, author_name, created_at, expires_at, pinned
      FROM scribbles
-     WHERE user_id = $1
+     WHERE calendar_id = $1
      ORDER BY pinned DESC, created_at DESC
      LIMIT $2`,
-    [userId, limit]
+    [calendarId, limit]
   );
 
   return result.rows.map(mapRow);
@@ -30,13 +30,13 @@ async function listScribbles({ userId, limit = 10 }) {
 /**
  * Get a single scribble by ID.
  */
-async function getScribble({ userId, scribbleId }) {
+async function getScribble({ calendarId, scribbleId }) {
   const pool = getPool();
   const result = await pool.query(
     `SELECT id, user_id, image_data, author_name, created_at, expires_at, pinned
      FROM scribbles
-     WHERE id = $1 AND user_id = $2`,
-    [scribbleId, userId]
+     WHERE id = $1 AND calendar_id = $2`,
+    [scribbleId, calendarId]
   );
 
   if (result.rows.length === 0) return null;
@@ -46,13 +46,13 @@ async function getScribble({ userId, scribbleId }) {
 /**
  * Create a new scribble. Enforces max limit per user.
  */
-async function createScribble({ userId, imageData, authorName, expiresAt }) {
+async function createScribble({ calendarId, userId, imageData, authorName, expiresAt }) {
   const pool = getPool();
 
   // Check current count and delete oldest if over limit
   const countResult = await pool.query(
-    `SELECT COUNT(*)::int AS c FROM scribbles WHERE user_id = $1`,
-    [userId]
+    `SELECT COUNT(*)::int AS c FROM scribbles WHERE calendar_id = $1`,
+    [calendarId]
   );
   const count = countResult.rows[0]?.c ?? 0;
 
@@ -62,19 +62,19 @@ async function createScribble({ userId, imageData, authorName, expiresAt }) {
       `DELETE FROM scribbles
        WHERE id IN (
          SELECT id FROM scribbles
-         WHERE user_id = $1 AND pinned = FALSE
+         WHERE calendar_id = $1 AND pinned = FALSE
          ORDER BY created_at ASC
          LIMIT $2
        )`,
-      [userId, count - MAX_SCRIBBLES_PER_USER + 1]
+      [calendarId, count - MAX_SCRIBBLES_PER_USER + 1]
     );
   }
 
   const result = await pool.query(
-    `INSERT INTO scribbles (user_id, image_data, author_name, expires_at)
-     VALUES ($1, $2, $3, $4)
+    `INSERT INTO scribbles (calendar_id, user_id, image_data, author_name, expires_at)
+     VALUES ($1, $2, $3, $4, $5)
      RETURNING id, user_id, image_data, author_name, created_at, expires_at, pinned`,
-    [userId, imageData, authorName || null, expiresAt || null]
+    [calendarId, userId, imageData, authorName || null, expiresAt || null]
   );
 
   return mapRow(result.rows[0]);
@@ -83,11 +83,11 @@ async function createScribble({ userId, imageData, authorName, expiresAt }) {
 /**
  * Delete a scribble.
  */
-async function deleteScribble({ userId, scribbleId }) {
+async function deleteScribble({ calendarId, scribbleId }) {
   const pool = getPool();
   const result = await pool.query(
-    `DELETE FROM scribbles WHERE id = $1 AND user_id = $2 RETURNING id`,
-    [scribbleId, userId]
+    `DELETE FROM scribbles WHERE id = $1 AND calendar_id = $2 RETURNING id`,
+    [scribbleId, calendarId]
   );
   return result.rowCount > 0;
 }
@@ -95,11 +95,11 @@ async function deleteScribble({ userId, scribbleId }) {
 /**
  * Pin or unpin a scribble.
  */
-async function pinScribble({ userId, scribbleId, pinned }) {
+async function pinScribble({ calendarId, scribbleId, pinned }) {
   const pool = getPool();
   const result = await pool.query(
-    `UPDATE scribbles SET pinned = $3 WHERE id = $1 AND user_id = $2 RETURNING id`,
-    [scribbleId, userId, pinned]
+    `UPDATE scribbles SET pinned = $3 WHERE id = $1 AND calendar_id = $2 RETURNING id`,
+    [scribbleId, calendarId, pinned]
   );
   return result.rowCount > 0;
 }

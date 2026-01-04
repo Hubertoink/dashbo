@@ -1,6 +1,7 @@
 const express = require('express');
 const { z } = require('zod');
 
+const { requireAuth, attachUserContext } = require('../middleware/auth');
 const { login } = require('../services/authService');
 
 const authRouter = express.Router();
@@ -20,6 +21,22 @@ authRouter.post('/login', async (req, res) => {
   if (!result) return res.status(401).json({ error: 'invalid_credentials' });
 
   return res.json(result);
+});
+
+// GET /auth/me - Return the authenticated user's identity/context
+authRouter.get('/me', requireAuth, attachUserContext, async (req, res) => {
+  if (!req.ctx?.userId) {
+    return res.status(401).json({ error: 'unauthorized' });
+  }
+
+  return res.json({
+    id: req.ctx.userId,
+    email: req.ctx.email,
+    name: req.ctx.name,
+    isAdmin: Boolean(req.ctx.isAdmin),
+    role: req.ctx.role,
+    calendarId: req.ctx.calendarId,
+  });
 });
 
 module.exports = { authRouter };

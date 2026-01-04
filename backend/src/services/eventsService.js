@@ -20,10 +20,10 @@ function normalizePersonIds({ personIds, personId }) {
   return Number.isInteger(n) && n > 0 ? [n] : [];
 }
 
-async function assertPersonsBelongToUser({ pool, userId, personIds }) {
+async function assertPersonsBelongToCalendar({ pool, calendarId, personIds }) {
   if (!personIds || personIds.length === 0) return;
   const ids = uniqueNumbers(personIds);
-  const r = await pool.query('SELECT id FROM persons WHERE user_id = $1 AND id = ANY($2::bigint[]);', [userId, ids]);
+  const r = await pool.query('SELECT id FROM persons WHERE calendar_id = $1 AND id = ANY($2::bigint[]);', [calendarId, ids]);
   if (r.rowCount !== ids.length) {
     const err = new Error('invalid_person');
     err.status = 400;
@@ -204,7 +204,7 @@ function expandRecurringEvent(baseEvent, from, to) {
   return out;
 }
 
-async function getEventById({ userId, id }) {
+async function getEventById({ calendarId, id }) {
   const pool = getPool();
   const result = await pool.query(
     `
@@ -212,18 +212,18 @@ async function getEventById({ userId, id }) {
       t.id AS tag_id, t.name AS tag_name, t.color AS tag_color,
       p.id AS person_id, p.name AS person_name, p.color AS person_color
     FROM events e
-    LEFT JOIN tags t ON t.id = e.tag_id
+    LEFT JOIN tags t ON t.id = e.tag_id AND t.calendar_id = e.calendar_id
     LEFT JOIN event_persons ep ON ep.event_id = e.id
-    LEFT JOIN persons p ON p.id = ep.person_id AND p.user_id = e.user_id
-    WHERE e.id = $1 AND e.user_id = $2;
+    LEFT JOIN persons p ON p.id = ep.person_id AND p.calendar_id = e.calendar_id
+    WHERE e.id = $1 AND e.calendar_id = $2;
     `,
-    [id, userId]
+    [id, calendarId]
   );
   if (result.rowCount === 0) return null;
   return toEventFromRows(result.rows);
 }
 
-async function listEventsBetween({ userId, from, to }) {
+async function listEventsBetween({ calendarId, from, to }) {
   const pool = getPool();
 
   // If from/to not provided, return recent-ish events (next 30 days)
@@ -236,10 +236,10 @@ async function listEventsBetween({ userId, from, to }) {
       t.id AS tag_id, t.name AS tag_name, t.color AS tag_color,
       p.id AS person_id, p.name AS person_name, p.color AS person_color
     FROM events e
-    LEFT JOIN tags t ON t.id = e.tag_id AND t.user_id = e.user_id
+    LEFT JOIN tags t ON t.id = e.tag_id AND t.calendar_id = e.calendar_id
     LEFT JOIN event_persons ep ON ep.event_id = e.id
-    LEFT JOIN persons p ON p.id = ep.person_id AND p.user_id = e.user_id
-    WHERE e.user_id = $1 AND (
+    LEFT JOIN persons p ON p.id = ep.person_id AND p.calendar_id = e.calendar_id
+    WHERE e.calendar_id = $1 AND (
       -- Non-recurring events:
       -- If end_at is NULL, treat it as a point-in-time event at start_at.
       (
@@ -257,7 +257,7 @@ async function listEventsBetween({ userId, from, to }) {
     )
     ORDER BY e.start_at ASC, p.sort_order ASC, p.name ASC;
     `,
-    [userId, effectiveFrom.toISOString(), effectiveTo.toISOString()]
+    [calendarId, effectiveFrom.toISOString(), effectiveTo.toISOString()]
   );
 
   const baseEvents = groupEvents(result.rows);
@@ -276,7 +276,8 @@ async function listEventsBetween({ userId, from, to }) {
 }
 
 async function insertEvent({
-  userId,
+  calendarId,
+  createdByUserId,
   title,
   description,
   location,
@@ -293,7 +294,7 @@ async function insertEvent({
   const normalizedPersonIds = normalizePersonIds({ personIds, personId });
 
   if (tagId != null) {
-    const ok = await pool.query('SELECT 1 FROM tags WHERE id = $1 AND user_id = $2;', [tagId, userId]);
+    const ok = await pool.query('SELECT 1 FROM tags WHERE id = $1 AND calendar_id = $2;', [tagId, calendarId]);
     if (ok.rowCount === 0) {
       const err = new Error('invalid_tag');
       err.status = 400;
@@ -301,7 +302,7 @@ async function insertEvent({
     }
   }
 
-  await assertPersonsBelongToUser({ pool, userId, personIds: normalizedPersonIds });
+  await assertPersonsBelongToCalendar({ pool, calendarId, personIds: normalizedPersonIds });
 
   const recurrenceFreq = recurrence ?? null;
   const recurrenceInterval = 1;
@@ -312,12 +313,13 @@ async function insertEvent({
     const primaryPersonId = normalizedPersonIds[0] ?? null;
     const result = await pool.query(
       `
-      INSERT INTO events (user_id, title, description, location, start_at, end_at, all_day, tag_id, person_id, recurrence_freq, recurrence_interval, recurrence_until)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+      INSERT INTO events (calendar_id, user_id, title, description, location, start_at, end_at, all_day, tag_id, person_id, recurrence_freq, recurrence_interval, recurrence_until)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
       RETURNING id;
       `,
       [
-        userId,
+        calendarId,
+        createdByUserId ?? null,
         title,
         description ?? null,
         location ?? null,
@@ -340,14 +342,14 @@ async function insertEvent({
     }
 
     await pool.query('COMMIT;');
-    return getEventById({ userId, id: eventId });
+    return getEventById({ calendarId, id: eventId });
   } catch (e) {
     await pool.query('ROLLBACK;');
     throw e;
   }
 }
 
-async function patchEvent({ userId, id, patch }) {
+async function patchEvent({ calendarId, userId, id, patch }) {
   const pool = getPool();
 
   const personsProvided = patch.personIds !== undefined || patch.personId !== undefined;
@@ -371,7 +373,7 @@ async function patchEvent({ userId, id, patch }) {
   if (patch.allDay !== undefined) add('all_day', Boolean(patch.allDay));
   if (patch.tagId !== undefined) {
     if (patch.tagId != null) {
-      const ok = await pool.query('SELECT 1 FROM tags WHERE id = $1 AND user_id = $2;', [patch.tagId, userId]);
+      const ok = await pool.query('SELECT 1 FROM tags WHERE id = $1 AND calendar_id = $2;', [patch.tagId, calendarId]);
       if (ok.rowCount === 0) {
         const err = new Error('invalid_tag');
         err.status = 400;
@@ -382,13 +384,13 @@ async function patchEvent({ userId, id, patch }) {
   }
 
   if (personsProvided) {
-    await assertPersonsBelongToUser({ pool, userId, personIds: normalizedPersonIds });
+    await assertPersonsBelongToCalendar({ pool, calendarId, personIds: normalizedPersonIds });
     add('person_id', (normalizedPersonIds && normalizedPersonIds[0]) ?? null);
   }
   if (patch.recurrence !== undefined) add('recurrence_freq', patch.recurrence ?? null);
 
   if (fields.length === 0) {
-    return getEventById({ userId, id });
+    return getEventById({ calendarId, id });
   }
 
   add('updated_at', new Date().toISOString());
@@ -399,10 +401,10 @@ async function patchEvent({ userId, id, patch }) {
       `
       UPDATE events
       SET ${fields.join(', ')}
-      WHERE id = $${values.length + 1} AND user_id = $${values.length + 2}
+      WHERE id = $${values.length + 1} AND calendar_id = $${values.length + 2}
       RETURNING id;
       `,
-      [...values, id, userId]
+      [...values, id, calendarId]
     );
 
     if (result.rowCount === 0) {
@@ -422,16 +424,16 @@ async function patchEvent({ userId, id, patch }) {
     }
 
     await pool.query('COMMIT;');
-    return getEventById({ userId, id: eventId });
+    return getEventById({ calendarId, id: eventId });
   } catch (e) {
     await pool.query('ROLLBACK;');
     throw e;
   }
 }
 
-async function removeEvent({ userId, id }) {
+async function removeEvent({ calendarId, id }) {
   const pool = getPool();
-  const result = await pool.query('DELETE FROM events WHERE id = $1 AND user_id = $2;', [id, userId]);
+  const result = await pool.query('DELETE FROM events WHERE id = $1 AND calendar_id = $2;', [id, calendarId]);
   return result.rowCount > 0;
 }
 

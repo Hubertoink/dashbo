@@ -332,17 +332,44 @@ export async function login(email: string, password: string): Promise<LoginRespo
   return api<LoginResponse>('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) });
 }
 
+export type MeDto = {
+  id: number;
+  email: string;
+  name: string;
+  isAdmin: boolean;
+  role: 'admin' | 'member' | string;
+  calendarId: number | null;
+};
+
+export async function fetchMe(): Promise<MeDto> {
+  return api<MeDto>('/auth/me');
+}
+
 export type UserDto = {
   id: number;
   email: string;
   name: string;
   isAdmin: boolean;
-  createdAt: string;
-  updatedAt: string;
+  role?: string;
+  calendarId?: number | null;
+  createdAt?: string;
+  updatedAt?: string;
 };
 
 export async function listUsers(): Promise<UserDto[]> {
   return api<UserDto[]>('/users');
+}
+
+export type UserRosterDto = {
+  id: number;
+  email: string;
+  name: string;
+  isAdmin: boolean;
+  role: string;
+};
+
+export async function listUserRoster(): Promise<UserRosterDto[]> {
+  return api<UserRosterDto[]>('/users/roster');
 }
 
 export async function createUser(input: { email: string; name: string; password: string; isAdmin?: boolean }): Promise<UserDto> {
