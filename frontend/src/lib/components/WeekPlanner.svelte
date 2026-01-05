@@ -1,6 +1,16 @@
 <script lang="ts">
-  import { fetchTodos, updateTodo, type EventDto, type HolidayDto, type TodoItemDto } from '$lib/api';
-  import { formatGermanShortDate } from '$lib/date';
+  import {
+    dismissRecurringSuggestion,
+    fetchEvents,
+    fetchSettings,
+    fetchTodos,
+    updateTodo,
+    type EventDto,
+    type HolidayDto,
+    type TodoItemDto
+  } from '$lib/api';
+  import { formatGermanShortDate, sameDay } from '$lib/date';
+  import { onMount } from 'svelte';
   import { fade, fly } from 'svelte/transition';
   import WeekPlannerTimeGrid from './WeekPlannerTimeGrid.svelte';
   import QuickAddEventModal from './QuickAddEventModal.svelte';
@@ -12,6 +22,11 @@
   export let holidays: HolidayDto[] = [];
   export let outlookConnected = false;
   export let todoEnabled = true;
+  export let recurringSuggestionsEnabled = false;
+  export let recurringSuggestionsWeekly = true;
+  export let recurringSuggestionsBiweekly = true;
+  export let recurringSuggestionsMonthly = true;
+  export let recurringSuggestionsBirthdays = true;
   export let onSelect: (d: Date) => void;
   export let onEditEvent: (e: EventDto) => void;
   export let onBack: () => void;
@@ -21,13 +36,471 @@
   let quickAddOpen = false;
   let quickAddDate = new Date();
 
+  let quickAddPrefillTitle: string | null = null;
+  let quickAddPrefillStartTime: string | null = null;
+  let quickAddPrefillEndTime: string | null = null;
+  let quickAddPrefillAllDay: boolean | null = null;
+  let quickAddPrefillPersonIds: number[] | null = null;
+  let quickAddPrefillTagId: number | null = null;
+
   function openQuickAdd(day: Date) {
     quickAddDate = day;
+    quickAddPrefillTitle = null;
+    quickAddPrefillStartTime = null;
+    quickAddPrefillEndTime = null;
+    quickAddPrefillAllDay = null;
+    quickAddPrefillPersonIds = null;
+    quickAddPrefillTagId = null;
     quickAddOpen = true;
   }
 
   function closeQuickAdd() {
     quickAddOpen = false;
+  }
+
+  type EventSuggestionDto = import('./WeekPlannerDay.svelte').EventSuggestionDto;
+  let suggestions: EventSuggestionDto[] = [];
+  let suggestionsLoading = false;
+  let suggestionsForWeekKey = '';
+  let dismissedSuggestionKeys = new Set<string>();
+  let dismissedLoaded = false;
+
+  async function loadDismissed() {
+    if (dismissedLoaded) return;
+    dismissedLoaded = true;
+    try {
+      const s = await fetchSettings();
+      const arr = Array.isArray((s as any)?.recurringSuggestionsDismissed)
+        ? (((s as any).recurringSuggestionsDismissed as any[]) ?? []).map((v) => String(v || '').trim()).filter(Boolean)
+        : [];
+      dismissedSuggestionKeys = new Set(arr.slice(0, 1000));
+    } catch {
+      dismissedSuggestionKeys = new Set();
+    }
+  }
+
+  onMount(() => {
+    if (recurringSuggestionsEnabled) {
+      void loadDismissed();
+    }
+  });
+
+  function normalizeTitle(t: string): string {
+    return String(t || '')
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, ' ');
+  }
+
+  function weekdayMon0(d: Date): number {
+    return (d.getDay() + 6) % 7;
+  }
+
+  function minutesSinceMidnight(d: Date): number {
+    return d.getHours() * 60 + d.getMinutes();
+  }
+
+  function bucket15(mins: number): number {
+    return Math.max(0, Math.min(24 * 60 - 1, Math.round(mins / 15) * 15));
+  }
+
+  function hhmmFromMinutes(mins: number): string {
+    const h = Math.floor(mins / 60);
+    const m = mins % 60;
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+  }
+
+  function timeFromIso(iso: string): string {
+    const d = new Date(iso);
+    const h = String(d.getHours()).padStart(2, '0');
+    const m = String(d.getMinutes()).padStart(2, '0');
+    return `${h}:${m}`;
+  }
+
+  function overlaps(aStart: Date, aEnd: Date | null, bStart: Date, bEnd: Date | null): boolean {
+    const a0 = aStart.getTime();
+    const a1 = (aEnd ?? aStart).getTime();
+    const b0 = bStart.getTime();
+    const b1 = (bEnd ?? bStart).getTime();
+    return a0 <= b1 && b0 <= a1;
+  }
+
+  // Get the nth weekday occurrence in a month (1-based: 1st, 2nd, 3rd, 4th, 5th)
+  function getNthWeekdayOfMonth(d: Date): number {
+    const dayOfMonth = d.getDate();
+    return Math.ceil(dayOfMonth / 7);
+  }
+
+  // Check if target date is the nth weekday of its month
+  function isNthWeekdayOfMonth(target: Date, nth: number, weekday: number): boolean {
+    if (weekdayMon0(target) !== weekday) return false;
+    return getNthWeekdayOfMonth(target) === nth;
+  }
+
+  // Get week number within the lookback period (for biweekly detection)
+  function getWeekIndex(d: Date, referenceStart: Date): number {
+    const msPerWeek = 7 * 24 * 60 * 60 * 1000;
+    const diff = d.getTime() - referenceStart.getTime();
+    return Math.floor(diff / msPerWeek);
+  }
+
+  function isLeapYear(y: number): boolean {
+    return (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0;
+  }
+
+  function isBirthdayEvent(e: EventDto): boolean {
+    const titleNorm = normalizeTitle(e.title);
+    const tagNorm = normalizeTitle(e.tag?.name ?? '');
+    const re = /\b(geburtstag|birthday)\b/i;
+    return re.test(titleNorm) || re.test(tagNorm);
+  }
+
+  async function loadSuggestionsForWeek(weekStartLocal: Date, weekEndLocal: Date) {
+    if (!recurringSuggestionsEnabled) {
+      suggestions = [];
+      return;
+    }
+
+    if (!dismissedLoaded) {
+      await loadDismissed();
+    }
+
+    const weekKey = dateKey(weekStartLocal);
+    if (suggestionsLoading || suggestionsForWeekKey === weekKey) return;
+    suggestionsLoading = true;
+
+    try {
+      const lookbackWeeks = 12; // Extended for monthly patterns
+      const from = new Date(weekStartLocal);
+      from.setDate(from.getDate() - lookbackWeeks * 7);
+      from.setHours(0, 0, 0, 0);
+
+      const to = new Date(weekStartLocal);
+      to.setHours(0, 0, 0, 0);
+
+      const historyPromise = fetchEvents(from, to);
+
+      const historyBirthdaysPromise = (() => {
+        if (!recurringSuggestionsBirthdays) return Promise.resolve([] as EventDto[]);
+        const fromBirthdays = new Date(weekStartLocal);
+        fromBirthdays.setDate(fromBirthdays.getDate() - 370);
+        fromBirthdays.setHours(0, 0, 0, 0);
+        return fetchEvents(fromBirthdays, to);
+      })();
+
+      const [history, historyBirthdays] = await Promise.all([historyPromise, historyBirthdaysPromise]);
+
+      const candidates = (history ?? []).filter((e) => {
+        if (e.source === 'outlook') return false;
+        if (e.allDay) return false;
+        if (e.recurrence) return false;
+        if (!e.title || !String(e.title).trim()) return false;
+        return true;
+      });
+
+      const birthdayCandidates = recurringSuggestionsBirthdays
+        ? (historyBirthdays ?? []).filter((e) => {
+        if (e.source === 'outlook') return false;
+        if (e.recurrence) return false;
+        if (!e.title || !String(e.title).trim()) return false;
+        return isBirthdayEvent(e);
+        })
+        : [];
+
+      const currentWeekEvents = (events ?? []).filter((e) => {
+        const s = new Date(e.startAt);
+        if (Number.isNaN(s.getTime())) return false;
+        return s.getTime() >= weekStartLocal.getTime() && s.getTime() <= weekEndLocal.getTime();
+      });
+
+      // ===== PATTERN TYPES =====
+      // 1. Weekly: same weekday + time + title (existing)
+      // 2. Biweekly: same weekday + time + title, but every 2 weeks
+      // 3. Monthly: same nth-weekday + time + title (e.g., "3rd Wednesday")
+
+      type PatternAgg = {
+        count: number;
+        weeks: Set<string>;
+        dates: Date[];
+        sample: EventDto;
+        weekday: number;
+        startBucket: number;
+        durationBucket: number | null;
+        titleNorm: string;
+        patternType: 'weekly' | 'biweekly' | 'monthly';
+        monthlyNth?: number;
+      };
+
+      const weeklyBySig = new Map<string, PatternAgg>();
+      const biweeklyBySig = new Map<string, PatternAgg>();
+      const monthlyBySig = new Map<string, PatternAgg>();
+
+      for (const e of candidates) {
+        const start = new Date(e.startAt);
+        if (Number.isNaN(start.getTime())) continue;
+        const wd = weekdayMon0(start);
+        const startMin = bucket15(minutesSinceMidnight(start));
+
+        const end = e.endAt ? new Date(e.endAt) : null;
+        const durationMinRaw = end && !Number.isNaN(end.getTime()) ? Math.max(0, Math.round((end.getTime() - start.getTime()) / 60000)) : null;
+        const durationBucket = durationMinRaw != null ? bucket15(durationMinRaw) : null;
+
+        const titleNorm = normalizeTitle(e.title);
+        if (!titleNorm) continue;
+
+        const weekOfEvent = mondayStart(start);
+        const weekId = dateKey(weekOfEvent);
+        const nthWeekday = getNthWeekdayOfMonth(start);
+
+        // Weekly signature
+        const weeklySig = `weekly|${wd}|${startMin}|${durationBucket ?? 'x'}|${titleNorm}`;
+        const existingWeekly = weeklyBySig.get(weeklySig);
+        if (existingWeekly) {
+          existingWeekly.count++;
+          existingWeekly.weeks.add(weekId);
+          existingWeekly.dates.push(start);
+          if (new Date(existingWeekly.sample.startAt).getTime() < start.getTime()) {
+            existingWeekly.sample = e;
+          }
+        } else {
+          weeklyBySig.set(weeklySig, {
+            count: 1,
+            weeks: new Set([weekId]),
+            dates: [start],
+            sample: e,
+            weekday: wd,
+            startBucket: startMin,
+            durationBucket,
+            titleNorm,
+            patternType: 'weekly',
+          });
+        }
+
+        // Biweekly signature (group by odd/even week index)
+        const weekIdx = getWeekIndex(start, from);
+        const biweeklyParity = weekIdx % 2;
+        const biweeklySig = `biweekly|${wd}|${startMin}|${durationBucket ?? 'x'}|${titleNorm}|${biweeklyParity}`;
+        const existingBiweekly = biweeklyBySig.get(biweeklySig);
+        if (existingBiweekly) {
+          existingBiweekly.count++;
+          existingBiweekly.weeks.add(weekId);
+          existingBiweekly.dates.push(start);
+          if (new Date(existingBiweekly.sample.startAt).getTime() < start.getTime()) {
+            existingBiweekly.sample = e;
+          }
+        } else {
+          biweeklyBySig.set(biweeklySig, {
+            count: 1,
+            weeks: new Set([weekId]),
+            dates: [start],
+            sample: e,
+            weekday: wd,
+            startBucket: startMin,
+            durationBucket,
+            titleNorm,
+            patternType: 'biweekly',
+          });
+        }
+
+        // Monthly signature (nth weekday of month)
+        const monthlySig = `monthly|${nthWeekday}|${wd}|${startMin}|${durationBucket ?? 'x'}|${titleNorm}`;
+        const existingMonthly = monthlyBySig.get(monthlySig);
+        if (existingMonthly) {
+          existingMonthly.count++;
+          existingMonthly.weeks.add(weekId);
+          existingMonthly.dates.push(start);
+          if (new Date(existingMonthly.sample.startAt).getTime() < start.getTime()) {
+            existingMonthly.sample = e;
+          }
+        } else {
+          monthlyBySig.set(monthlySig, {
+            count: 1,
+            weeks: new Set([weekId]),
+            dates: [start],
+            sample: e,
+            weekday: wd,
+            startBucket: startMin,
+            durationBucket,
+            titleNorm,
+            patternType: 'monthly',
+            monthlyNth: nthWeekday,
+          });
+        }
+      }
+
+      const out: EventSuggestionDto[] = [];
+      const addedSigBases = new Set<string>(); // Prevent duplicates across pattern types
+
+      // Helper to check conflicts and add suggestion
+      const tryAddSuggestion = (sig: string, agg: PatternAgg, targetDay: Date) => {
+        const sigBase = `${agg.weekday}|${agg.startBucket}|${agg.durationBucket ?? 'x'}|${agg.titleNorm}`;
+        if (addedSigBases.has(sigBase)) return;
+        if (dismissedSuggestionKeys.has(sig)) return;
+
+        const start = new Date(targetDay);
+        const hhmm = hhmmFromMinutes(agg.startBucket);
+        const [hh, mm] = hhmm.split(':').map((x) => Number(x));
+        start.setHours(hh || 0, mm || 0, 0, 0);
+
+        const end = agg.durationBucket != null ? new Date(start.getTime() + agg.durationBucket * 60000) : null;
+
+        // Check for conflicts with existing events
+        const conflicts = currentWeekEvents.some((e) => {
+          const es = new Date(e.startAt);
+          if (Number.isNaN(es.getTime())) return false;
+          const ee = e.endAt ? new Date(e.endAt) : null;
+          if (ee && Number.isNaN(ee.getTime())) return overlaps(start, end, es, null);
+          return overlaps(start, end, es, ee);
+        });
+
+        if (conflicts) return;
+
+        addedSigBases.add(sigBase);
+        out.push({
+          suggestionKey: sig,
+          title: agg.sample.title,
+          startAt: start.toISOString(),
+          endAt: end ? end.toISOString() : null,
+          allDay: false,
+          tag: agg.sample.tag,
+          person: agg.sample.person,
+          persons: agg.sample.persons,
+        });
+      };
+
+      // 1. Process weekly patterns (need 3+ occurrences in 3+ different weeks)
+      if (recurringSuggestionsWeekly) {
+        for (const [sig, agg] of weeklyBySig) {
+          if (agg.count < 3 || agg.weeks.size < 3) continue;
+
+          const targetDay = new Date(weekStartLocal);
+          targetDay.setDate(targetDay.getDate() + agg.weekday);
+          targetDay.setHours(0, 0, 0, 0);
+
+          tryAddSuggestion(sig, agg, targetDay);
+        }
+      }
+
+      // 2. Process biweekly patterns (need 2+ occurrences, check if this week matches parity)
+      if (recurringSuggestionsBiweekly) {
+        const currentWeekIdx = getWeekIndex(weekStartLocal, from);
+        for (const [sig, agg] of biweeklyBySig) {
+          if (agg.count < 2 || agg.weeks.size < 2) continue;
+
+          // Check if this week has the right parity
+          const sigParts = sig.split('|');
+          const expectedParity = Number(sigParts[sigParts.length - 1]);
+          if (currentWeekIdx % 2 !== expectedParity) continue;
+
+          const targetDay = new Date(weekStartLocal);
+          targetDay.setDate(targetDay.getDate() + agg.weekday);
+          targetDay.setHours(0, 0, 0, 0);
+
+          tryAddSuggestion(sig, agg, targetDay);
+        }
+      }
+
+      // 3. Process monthly patterns (need 2+ occurrences, check if target week has nth weekday)
+      if (recurringSuggestionsMonthly) {
+        for (const [sig, agg] of monthlyBySig) {
+          if (agg.count < 2 || agg.weeks.size < 2) continue;
+          if (agg.monthlyNth == null) continue;
+
+          // Find if any day in the target week is the nth weekday
+          for (let i = 0; i < 7; i++) {
+            const day = new Date(weekStartLocal);
+            day.setDate(weekStartLocal.getDate() + i);
+            day.setHours(0, 0, 0, 0);
+
+            if (isNthWeekdayOfMonth(day, agg.monthlyNth, agg.weekday)) {
+              tryAddSuggestion(sig, agg, day);
+              break;
+            }
+          }
+        }
+      }
+
+      // 4. Birthdays: yearly all-day suggestion based on title/tag
+      if (recurringSuggestionsBirthdays) {
+        const birthdaySeenForDay = new Set<string>();
+        for (const e of birthdayCandidates) {
+          const baseTitleNorm = normalizeTitle(e.title);
+          if (!baseTitleNorm) continue;
+
+          const eventStart = new Date(e.startAt);
+          if (Number.isNaN(eventStart.getTime())) continue;
+
+          const srcMonth = eventStart.getMonth();
+          const srcDay = eventStart.getDate();
+
+          for (let i = 0; i < 7; i++) {
+            const day = new Date(weekStartLocal);
+            day.setDate(weekStartLocal.getDate() + i);
+            day.setHours(0, 0, 0, 0);
+
+            const year = day.getFullYear();
+            const month = day.getMonth();
+            const date = day.getDate();
+
+            const effDay = srcMonth === 1 && srcDay === 29 && !isLeapYear(year) ? 28 : srcDay;
+            if (month !== srcMonth || date !== effDay) continue;
+
+            const sig = `birthday|${dateKey(day)}|${baseTitleNorm}`;
+            if (dismissedSuggestionKeys.has(sig)) continue;
+
+            const dayKey = `${dateKey(day)}|${baseTitleNorm}`;
+            if (birthdaySeenForDay.has(dayKey)) continue;
+
+            // Avoid duplicates if event already exists that day (same title)
+            const alreadyExists = currentWeekEvents.some((x) => {
+              const xs = new Date(x.startAt);
+              if (Number.isNaN(xs.getTime())) return false;
+              return sameDay(xs, day) && normalizeTitle(x.title) === baseTitleNorm;
+            });
+            if (alreadyExists) continue;
+
+            birthdaySeenForDay.add(dayKey);
+            out.push({
+              suggestionKey: sig,
+              title: e.title,
+              startAt: isoNoonLocal(day),
+              endAt: null,
+              allDay: true,
+              tag: e.tag,
+              person: e.person,
+              persons: e.persons,
+            });
+            break;
+          }
+        }
+      }
+
+      out.sort((a, b) => {
+        if (a.allDay !== b.allDay) return a.allDay ? -1 : 1;
+        return new Date(a.startAt).getTime() - new Date(b.startAt).getTime();
+      });
+
+      suggestions = out.slice(0, 10);
+      suggestionsForWeekKey = weekKey;
+    } catch {
+      suggestions = [];
+      suggestionsForWeekKey = weekKey;
+    } finally {
+      suggestionsLoading = false;
+    }
+  }
+
+  async function dismissSuggestion(s: EventSuggestionDto) {
+    const key = String(s?.suggestionKey || '').trim();
+    if (!key) return;
+    // optimistic
+    dismissedSuggestionKeys = new Set([key, ...Array.from(dismissedSuggestionKeys)]);
+    suggestions = suggestions.filter((x) => x.suggestionKey !== key);
+    try {
+      await dismissRecurringSuggestion(key);
+    } catch {
+      // keep optimistic behavior; worst case user will see it again after reload
+    }
   }
 
   function handleEventCreated() {
@@ -170,6 +643,12 @@
   $: weekEnd = days[6] ?? addLocalDays(weekStart, 6);
   $: weekNumber = getWeekNumber(selectedDate);
 
+  $: if (recurringSuggestionsEnabled) {
+    void loadSuggestionsForWeek(weekStart, weekEnd);
+  } else {
+    suggestions = [];
+    suggestionsForWeekKey = '';
+  }
   $: todosByDay = (() => {
     const m = new Map<string, TodoItemDto[]>();
     for (const t of todoItems) {
@@ -182,6 +661,33 @@
     }
     return m;
   })();
+
+  $: suggestionsByDay = (() => {
+    const m = new Map<string, EventSuggestionDto[]>();
+    for (const s of suggestions) {
+      const d = startOfLocalDay(new Date(s.startAt));
+      const k = dateKey(d);
+      const arr = m.get(k) ?? [];
+      arr.push(s);
+      m.set(k, arr);
+    }
+    for (const arr of m.values()) {
+      arr.sort((a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime());
+    }
+    return m;
+  })();
+
+  function acceptSuggestion(s: EventSuggestionDto) {
+    const d = new Date(s.startAt);
+    quickAddDate = d;
+    quickAddPrefillTitle = s.title;
+    quickAddPrefillStartTime = timeFromIso(s.startAt);
+    quickAddPrefillEndTime = s.endAt ? timeFromIso(s.endAt) : '';
+    quickAddPrefillAllDay = Boolean(s.allDay);
+    quickAddPrefillPersonIds = (s.persons && s.persons.length > 0 ? s.persons : s.person ? [s.person] : []).map((p) => p.id);
+    quickAddPrefillTagId = s.tag?.id ?? null;
+    quickAddOpen = true;
+  }
 </script>
 
 <!-- Backdrop -->
@@ -255,9 +761,12 @@
         {days}
         {events}
         {holidays}
+        suggestions={suggestions}
         onAddEvent={(d) => openQuickAdd(d)}
         onEditEvent={onEditEvent}
         onEventDeleted={handleEventDeleted}
+        onAcceptSuggestion={acceptSuggestion}
+        onDismissSuggestion={dismissSuggestion}
       />
     </div>
   </div>
@@ -281,6 +790,12 @@
 <QuickAddEventModal
   open={quickAddOpen}
   prefilledDate={quickAddDate}
+  prefillTitle={quickAddPrefillTitle}
+  prefillStartTime={quickAddPrefillStartTime}
+  prefillEndTime={quickAddPrefillEndTime}
+  prefillAllDay={quickAddPrefillAllDay}
+  prefillPersonIds={quickAddPrefillPersonIds}
+  prefillTagId={quickAddPrefillTagId}
   {outlookConnected}
   {todoEnabled}
   onClose={closeQuickAdd}

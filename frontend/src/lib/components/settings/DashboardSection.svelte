@@ -116,6 +116,12 @@
   export let rotateError: string | null;
   export let saveBackgroundRotate: () => void | Promise<void>;
 
+  export let backgroundRotateImages: string[];
+  export let rotateImagesSaving: boolean;
+  export let rotateImagesError: string | null;
+  export let toggleBackgroundRotateImage: (filename: string) => void;
+  export let saveBackgroundRotateImages: () => void | Promise<void>;
+
   export let uploadFiles: File[];
   export let savingBg: boolean;
   export let uploadProgress: number;
@@ -233,6 +239,11 @@
         {rotateSaving}
         {rotateError}
         {saveBackgroundRotate}
+        bind:backgroundRotateImages
+        {rotateImagesSaving}
+        {rotateImagesError}
+        toggleRotateImage={toggleBackgroundRotateImage}
+        {saveBackgroundRotateImages}
         {uploadFiles}
         {savingBg}
         {uploadProgress}

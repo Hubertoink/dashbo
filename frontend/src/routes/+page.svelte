@@ -9,7 +9,7 @@
   import ForecastWidget from '$lib/components/ForecastWidget.svelte';
   import MusicWidget from '$lib/components/MusicWidget.svelte';
   import ScribbleWidget from '$lib/components/ScribbleWidget.svelte';
-  import CalendarMonth from '$lib/components/CalendarMonth.svelte';
+  import CalendarMonth, { type DashboardSuggestionDto } from '$lib/components/CalendarMonth.svelte';
   import WeekView from '$lib/components/WeekView.svelte';
   import WeekPlanner from '$lib/components/WeekPlanner.svelte';
   import EventsPanel from '$lib/components/EventsPanel.svelte';
@@ -26,7 +26,8 @@
     type TagColorKey,
     fetchSettings,
     fetchOutlookStatus,
-    getStoredToken
+    getStoredToken,
+    dismissRecurringSuggestion
   } from '$lib/api';
   import { daysForMonthGrid } from '$lib/date';
   import { getEdgePlayerWidgetEnabledFromStorage } from '$lib/edge';
@@ -74,6 +75,44 @@
   let standbyScribbles: ScribbleDto[] = [];
   let standbyScribbleIndex = 0;
   let standbyScribbleRotateInterval: ReturnType<typeof setInterval> | null = null;
+
+  let recurringSuggestionsEnabled = false;
+  let recurringSuggestionsWeekly = true;
+  let recurringSuggestionsBiweekly = true;
+  let recurringSuggestionsMonthly = true;
+  let recurringSuggestionsBirthdays = true;
+
+  let dashboardSuggestions: DashboardSuggestionDto[] = [];
+  let dashboardSuggestionsLoaded = false;
+  let dismissedSuggestionKeys = new Set<string>();
+  let dismissedLoaded = false;
+
+  async function loadDismissedKeys() {
+    if (dismissedLoaded) return;
+    dismissedLoaded = true;
+    try {
+      const s = await fetchSettings();
+      const arr = Array.isArray((s as any)?.recurringSuggestionsDismissed)
+        ? (((s as any).recurringSuggestionsDismissed as any[]) ?? []).map((v) => String(v || '').trim()).filter(Boolean)
+        : [];
+      dismissedSuggestionKeys = new Set(arr.slice(0, 1000));
+    } catch {
+      dismissedSuggestionKeys = new Set();
+    }
+  }
+
+  async function dismissDashboardSuggestion(s: DashboardSuggestionDto) {
+    const key = String(s?.suggestionKey || '').trim();
+    if (!key) return;
+    // optimistic update
+    dismissedSuggestionKeys = new Set([key, ...Array.from(dismissedSuggestionKeys)]);
+    dashboardSuggestions = dashboardSuggestions.filter((x) => x.suggestionKey !== key);
+    try {
+      await dismissRecurringSuggestion(key);
+    } catch {
+      // keep optimistic; user may see suggestion again after reload if backend failed
+    }
+  }
 
   async function loadStandbyScribbles() {
     try {
@@ -240,6 +279,13 @@
   let showAddEventModal = false;
   let eventToEdit: EventDto | null = null;
   let plannerOpen = false;
+  let addEventPrefill: {
+    title?: string;
+    allDay?: boolean;
+    startTime?: string;
+    endTime?: string;
+  } | null = null;
+  let addEventPrefillKey: string | null = null;
 
   $: bgOverlay =
     tone === 'dark'
@@ -247,6 +293,27 @@
       : 'linear-gradient(to right, rgba(0,0,0,0.55), rgba(0,0,0,0.78))';
 
   function openAddEventModal() {
+    addEventPrefill = null;
+    addEventPrefillKey = null;
+    eventToEdit = null;
+    showAddEventModal = true;
+  }
+
+  function openAddEventModalFromSuggestion(s: import('$lib/components/CalendarMonth.svelte').DashboardSuggestionDto) {
+    const d = new Date(s.date);
+    // keep UI in sync with clicked day
+    onSelect(d);
+
+    const ps = s.persons && s.persons.length > 0 ? s.persons : s.person ? [s.person] : [];
+    addEventPrefill = {
+      title: s.title,
+      allDay: Boolean(s.allDay),
+      startTime: s.startTime,
+      endTime: s.endTime,
+      tagId: s.tag?.id ?? null,
+      personIds: ps.map((p) => p.id)
+    };
+    addEventPrefillKey = s.suggestionKey;
     eventToEdit = null;
     showAddEventModal = true;
   }
@@ -263,6 +330,8 @@
     if (e.source === 'outlook') return;
     // keep UI in sync with the clicked occurrence day
     onSelect(new Date(e.startAt));
+    addEventPrefill = null;
+    addEventPrefillKey = null;
     eventToEdit = e;
     showAddEventModal = true;
   }
@@ -270,6 +339,8 @@
   function closeAddEventModal() {
     showAddEventModal = false;
     eventToEdit = null;
+    addEventPrefill = null;
+    addEventPrefillKey = null;
   }
 
   function setViewMode(next: 'month' | 'week') {
@@ -634,12 +705,257 @@
     }
   }
 
+  // Dashboard suggestions: compute patterns for current month view
+  async function loadDashboardSuggestions() {
+    if (!recurringSuggestionsEnabled) {
+      dashboardSuggestions = [];
+      return;
+    }
+
+    try {
+      // Get grid range for current month
+      const gridDays = daysForMonthGrid(monthAnchor);
+      const gridStart = gridDays[0] ?? new Date(monthAnchor.getFullYear(), monthAnchor.getMonth(), 1);
+      const gridEnd = gridDays[gridDays.length - 1] ?? new Date(monthAnchor.getFullYear(), monthAnchor.getMonth() + 1, 0);
+
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+
+      // Lookback for patterns (12 weeks) – but include the whole visible grid range,
+      // otherwise patterns inside the current month won't be detected (e.g. Jan 7/14/21 -> Jan 28).
+      const lookbackFrom = new Date(gridStart);
+      lookbackFrom.setDate(lookbackFrom.getDate() - 12 * 7);
+      lookbackFrom.setHours(0, 0, 0, 0);
+
+      const historyTo = new Date(gridEnd);
+      historyTo.setHours(23, 59, 59, 999);
+
+      // Fetch a single consolidated range for pattern analysis + "already exists" checks.
+      const allEventsForAnalysis = await fetchEvents(lookbackFrom, historyTo);
+
+      // Build pattern suggestions (simplified version for dashboard)
+      const suggestions: DashboardSuggestionDto[] = [];
+      const addedKeys = new Set<string>();
+
+      // Helper functions
+      const normalizeTitle = (t: string) => String(t || '').trim().toLowerCase().replace(/\s+/g, ' ');
+      const weekdayMon0 = (d: Date) => (d.getDay() + 6) % 7;
+      const dateKey = (d: Date) => `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+      const bucket15 = (mins: number) => Math.round(mins / 15) * 15;
+      const minutesSinceMidnight = (d: Date) => d.getHours() * 60 + d.getMinutes();
+      const isBirthdayEvent = (e: EventDto) => /\b(geburtstag|birthday)\b/i.test(normalizeTitle(e.title) + ' ' + normalizeTitle(e.tag?.name ?? ''));
+
+      // Filter candidates
+      const candidates = (allEventsForAnalysis ?? []).filter((e) => {
+        if (e.source === 'outlook') return false;
+        if (e.allDay) return false;
+        if (e.recurrence) return false;
+        if (!e.title || !String(e.title).trim()) return false;
+        return true;
+      });
+
+      // Weekly pattern aggregation
+      if (recurringSuggestionsWeekly) {
+        const weeklyAgg = new Map<
+          string,
+          { dates: Date[]; sample: EventDto; weekday: number; startBucket: number; titleNorm: string }
+        >();
+
+        for (const e of candidates) {
+          const start = new Date(e.startAt);
+          if (Number.isNaN(start.getTime())) continue;
+          const wd = weekdayMon0(start);
+          const startMin = bucket15(minutesSinceMidnight(start));
+          const titleNorm = normalizeTitle(e.title);
+          if (!titleNorm) continue;
+
+          const sig = `weekly|${wd}|${startMin}|${titleNorm}`;
+          const existing = weeklyAgg.get(sig);
+
+          if (existing) {
+            existing.dates.push(start);
+
+            // Keep the most recent sample so person(s)/tag reflect the latest real event
+            // (matches WeekPlanner behaviour and fixes missing-person cases like "Merle").
+            const existingSampleStart = new Date(existing.sample.startAt);
+            const existingSampleMs = existingSampleStart.getTime();
+            const currentMs = start.getTime();
+            if (Number.isNaN(existingSampleMs) || currentMs > existingSampleMs) {
+              existing.sample = e;
+            }
+          } else {
+            weeklyAgg.set(sig, { dates: [start], sample: e, weekday: wd, startBucket: startMin, titleNorm });
+          }
+        }
+
+        const hhmmFromMinutes = (mins: number) => {
+          const h = Math.floor(mins / 60);
+          const m = mins % 60;
+          return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+        };
+
+        // Generate suggestions for matching days in grid
+        for (const [sig, agg] of weeklyAgg) {
+          for (const day of gridDays) {
+            const dayStart = new Date(day);
+            dayStart.setHours(0, 0, 0, 0);
+            if (dayStart < todayStart) continue;
+            if (weekdayMon0(day) !== agg.weekday) continue;
+
+            const datesBefore = agg.dates.filter((d) => d.getTime() < dayStart.getTime());
+            if (datesBefore.length < 3) continue;
+            const weeksBefore = new Set(
+              datesBefore.map((d) => {
+                const weekStart = new Date(d.getFullYear(), d.getMonth(), d.getDate() - weekdayMon0(d));
+                return dateKey(weekStart);
+              })
+            );
+            if (weeksBefore.size < 3) continue;
+
+            const dayDateKey = dateKey(day);
+            const suggKey = `${sig}|${dayDateKey}`;
+            if (addedKeys.has(suggKey)) continue;
+            if (dismissedSuggestionKeys.has(suggKey)) continue;
+
+            // Check if event already exists on this day
+            const hasExisting = (allEventsForAnalysis ?? []).some((ev) => {
+              const evStart = new Date(ev.startAt);
+              return dateKey(evStart) === dayDateKey && normalizeTitle(ev.title) === agg.titleNorm;
+            });
+            if (hasExisting) continue;
+
+            addedKeys.add(suggKey);
+
+            let endTime: string | undefined;
+            try {
+              const sampleStart = new Date(agg.sample.startAt);
+              const sampleEnd = agg.sample.endAt ? new Date(agg.sample.endAt) : null;
+              if (sampleEnd && !Number.isNaN(sampleStart.getTime()) && !Number.isNaN(sampleEnd.getTime())) {
+                const deltaMs = sampleEnd.getTime() - sampleStart.getTime();
+                const minMs = 15 * 60 * 1000;
+                const maxMs = 12 * 60 * 60 * 1000;
+                if (deltaMs >= minMs && deltaMs <= maxMs) {
+                  const durMins = Math.round(deltaMs / (60 * 1000));
+                  const endMins = agg.startBucket + durMins;
+                  if (endMins > 0 && endMins < 24 * 60) endTime = hhmmFromMinutes(endMins);
+                }
+              }
+            } catch {
+              // ignore duration issues
+            }
+
+            suggestions.push({
+              suggestionKey: suggKey,
+              title: agg.sample.title,
+              date: new Date(day),
+              allDay: false,
+              startTime: hhmmFromMinutes(agg.startBucket),
+              endTime,
+              tag: agg.sample.tag,
+              person: agg.sample.person,
+              persons: agg.sample.persons,
+            });
+          }
+        }
+      }
+
+      // Birthday suggestions (yearly)
+      if (recurringSuggestionsBirthdays) {
+        const birthdayLookbackFrom = new Date(gridStart);
+        birthdayLookbackFrom.setDate(birthdayLookbackFrom.getDate() - 370);
+        birthdayLookbackFrom.setHours(0, 0, 0, 0);
+        const birthdayHistory = await fetchEvents(birthdayLookbackFrom, historyTo);
+
+        const birthdayCandidates = (birthdayHistory ?? []).filter((e) => {
+          if (e.source === 'outlook') return false;
+          if (e.recurrence) return false;
+          if (!e.title) return false;
+          return isBirthdayEvent(e);
+        });
+
+        for (const e of birthdayCandidates) {
+          const eventStart = new Date(e.startAt);
+          if (Number.isNaN(eventStart.getTime())) continue;
+
+          const srcMonth = eventStart.getMonth();
+          const srcDay = eventStart.getDate();
+          const titleNorm = normalizeTitle(e.title);
+
+          for (const day of gridDays) {
+            const dayStart = new Date(day);
+            dayStart.setHours(0, 0, 0, 0);
+            if (dayStart < todayStart) continue;
+            const year = day.getFullYear();
+            const isLeap = (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
+            const effDay = srcMonth === 1 && srcDay === 29 && !isLeap ? 28 : srcDay;
+
+            if (day.getMonth() !== srcMonth || day.getDate() !== effDay) continue;
+
+            const dayDateKey = dateKey(day);
+            const suggKey = `birthday|${dayDateKey}|${titleNorm}`;
+            if (addedKeys.has(suggKey)) continue;
+            if (dismissedSuggestionKeys.has(suggKey)) continue;
+
+            // Check if event already exists
+            const hasExisting = (allEventsForAnalysis ?? []).some((ev) => {
+              const evStart = new Date(ev.startAt);
+              return dateKey(evStart) === dayDateKey && normalizeTitle(ev.title) === titleNorm;
+            });
+            if (hasExisting) continue;
+
+            addedKeys.add(suggKey);
+            suggestions.push({
+              suggestionKey: suggKey,
+              title: e.title,
+              date: new Date(day),
+              allDay: true,
+              tag: e.tag,
+              person: e.person,
+              persons: e.persons,
+            });
+          }
+        }
+      }
+
+      dashboardSuggestions = suggestions;
+      dashboardSuggestionsLoaded = true;
+    } catch {
+      dashboardSuggestions = [];
+    }
+  }
+
+  function handleMonthChange(delta: number) {
+    const nextAnchor = new Date(monthAnchor.getFullYear(), monthAnchor.getMonth() + delta, 1);
+    const lastDayOfNextMonth = new Date(nextAnchor.getFullYear(), nextAnchor.getMonth() + 1, 0).getDate();
+    const clampedDay = Math.min(selectedDate.getDate(), lastDayOfNextMonth);
+    const nextSelected = new Date(nextAnchor.getFullYear(), nextAnchor.getMonth(), clampedDay);
+
+    selectedDate = nextSelected;
+    monthAnchor = nextAnchor;
+    void loadEvents();
+    void loadDashboardSuggestions();
+  }
+
   function onSelect(d: Date) {
     const newAnchor = new Date(d.getFullYear(), d.getMonth(), 1);
     const anchorChanged = newAnchor.getTime() !== monthAnchor.getTime();
     selectedDate = d;
     if (anchorChanged) monthAnchor = newAnchor;
-    if (!upcomingMode && (viewMode === 'week' || anchorChanged)) void loadEvents();
+    if (!upcomingMode && (viewMode === 'week' || anchorChanged)) {
+      void loadEvents();
+      void loadDashboardSuggestions();
+    }
+  }
+
+  function jumpToToday() {
+    const today = new Date();
+    const nextAnchor = new Date(today.getFullYear(), today.getMonth(), 1);
+    const nextSelected = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+
+    selectedDate = nextSelected;
+    monthAnchor = nextAnchor;
+    void loadEvents();
+    void loadDashboardSuggestions();
   }
 
   onMount(() => {
@@ -668,6 +984,16 @@
         const s = await fetchSettings();
         clockStyle = normalizeClockStyle((s as any)?.clockStyle);
 
+        recurringSuggestionsEnabled = Boolean((s as any)?.recurringSuggestionsEnabled);
+        recurringSuggestionsWeekly = (s as any)?.recurringSuggestionsWeekly !== false;
+        recurringSuggestionsBiweekly = (s as any)?.recurringSuggestionsBiweekly !== false;
+        recurringSuggestionsMonthly = (s as any)?.recurringSuggestionsMonthly !== false;
+        recurringSuggestionsBirthdays = (s as any)?.recurringSuggestionsBirthdays !== false;
+
+        // Load dismissed keys first, then suggestions
+        await loadDismissedKeys();
+        void loadDashboardSuggestions();
+
         try {
           const st = await fetchOutlookStatus();
           outlookConnected = Boolean(st?.connected);
@@ -681,6 +1007,10 @@
         }
 
         const uploaded = (s.images ?? []).map((img: string) => `/api/media/${img}`);
+        const rotateSubset = Array.isArray((s as any)?.backgroundRotateImages)
+          ? ((s as any).backgroundRotateImages as string[]).map((img) => `/api/media/${img}`).filter((u) => uploaded.includes(u))
+          : [];
+
         uploadedBackgroundUrls = uploaded;
 
         if (bgRotateInterval) {
@@ -691,19 +1021,20 @@
         const rotateEnabled = Boolean(s.backgroundRotateEnabled);
 
         if (uploadedBackgroundUrls.length > 0) {
+          const rotateCandidates = rotateEnabled && rotateSubset.length > 0 ? rotateSubset : uploadedBackgroundUrls;
           if (rotateEnabled) {
             // Rotation enabled: start on a random uploaded image.
-            bgIndex = Math.floor(Math.random() * uploadedBackgroundUrls.length);
-            await applyBackground(uploadedBackgroundUrls[bgIndex] ?? '/background.jpg');
+            bgIndex = Math.floor(Math.random() * rotateCandidates.length);
+            await applyBackground(rotateCandidates[bgIndex] ?? '/background.jpg');
 
-            if (uploadedBackgroundUrls.length > 1) {
+            if (rotateCandidates.length > 1) {
               bgRotateInterval = setInterval(() => {
                 // pick a random next index (avoid immediate repeat when possible)
-                const max = uploadedBackgroundUrls.length;
+                const max = rotateCandidates.length;
                 let nextIndex = Math.floor(Math.random() * max);
                 if (max > 1 && nextIndex === bgIndex) nextIndex = (nextIndex + 1) % max;
                 bgIndex = nextIndex;
-                const next = uploadedBackgroundUrls[bgIndex];
+                const next = rotateCandidates[bgIndex];
                 if (next) void applyBackground(next);
               }, BG_ROTATE_MS);
             }
@@ -1124,6 +1455,9 @@
                 onSelect={onSelect}
                 {events}
                 {holidays}
+                suggestions={dashboardSuggestions}
+                onMonthChange={handleMonthChange}
+                onJumpToToday={jumpToToday}
                 {viewMode}
                 onSetViewMode={setViewMode}
                 {upcomingMode}
@@ -1133,7 +1467,16 @@
             </div>
           </div>
           <div class={`${dashboardTextClasses} border-t border-white/10 ${dashboardGlassBlurEnabled ? 'glass-dashboard-blur' : 'glass-dashboard-flat'} h-full overflow-hidden`}>
-            <EventsPanel {selectedDate} {events} {holidays} onCreate={openAddEventModal} onEdit={openEditEventModal} />
+            <EventsPanel
+              {selectedDate}
+              {events}
+              {holidays}
+              suggestions={dashboardSuggestions}
+              onCreate={openAddEventModal}
+              onCreateFromSuggestion={openAddEventModalFromSuggestion}
+              onDismissSuggestion={dismissDashboardSuggestion}
+              onEdit={openEditEventModal}
+            />
           </div>
         </div>
       {:else}
@@ -1377,7 +1720,17 @@
     </div>
   </div>
 
-  <AddEventModal open={showAddEventModal} {selectedDate} {eventToEdit} onClose={closeAddEventModal} onCreated={loadEvents} />
+  <AddEventModal
+    open={showAddEventModal}
+    {selectedDate}
+    {eventToEdit}
+    {outlookConnected}
+    {todoEnabled}
+    prefill={addEventPrefill}
+    prefillKey={addEventPrefillKey}
+    onClose={closeAddEventModal}
+    onCreated={loadEvents}
+  />
 
   <!-- Week Planner Overlay -->
   {#if plannerOpen}
@@ -1387,6 +1740,11 @@
       {holidays}
       {outlookConnected}
       {todoEnabled}
+      {recurringSuggestionsEnabled}
+      {recurringSuggestionsWeekly}
+      {recurringSuggestionsBiweekly}
+      {recurringSuggestionsMonthly}
+      {recurringSuggestionsBirthdays}
       onSelect={onSelect}
       onEditEvent={openEditEventModal}
       onBack={closePlanner}
@@ -1402,6 +1760,24 @@
         <Clock style={clockStyle} />
       </div>
     </div>
+  {/if}
+
+  <!-- Floating button on mobile: hint at /planner -->
+  {#if !standbyMode && !plannerOpen}
+    <a
+      href="/planner"
+      class="fixed bottom-6 right-6 z-50 md:hidden flex items-center gap-2 px-4 py-3 rounded-full bg-white/20 backdrop-blur-md border border-white/10 shadow-lg text-white text-sm font-medium hover:bg-white/30 transition-colors"
+      in:fly={{ y: 20, duration: 250, delay: 500 }}
+      out:fade={{ duration: 150 }}
+    >
+      <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+        <line x1="16" y1="2" x2="16" y2="6"></line>
+        <line x1="8" y1="2" x2="8" y2="6"></line>
+        <line x1="3" y1="10" x2="21" y2="10"></line>
+      </svg>
+      Mobile Ansicht
+    </a>
   {/if}
 </div>
 

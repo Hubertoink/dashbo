@@ -17,7 +17,11 @@
     disconnectOutlookConnection,
     setOutlookConnectionColor,
     listUsers,
+    listUserRoster,
     createUser,
+    inviteUser,
+    createInviteLinkForUser,
+    createCalendarInviteLink,
     deleteUser,
     resetUserPassword,
     setWeatherLocation,
@@ -32,6 +36,7 @@
     setClockStyle,
     uploadBackgroundWithProgress,
     setBackgroundRotateEnabled,
+    setBackgroundRotateImages,
     listTags,
     createTag,
     deleteTag,
@@ -46,6 +51,11 @@
     type PersonColorKey,
     type OutlookStatusDto
     , type OutlookConnectionDto
+    , type MeDto
+    , fetchMe
+    , decodeJwtPayload
+    , requestEmailVerification
+    , setRecurringSuggestionsSettings
   } from '$lib/api';
 
   import { normalizeClockStyle, type ClockStyle } from '$lib/clockStyle';
@@ -83,6 +93,7 @@
   let authError: string | null = null;
   let authed = false;
   let isAdmin = false;
+  let me: MeDto | null = null;
 
   // Return URL from query params (for mobile navigation from planner)
   $: returnUrl = $page.url.searchParams.get('from') || '/';
@@ -179,6 +190,18 @@
   let rotateSaving = false;
   let rotateError: string | null = null;
 
+  let backgroundRotateImages: string[] = [];
+  let rotateImagesSaving = false;
+  let rotateImagesError: string | null = null;
+
+  let recurringSuggestionsEnabled = false;
+  let recurringSuggestionsWeekly = true;
+  let recurringSuggestionsBiweekly = true;
+  let recurringSuggestionsMonthly = true;
+  let recurringSuggestionsBirthdays = true;
+  let recurringSuggestionsSaving = false;
+  let recurringSuggestionsError: string | null = null;
+
   let folderConfirmOpen = false;
   let pendingFolderFiles: File[] = [];
 
@@ -210,7 +233,6 @@
 
   let newUserEmail = '';
   let newUserName = '';
-  let newUserPassword = '';
   let newUserIsAdmin = false;
   let userError: string | null = null;
 
@@ -693,6 +715,9 @@
       : 20;
     scribblePaperLook = settings?.scribblePaperLook !== false;
     backgroundRotateEnabled = Boolean(settings?.backgroundRotateEnabled);
+    backgroundRotateImages = Array.isArray((settings as any)?.backgroundRotateImages)
+      ? ((settings as any).backgroundRotateImages as string[]).map((s) => String(s || '').trim()).filter(Boolean)
+      : [];
 
     const listNames = Array.isArray(settings?.todoListNames) ? settings!.todoListNames! : [];
     todoListNamesText = listNames.length ? listNames.join('\n') : settings?.todoListName ?? '';
@@ -701,6 +726,32 @@
     newsFeeds = (feeds.length ? feeds : ['zeit']) as NewsFeedId[];
 
     clockStyle = normalizeClockStyle((settings as any)?.clockStyle);
+
+    recurringSuggestionsEnabled = Boolean((settings as any)?.recurringSuggestionsEnabled);
+    recurringSuggestionsWeekly = (settings as any)?.recurringSuggestionsWeekly !== false;
+    recurringSuggestionsBiweekly = (settings as any)?.recurringSuggestionsBiweekly !== false;
+    recurringSuggestionsMonthly = (settings as any)?.recurringSuggestionsMonthly !== false;
+    recurringSuggestionsBirthdays = (settings as any)?.recurringSuggestionsBirthdays !== false;
+  }
+
+  async function saveRecurringSuggestionsSettings() {
+    recurringSuggestionsError = null;
+    recurringSuggestionsSaving = true;
+    try {
+      await setRecurringSuggestionsSettings({
+        enabled: recurringSuggestionsEnabled,
+        weekly: recurringSuggestionsWeekly,
+        biweekly: recurringSuggestionsBiweekly,
+        monthly: recurringSuggestionsMonthly,
+        birthdays: recurringSuggestionsBirthdays,
+      });
+      await refreshSettings();
+      showToast('Gespeichert');
+    } catch {
+      recurringSuggestionsError = 'Speichern fehlgeschlagen.';
+    } finally {
+      recurringSuggestionsSaving = false;
+    }
   }
 
   async function saveClockStyleHandler() {
@@ -767,8 +818,34 @@
     }
   }
 
+  function toggleBackgroundRotateImage(img: string) {
+    const filename = String(img || '').trim();
+    if (!filename) return;
+    const set = new Set(backgroundRotateImages);
+    if (set.has(filename)) set.delete(filename);
+    else set.add(filename);
+    backgroundRotateImages = Array.from(set);
+  }
+
+  async function saveBackgroundRotateImages() {
+    rotateImagesError = null;
+    rotateImagesSaving = true;
+    try {
+      await setBackgroundRotateImages(backgroundRotateImages);
+      await refreshSettings();
+    } catch {
+      rotateImagesError = 'Speichern fehlgeschlagen.';
+    } finally {
+      rotateImagesSaving = false;
+    }
+  }
+
   async function refreshUsers() {
-    users = await listUsers();
+    if (!authed) {
+      users = [];
+      return;
+    }
+    users = isAdmin ? await listUsers() : await listUserRoster();
   }
 
   async function refreshTags() {
@@ -802,9 +879,27 @@
       const res = await login(email, password);
       setToken(res.token);
       authed = true;
-      isAdmin = !!res.user?.isAdmin;
+
+      // Immediate UI feedback even if /auth/me is slow/unavailable
+      me = {
+        id: res.user.id,
+        email: res.user.email,
+        name: res.user.name,
+        isAdmin: !!res.user.isAdmin,
+        role: res.user.isAdmin ? 'admin' : 'member',
+        calendarId: null
+      };
+
+      try {
+        me = await fetchMe();
+        isAdmin = !!me.isAdmin;
+      } catch {
+        // Fallback to login response if /auth/me isn't reachable yet
+        isAdmin = !!res.user?.isAdmin;
+      }
+
       await refreshSettings();
-      if (isAdmin) await refreshUsers();
+      await refreshUsers();
       await refreshTags();
       await refreshPersons();
       await refreshOutlook();
@@ -812,6 +907,25 @@
       authError = 'Login fehlgeschlagen';
       authed = false;
       isAdmin = false;
+      me = null;
+    }
+  }
+
+  async function doRequestEmailVerification() {
+    if (!authed) return;
+    try {
+      await requestEmailVerification();
+      showToast('Bestätigungs-Mail wurde gesendet.');
+      try {
+        me = await fetchMe();
+        isAdmin = !!me.isAdmin;
+      } catch {
+        // ignore
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      showToast(msg.includes('API') ? 'Bestätigungs-Mail konnte nicht gesendet werden.' : msg);
+      throw e;
     }
   }
 
@@ -819,6 +933,7 @@
     setToken(null);
     authed = false;
     isAdmin = false;
+    me = null;
     users = [];
     persons = [];
     outlookStatus = null;
@@ -1025,20 +1140,61 @@
 
   async function doCreateUser() {
     userError = null;
+    const email = newUserEmail.trim();
+    const name = newUserName.trim();
+    if (!email) {
+      userError = 'Bitte eine E-Mail eingeben.';
+      return;
+    }
+    if (!email.includes('@')) {
+      userError = 'Bitte eine gültige E-Mail eingeben.';
+      return;
+    }
+    if (!name) {
+      userError = 'Bitte einen Namen eingeben.';
+      return;
+    }
     try {
-      await createUser({
-        email: newUserEmail,
-        name: newUserName,
-        password: newUserPassword,
-        isAdmin: newUserIsAdmin
-      });
+      const res = await inviteUser({ email, name, isAdmin: newUserIsAdmin });
       newUserEmail = '';
       newUserName = '';
-      newUserPassword = '';
       newUserIsAdmin = false;
       await refreshUsers();
+      try {
+        await navigator.clipboard.writeText(res.link);
+        showToast(res.mailSent ? 'Einladung gesendet (Link kopiert)' : 'Link kopiert');
+      } catch {
+        showToast(res.mailSent ? 'Einladung gesendet' : 'Einladungslink erstellt');
+      }
     } catch (err) {
-      userError = err instanceof Error ? err.message : 'User konnte nicht angelegt werden.';
+      const msg = err instanceof Error ? err.message : '';
+      if (msg.includes('missing_public_app_url')) userError = 'PUBLIC_APP_URL fehlt (wird für Einladungslinks benötigt).';
+      else if (msg.includes('email_in_use')) userError = 'Diese E-Mail wird bereits in einem anderen Kalender genutzt.';
+      else if (msg.includes('already_active')) userError = 'Dieser Benutzer existiert bereits und hat schon ein Passwort gesetzt.';
+      else if (msg.includes('invalid_body')) userError = 'Bitte E-Mail und Name korrekt ausfüllen.';
+      else userError = msg || 'Einladung konnte nicht gesendet werden.';
+    }
+  }
+
+  async function copyInviteLinkForUser(u: any) {
+    try {
+      const res = await createInviteLinkForUser(Number(u.id));
+      await navigator.clipboard.writeText(res.link);
+      showToast('Einladungslink kopiert');
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      showToast(msg.includes('missing_public_app_url') ? 'PUBLIC_APP_URL fehlt.' : 'Link konnte nicht kopiert werden.');
+    }
+  }
+
+  async function copyCalendarInviteLink() {
+    try {
+      const res = await createCalendarInviteLink();
+      await navigator.clipboard.writeText(res.link);
+      showToast('Familien-Einladungslink kopiert');
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      showToast(msg.includes('missing_public_app_url') ? 'PUBLIC_APP_URL fehlt.' : 'Link konnte nicht kopiert werden.');
     }
   }
 
@@ -1114,29 +1270,43 @@
     loadEdgeConfig();
     const existing = getStoredToken();
     if (existing) {
-      authed = true;
-
-      await refreshSettings();
-      await refreshTags();
-      try {
-        await refreshUsers();
-        isAdmin = true;
-      } catch {
-        isAdmin = false;
-        users = [];
+      // Try to show identity immediately from token (useful with SW cache / slow backend)
+      const payload = decodeJwtPayload<any>(existing);
+      if (payload && (payload.email || payload.name || payload.sub)) {
+        const id = Number(payload.sub);
+        const email = String(payload.email || '');
+        const name = String(payload.name || payload.email || '');
+        const isAdminFromToken = Boolean(payload.isAdmin);
+        me = {
+          id: Number.isFinite(id) ? id : 0,
+          email,
+          name,
+          isAdmin: isAdminFromToken,
+          role: String(payload.role || (isAdminFromToken ? 'admin' : 'member')),
+          calendarId: payload.calendarId != null ? Number(payload.calendarId) : null
+        };
       }
       try {
+        me = await fetchMe();
+        authed = true;
+        isAdmin = !!me.isAdmin;
+
+        await refreshSettings();
+        await refreshTags();
+        await refreshUsers();
         await refreshPersons();
+        await refreshOutlook();
       } catch {
         authed = false;
         isAdmin = false;
+        me = null;
+        users = [];
         persons = [];
       }
-
-      await refreshOutlook();
     } else {
       authed = false;
       isAdmin = false;
+      me = null;
     }
   });
 
@@ -1272,7 +1442,17 @@
       <a class="text-white/60 hover:text-white text-sm" href={returnUrl}>← Zurück</a>
     </div>
 
-    <AccountSection {authed} {isAdmin} bind:email bind:password {authError} {doLogin} {logout} />
+    <AccountSection
+      {authed}
+      {isAdmin}
+      {me}
+      bind:email
+      bind:password
+      {authError}
+      {doLogin}
+      {logout}
+      requestEmailVerification={doRequestEmailVerification}
+    />
 
     {#if showFirstRunWizard}
       <FirstRunSection
@@ -1289,6 +1469,14 @@
 
     <CalendarSection
       {authed}
+      bind:recurringSuggestionsEnabled
+      bind:recurringSuggestionsWeekly
+      bind:recurringSuggestionsBiweekly
+      bind:recurringSuggestionsMonthly
+      bind:recurringSuggestionsBirthdays
+      {recurringSuggestionsSaving}
+      {recurringSuggestionsError}
+      {saveRecurringSuggestionsSettings}
       {tags}
       bind:newTagName
       bind:newTagColor
@@ -1407,6 +1595,11 @@
       {rotateSaving}
       {rotateError}
       {saveBackgroundRotate}
+      bind:backgroundRotateImages
+      {rotateImagesSaving}
+      {rotateImagesError}
+      {toggleBackgroundRotateImage}
+      {saveBackgroundRotateImages}
       {uploadFiles}
       {savingBg}
       {uploadProgress}
@@ -1428,7 +1621,6 @@
         {users}
         bind:newUserEmail
         bind:newUserName
-        bind:newUserPassword
         bind:newUserIsAdmin
         {userError}
         bind:resetFor
@@ -1436,6 +1628,8 @@
         bind:resetError
         bind:deletingFor
         {doCreateUser}
+        copyInviteLinkForUser={copyInviteLinkForUser}
+        copyCalendarInviteLink={copyCalendarInviteLink}
       />
     {/if}
   </div>

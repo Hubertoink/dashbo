@@ -130,11 +130,102 @@ async function initDb() {
       id BIGSERIAL PRIMARY KEY,
       email TEXT NOT NULL UNIQUE,
       name TEXT NOT NULL,
-      password_hash TEXT NOT NULL,
+      password_hash TEXT,
       is_admin BOOLEAN NOT NULL DEFAULT FALSE,
+      email_verified_at TIMESTAMPTZ,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
+
+    -- Invitation flow: allow users without a password_hash until they accept the invite.
+    DO $$
+    BEGIN
+      IF EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'users'
+          AND column_name = 'password_hash'
+          AND is_nullable = 'NO'
+      ) THEN
+        ALTER TABLE users ALTER COLUMN password_hash DROP NOT NULL;
+      END IF;
+    END $$;
+  `);
+
+  // Older installations: add email_verified_at if missing
+  await p.query(`
+    ALTER TABLE users
+    ADD COLUMN IF NOT EXISTS email_verified_at TIMESTAMPTZ;
+  `);
+
+  // Calendars (aka families / tenants)
+  await p.query(`
+    CREATE TABLE IF NOT EXISTS calendars (
+      id BIGSERIAL PRIMARY KEY,
+      name TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+
+  // Bind users to a calendar (idempotent migrations)
+  await p.query(`
+    ALTER TABLE users
+    ADD COLUMN IF NOT EXISTS calendar_id BIGINT;
+  `);
+
+  await p.query(`
+    ALTER TABLE users
+    ADD COLUMN IF NOT EXISTS role TEXT;
+  `);
+
+  // Backfill missing calendars for existing users (idempotent)
+  // Each existing user gets their own calendar to preserve today's behavior.
+  await p.query('BEGIN;');
+  try {
+    const missing = await p.query('SELECT id, name, is_admin FROM users WHERE calendar_id IS NULL ORDER BY id ASC;');
+    for (const row of missing.rows) {
+      const userId = Number(row.id);
+      const name = row.name ? String(row.name) : null;
+      const isAdmin = Boolean(row.is_admin);
+      const cal = await p.query('INSERT INTO calendars (name) VALUES ($1) RETURNING id;', [name]);
+      const calendarId = Number(cal.rows[0].id);
+      const role = isAdmin ? 'admin' : 'member';
+      await p.query('UPDATE users SET calendar_id = $2, role = COALESCE(role, $3) WHERE id = $1;', [userId, calendarId, role]);
+    }
+
+    // Ensure role is present for existing users
+    await p.query(
+      `
+      UPDATE users
+      SET role = CASE WHEN is_admin THEN 'admin' ELSE 'member' END
+      WHERE role IS NULL;
+      `
+    );
+
+    await p.query('COMMIT;');
+  } catch (e) {
+    await p.query('ROLLBACK;');
+    throw e;
+  }
+
+  await p.query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'users_calendar_id_fkey'
+      ) THEN
+        ALTER TABLE users
+        ADD CONSTRAINT users_calendar_id_fkey
+        FOREIGN KEY (calendar_id)
+        REFERENCES calendars(id)
+        ON DELETE RESTRICT;
+      END IF;
+    END $$;
+  `);
+
+  await p.query(`
+    CREATE INDEX IF NOT EXISTS users_calendar_id_idx ON users (calendar_id);
   `);
 
   // Tags: bind to user (idempotent migrations) - users table must exist first
@@ -143,11 +234,25 @@ async function initDb() {
     ADD COLUMN IF NOT EXISTS user_id BIGINT;
   `);
 
+  // Tags: bind to calendar (families)
+  await p.query(`
+    ALTER TABLE tags
+    ADD COLUMN IF NOT EXISTS calendar_id BIGINT;
+  `);
+
   // Backfill existing tags to first user (idempotent)
   await p.query(`
     UPDATE tags
     SET user_id = (SELECT id FROM users ORDER BY id ASC LIMIT 1)
     WHERE user_id IS NULL;
+  `);
+
+  // Backfill calendar_id from user_id (idempotent)
+  await p.query(`
+    UPDATE tags t
+    SET calendar_id = u.calendar_id
+    FROM users u
+    WHERE t.calendar_id IS NULL AND t.user_id = u.id;
   `);
 
   // Replace old unique(name) with unique(user_id, name)
@@ -168,6 +273,21 @@ async function initDb() {
     END $$;
   `);
 
+  // Transition uniqueness to calendar scope (safe because each user currently has their own calendar)
+  await p.query('ALTER TABLE tags DROP CONSTRAINT IF EXISTS tags_user_id_name_key;');
+
+  await p.query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'tags_calendar_id_name_key'
+      ) THEN
+        ALTER TABLE tags
+        ADD CONSTRAINT tags_calendar_id_name_key UNIQUE (calendar_id, name);
+      END IF;
+    END $$;
+  `);
+
   await p.query(`
     DO $$
     BEGIN
@@ -182,6 +302,26 @@ async function initDb() {
       END IF;
     END $$;
   `);
+
+  // Calendar data must not be deleted when a user is deleted; drop the user FK if present.
+  await p.query('ALTER TABLE tags DROP CONSTRAINT IF EXISTS tags_user_id_fkey;');
+
+  await p.query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'tags_calendar_id_fkey'
+      ) THEN
+        ALTER TABLE tags
+        ADD CONSTRAINT tags_calendar_id_fkey
+        FOREIGN KEY (calendar_id)
+        REFERENCES calendars(id)
+        ON DELETE CASCADE;
+      END IF;
+    END $$;
+  `);
+
+  await p.query('CREATE INDEX IF NOT EXISTS tags_calendar_id_idx ON tags (calendar_id);');
 
   await p.query(`
     CREATE INDEX IF NOT EXISTS tags_user_id_idx ON tags (user_id);
@@ -200,6 +340,57 @@ async function initDb() {
     );
   `);
 
+  // Persons: bind to calendar (families)
+  await p.query(`
+    ALTER TABLE persons
+    ADD COLUMN IF NOT EXISTS calendar_id BIGINT;
+  `);
+
+  // Backfill calendar_id from user_id (idempotent)
+  await p.query(`
+    UPDATE persons p
+    SET calendar_id = u.calendar_id
+    FROM users u
+    WHERE p.calendar_id IS NULL AND p.user_id = u.id;
+  `);
+
+  // Transition uniqueness to calendar scope
+  await p.query('ALTER TABLE persons DROP CONSTRAINT IF EXISTS persons_user_id_name_key;');
+  await p.query('ALTER TABLE persons DROP CONSTRAINT IF EXISTS persons_user_id_fkey;');
+  await p.query('ALTER TABLE persons DROP CONSTRAINT IF EXISTS persons_user_id_name_key;');
+
+  await p.query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'persons_calendar_id_name_key'
+      ) THEN
+        ALTER TABLE persons
+        ADD CONSTRAINT persons_calendar_id_name_key UNIQUE (calendar_id, name);
+      END IF;
+    END $$;
+  `);
+
+  // Drop the user FK if present (avoid cascading calendar data on user deletion)
+  await p.query('ALTER TABLE persons DROP CONSTRAINT IF EXISTS persons_user_id_fkey;');
+
+  await p.query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'persons_calendar_id_fkey'
+      ) THEN
+        ALTER TABLE persons
+        ADD CONSTRAINT persons_calendar_id_fkey
+        FOREIGN KEY (calendar_id)
+        REFERENCES calendars(id)
+        ON DELETE CASCADE;
+      END IF;
+    END $$;
+  `);
+
+  await p.query('CREATE INDEX IF NOT EXISTS persons_calendar_id_idx ON persons (calendar_id);');
+
   await p.query(`
     DO $$
     BEGIN
@@ -214,6 +405,9 @@ async function initDb() {
       END IF;
     END $$;
   `);
+
+  // Ensure the old constraint is removed (calendar-scoped)
+  await p.query('ALTER TABLE persons DROP CONSTRAINT IF EXISTS persons_user_id_fkey;');
 
   await p.query(`
     CREATE TABLE IF NOT EXISTS settings (
@@ -252,6 +446,114 @@ async function initDb() {
   await p.query(`
     CREATE INDEX IF NOT EXISTS user_settings_user_id_idx ON user_settings (user_id);
   `);
+
+  // Per-calendar settings (shared family settings)
+  await p.query(`
+    CREATE TABLE IF NOT EXISTS calendar_settings (
+      calendar_id BIGINT NOT NULL,
+      key TEXT NOT NULL,
+      value TEXT NOT NULL,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (calendar_id, key)
+    );
+  `);
+
+  await p.query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'calendar_settings_calendar_id_fkey'
+      ) THEN
+        ALTER TABLE calendar_settings
+        ADD CONSTRAINT calendar_settings_calendar_id_fkey
+        FOREIGN KEY (calendar_id)
+        REFERENCES calendars(id)
+        ON DELETE CASCADE;
+      END IF;
+    END $$;
+  `);
+
+  await p.query('CREATE INDEX IF NOT EXISTS calendar_settings_calendar_id_idx ON calendar_settings (calendar_id);');
+
+  // Auth tokens (email verification, password reset)
+  await p.query(`
+    CREATE TABLE IF NOT EXISTS auth_tokens (
+      id BIGSERIAL PRIMARY KEY,
+      user_id BIGINT NOT NULL,
+      kind TEXT NOT NULL,
+      token_hash TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      expires_at TIMESTAMPTZ NOT NULL,
+      used_at TIMESTAMPTZ,
+      meta JSONB
+    );
+  `);
+
+  await p.query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'auth_tokens_user_id_fkey'
+      ) THEN
+        ALTER TABLE auth_tokens
+        ADD CONSTRAINT auth_tokens_user_id_fkey
+        FOREIGN KEY (user_id)
+        REFERENCES users(id)
+        ON DELETE CASCADE;
+      END IF;
+    END $$;
+  `);
+
+  await p.query('CREATE UNIQUE INDEX IF NOT EXISTS auth_tokens_token_hash_uq ON auth_tokens (token_hash);');
+  await p.query('CREATE INDEX IF NOT EXISTS auth_tokens_user_kind_idx ON auth_tokens (user_id, kind);');
+  await p.query('CREATE INDEX IF NOT EXISTS auth_tokens_expires_idx ON auth_tokens (expires_at);');
+
+  // Calendar invite links (copy/share family invite)
+  await p.query(`
+    CREATE TABLE IF NOT EXISTS calendar_invites (
+      id BIGSERIAL PRIMARY KEY,
+      calendar_id BIGINT NOT NULL,
+      created_by_user_id BIGINT,
+      token_hash TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      expires_at TIMESTAMPTZ NOT NULL,
+      used_at TIMESTAMPTZ
+    );
+  `);
+
+  await p.query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'calendar_invites_calendar_id_fkey'
+      ) THEN
+        ALTER TABLE calendar_invites
+        ADD CONSTRAINT calendar_invites_calendar_id_fkey
+        FOREIGN KEY (calendar_id)
+        REFERENCES calendars(id)
+        ON DELETE CASCADE;
+      END IF;
+    END $$;
+  `);
+
+  await p.query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'calendar_invites_created_by_user_id_fkey'
+      ) THEN
+        ALTER TABLE calendar_invites
+        ADD CONSTRAINT calendar_invites_created_by_user_id_fkey
+        FOREIGN KEY (created_by_user_id)
+        REFERENCES users(id)
+        ON DELETE SET NULL;
+      END IF;
+    END $$;
+  `);
+
+  await p.query('CREATE UNIQUE INDEX IF NOT EXISTS calendar_invites_token_hash_uq ON calendar_invites (token_hash);');
+  await p.query('CREATE INDEX IF NOT EXISTS calendar_invites_calendar_id_idx ON calendar_invites (calendar_id);');
+  await p.query('CREATE INDEX IF NOT EXISTS calendar_invites_expires_idx ON calendar_invites (expires_at);');
 
   // Outlook (Microsoft Graph) per-user OAuth tokens (read-only)
   await p.query(`
@@ -353,6 +655,12 @@ async function initDb() {
     ADD COLUMN IF NOT EXISTS user_id BIGINT;
   `);
 
+  // Events: bind to calendar (families)
+  await p.query(`
+    ALTER TABLE events
+    ADD COLUMN IF NOT EXISTS calendar_id BIGINT;
+  `);
+
   await p.query(`
     ALTER TABLE events
     ADD COLUMN IF NOT EXISTS person_id BIGINT;
@@ -412,6 +720,14 @@ async function initDb() {
     WHERE user_id IS NULL;
   `);
 
+  // Backfill calendar_id from user_id (idempotent)
+  await p.query(`
+    UPDATE events e
+    SET calendar_id = u.calendar_id
+    FROM users u
+    WHERE e.calendar_id IS NULL AND e.user_id = u.id;
+  `);
+
   // Backfill legacy single-person events into join table (idempotent)
   await p.query(`
     INSERT INTO event_persons (event_id, person_id)
@@ -435,6 +751,26 @@ async function initDb() {
       END IF;
     END $$;
   `);
+
+  // Drop the user FK if present (avoid cascading calendar data on user deletion)
+  await p.query('ALTER TABLE events DROP CONSTRAINT IF EXISTS events_user_id_fkey;');
+
+  await p.query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'events_calendar_id_fkey'
+      ) THEN
+        ALTER TABLE events
+        ADD CONSTRAINT events_calendar_id_fkey
+        FOREIGN KEY (calendar_id)
+        REFERENCES calendars(id)
+        ON DELETE CASCADE;
+      END IF;
+    END $$;
+  `);
+
+  await p.query('CREATE INDEX IF NOT EXISTS events_calendar_id_idx ON events (calendar_id);');
 
   await p.query(`
     DO $$
@@ -464,12 +800,27 @@ async function initDb() {
     CREATE TABLE IF NOT EXISTS scribbles (
       id BIGSERIAL PRIMARY KEY,
       user_id BIGINT NOT NULL,
+      calendar_id BIGINT,
       image_data TEXT NOT NULL,
       author_name TEXT,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       expires_at TIMESTAMPTZ,
       pinned BOOLEAN NOT NULL DEFAULT FALSE
     );
+  `);
+
+  // Ensure calendar_id exists for older installations where scribbles pre-dated calendars
+  await p.query(`
+    ALTER TABLE scribbles
+    ADD COLUMN IF NOT EXISTS calendar_id BIGINT;
+  `);
+
+  // Backfill calendar_id for existing scribbles (idempotent)
+  await p.query(`
+    UPDATE scribbles s
+    SET calendar_id = u.calendar_id
+    FROM users u
+    WHERE s.calendar_id IS NULL AND s.user_id = u.id;
   `);
 
   await p.query(`
@@ -486,6 +837,26 @@ async function initDb() {
       END IF;
     END $$;
   `);
+
+  // Drop the user FK if present (avoid cascading calendar data on user deletion)
+  await p.query('ALTER TABLE scribbles DROP CONSTRAINT IF EXISTS scribbles_user_id_fkey;');
+
+  await p.query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'scribbles_calendar_id_fkey'
+      ) THEN
+        ALTER TABLE scribbles
+        ADD CONSTRAINT scribbles_calendar_id_fkey
+        FOREIGN KEY (calendar_id)
+        REFERENCES calendars(id)
+        ON DELETE CASCADE;
+      END IF;
+    END $$;
+  `);
+
+  await p.query('CREATE INDEX IF NOT EXISTS scribbles_calendar_id_idx ON scribbles (calendar_id);');
 
   await p.query(`
     CREATE INDEX IF NOT EXISTS scribbles_user_id_idx ON scribbles (user_id);

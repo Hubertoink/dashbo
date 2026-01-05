@@ -1,7 +1,7 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onDestroy, onMount } from 'svelte';
   import { musicPlayerState, togglePlayPause, playNext, playPrev } from '$lib/stores/musicPlayer';
-  import { heosPlaybackStatus } from '$lib/stores/heosPlayback';
+  import { heosPlaybackStatus, setHeosPlaybackStatus } from '$lib/stores/heosPlayback';
   import { spotifyPlaybackStatus } from '$lib/stores/spotifyPlayback';
   import {
     EDGE_BASE_URL_KEY,
@@ -67,6 +67,9 @@
   $: spotifySourceLabel = $spotifyPlaybackStatus?.source ? String($spotifyPlaybackStatus.source) : 'Spotify';
 
   $: heosExternalActive = Boolean(heosEnabled && selectedPid && heosExternal);
+
+  $: heosIsPlaying = Boolean($heosPlaybackStatus?.isPlaying);
+  $: isPlayingForUi = now ? playing : heosExternalActive ? heosIsPlaying : false;
   $: displayArtist = now?.artist
     ? String(now.artist)
     : heosExternalActive
@@ -106,6 +109,90 @@
   let heosVolumeBusy = false;
   let heosVolumeError: string | null = null;
   let heosVolumeLevel: number | null = null;
+
+  let heosSkipDisabledUntil = 0;
+  let heosSkipTimer: ReturnType<typeof setTimeout> | null = null;
+  $: heosSkipDisabled = heosExternalActive && heosSkipDisabledUntil > Date.now();
+
+  function disableHeosSkipFor(ms: number) {
+    const t = Math.max(1000, Math.min(120_000, Math.floor(ms)));
+    heosSkipDisabledUntil = Date.now() + t;
+    if (heosSkipTimer) clearTimeout(heosSkipTimer);
+    heosSkipTimer = setTimeout(() => {
+      heosSkipDisabledUntil = 0;
+      heosSkipTimer = null;
+    }, t);
+  }
+
+  async function heosPost(path: string, body: any) {
+    const base = normalizeEdgeBaseUrl(edgeBaseUrl);
+    if (!base) throw new Error('Edge Base URL fehlt');
+
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (heosHosts.trim()) headers['X-HEOS-HOSTS'] = heosHosts.trim();
+
+    return edgeFetchJson<any>(base, path, edgeToken || undefined, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(body)
+    });
+  }
+
+  async function heosToggleExternal() {
+    if (!heosExternalActive) {
+      togglePlayPause();
+      return;
+    }
+    const pid = Number(selectedPid);
+    if (!Number.isFinite(pid) || pid === 0) return;
+
+    const nextState = heosIsPlaying ? 'pause' : 'play';
+    await heosPost('/api/heos/play_state', { pid, state: nextState });
+    setHeosPlaybackStatus({
+      pid,
+      state: nextState as any,
+      isPlaying: nextState === 'play',
+      isActive: true,
+      updatedAt: Date.now(),
+      error: null
+    });
+  }
+
+  async function heosNextExternal() {
+    if (!heosExternalActive) {
+      playNext();
+      return;
+    }
+    if (heosSkipDisabled) return;
+    const pid = Number(selectedPid);
+    if (!Number.isFinite(pid) || pid === 0) return;
+    try {
+      await heosPost('/api/heos/next', { pid });
+    } catch {
+      // Some sources (e.g. radio/stations) don't support skip.
+      disableHeosSkipFor(30_000);
+    }
+  }
+
+  async function heosPrevExternal() {
+    if (!heosExternalActive) {
+      playPrev();
+      return;
+    }
+    if (heosSkipDisabled) return;
+    const pid = Number(selectedPid);
+    if (!Number.isFinite(pid) || pid === 0) return;
+    try {
+      await heosPost('/api/heos/prev', { pid });
+    } catch {
+      // Some sources (e.g. radio/stations) don't support skip.
+      disableHeosSkipFor(30_000);
+    }
+  }
+
+  onDestroy(() => {
+    if (heosSkipTimer) clearTimeout(heosSkipTimer);
+  });
 
   function closeSpeakerModal() {
     speakerOpen = false;
@@ -472,7 +559,7 @@
 
   <!-- Content rechts über dem Cover hinausragend -->
   <div class="relative h-full flex items-center pl-[36%] pr-3">
-    {#if now}
+    {#if now || heosExternalActive || spotifyActive}
       <div class="flex-1 min-w-0 flex flex-col justify-center gap-1">
         <div class="text-sm font-semibold truncate leading-tight">{displayArtist ? displayArtist : 'Musik'}</div>
         <div class="text-white/50 text-xs truncate">{displayTitle ? displayTitle : '—'}</div>
@@ -498,8 +585,8 @@
         <div class="flex items-center gap-1">
         <button
           type="button"
-          class="h-7 w-7 rounded-lg bg-white/10 hover:bg-white/20 inline-flex items-center justify-center"
-          on:click={playPrev}
+          class={`h-7 w-7 rounded-lg bg-white/10 hover:bg-white/20 inline-flex items-center justify-center ${heosSkipDisabled ? 'opacity-40 pointer-events-none' : ''}`}
+          on:click={heosPrevExternal}
           aria-label="Zurück"
         >
           <svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="currentColor">
@@ -510,10 +597,10 @@
         <button
           type="button"
           class="h-8 w-8 rounded-lg bg-white/15 hover:bg-white/25 inline-flex items-center justify-center"
-          on:click={togglePlayPause}
-          aria-label={playing ? 'Pause' : 'Play'}
+          on:click={heosToggleExternal}
+          aria-label={isPlayingForUi ? 'Pause' : 'Play'}
         >
-          {#if playing}
+          {#if isPlayingForUi}
             <svg viewBox="0 0 24 24" class="h-4 w-4" fill="currentColor">
               <path d="M6 5h4v14H6V5zm8 0h4v14h-4V5z" />
             </svg>
@@ -526,8 +613,8 @@
 
         <button
           type="button"
-          class="h-7 w-7 rounded-lg bg-white/10 hover:bg-white/20 inline-flex items-center justify-center"
-          on:click={playNext}
+          class={`h-7 w-7 rounded-lg bg-white/10 hover:bg-white/20 inline-flex items-center justify-center ${heosSkipDisabled ? 'opacity-40 pointer-events-none' : ''}`}
+          on:click={heosNextExternal}
           aria-label="Weiter"
         >
           <svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="currentColor">

@@ -4,13 +4,17 @@
   import { formatGermanDayLabel, sameDay } from '$lib/date';
   import { fade, scale } from 'svelte/transition';
   import { layoutWeekTimedSegments, type PositionedSegment, type WeekPlannerConfig } from '$lib/weekPlannerLayout';
+  import type { EventSuggestionDto } from './WeekPlannerDay.svelte';
 
   export let days: Date[] = [];
   export let events: EventDto[] = [];
   export let holidays: HolidayDto[] = [];
+  export let suggestions: EventSuggestionDto[] = [];
   export let onAddEvent: (d: Date) => void;
   export let onEditEvent: (e: EventDto) => void;
   export let onEventDeleted: () => void = () => {};
+  export let onAcceptSuggestion: (s: EventSuggestionDto) => void = () => {};
+  export let onDismissSuggestion: (s: EventSuggestionDto) => void = () => {};
 
   const config: WeekPlannerConfig = {
     startHour: 6,
@@ -64,12 +68,25 @@
     return start;
   }
 
+  function fmtSuggestionTime(s: EventSuggestionDto): string {
+    if (s.allDay) return 'Ganztägig';
+    return fmtTimeRange(s.startAt, s.endAt);
+  }
+
   function eventBaseColor(e: EventDto): string | null {
     const tagColor = e.tag?.color;
     if (tagColor && typeof tagColor === 'string') return tagColor;
     const ps = e.persons && e.persons.length > 0 ? e.persons : e.person ? [e.person] : [];
     const p0 = ps[0];
     return p0?.color ?? null;
+  }
+
+  function suggestionBaseColor(s: EventSuggestionDto): string | null {
+    const tagColor = s.tag?.color;
+    if (tagColor && typeof tagColor === 'string') return tagColor;
+    const ps = s.persons && s.persons.length > 0 ? s.persons : s.person ? [s.person] : [];
+    const p0 = ps[0];
+    return (p0 as any)?.color ?? null;
   }
 
   function eventTileStyle(color: string | null): string {
@@ -127,6 +144,21 @@
   })();
 
   $: timedByDay = layoutWeekTimedSegments(events, days, config);
+
+  $: suggestionsByDay = (() => {
+    const m = new Map<number, EventSuggestionDto[]>();
+    for (const s of suggestions) {
+      const d = startOfLocalDay(new Date(s.startAt));
+      const k = dateKey(d);
+      const arr = m.get(k) ?? [];
+      arr.push(s);
+      m.set(k, arr);
+    }
+    for (const arr of m.values()) {
+      arr.sort((a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime());
+    }
+    return m;
+  })();
 
   const totalMinutes = (config.endHour - config.startHour) * 60;
   const gridHeightPx = totalMinutes * config.pxPerMinute;
@@ -196,6 +228,7 @@
       {#each days as day (dateKey(day))}
         {@const k = dateKey(day)}
         {@const allDayEvents = allDayByDay.get(k) ?? []}
+        {@const daySuggestions = suggestionsByDay.get(k) ?? []}
         <div class="px-2 py-2 border-l border-white/10 min-h-[64px]">
           <div class="space-y-1 max-h-[88px] overflow-y-auto pr-1">
             {#each allDayEvents as e (e.occurrenceId ?? `${e.id}:${e.startAt}`)}
@@ -224,6 +257,42 @@
                       d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
                     />
                   </svg>
+                </button>
+              </div>
+            {/each}
+
+            {#each daySuggestions as s (s.suggestionKey)}
+              {@const color = suggestionBaseColor(s)}
+              <div class="relative">
+                <button
+                  type="button"
+                  class={`w-full text-left rounded-lg px-2 py-1.5 pr-16 border text-xs transition active:scale-[0.99] ${eventTileBgClass(color)} border-dashed opacity-90`}
+                  style={eventTileStyle(color)}
+                  on:click|stopPropagation={() => onAcceptSuggestion(s)}
+                  title="Vorschlag übernehmen"
+                >
+                  <div class="truncate font-medium">{s.title}</div>
+                  <div class="text-[11px] text-white/60 truncate mt-0.5">{fmtSuggestionTime(s)}</div>
+                </button>
+
+                <button
+                  type="button"
+                  class="absolute top-1 right-1 h-6 w-6 rounded-md bg-white/5 hover:bg-white/10 active:bg-white/15 transition grid place-items-center text-white/60"
+                  aria-label="Vorschlag ausblenden"
+                  title="Ausblenden"
+                  on:click|stopPropagation={() => onDismissSuggestion(s)}
+                >
+                  ✕
+                </button>
+
+                <button
+                  type="button"
+                  class="absolute top-1 right-8 h-6 px-2 rounded-md bg-white/5 hover:bg-white/10 active:bg-white/15 transition text-[11px] font-semibold text-white/75"
+                  aria-label="Vorschlag übernehmen"
+                  title="Übernehmen"
+                  on:click|stopPropagation={() => onAcceptSuggestion(s)}
+                >
+                  +
                 </button>
               </div>
             {/each}

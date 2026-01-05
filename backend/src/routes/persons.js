@@ -1,7 +1,7 @@
 const express = require('express');
 const { z } = require('zod');
 
-const { requireAuth } = require('../middleware/auth');
+const { requireAuth, attachUserContext } = require('../middleware/auth');
 const { listPersons, createPerson, deletePerson } = require('../services/personsService');
 
 const personsRouter = express.Router();
@@ -29,24 +29,28 @@ function validateBody(schema) {
   };
 }
 
-personsRouter.get('/', requireAuth, async (req, res) => {
-  const userId = Number(req.auth?.sub);
-  const people = await listPersons({ userId });
+personsRouter.get('/', requireAuth, attachUserContext, async (req, res) => {
+  const calendarId = Number(req.ctx?.calendarId);
+  if (!Number.isFinite(calendarId) || calendarId <= 0) return res.status(400).json({ error: 'missing_calendar' });
+  const people = await listPersons({ calendarId });
   res.json(people);
 });
 
-personsRouter.post('/', requireAuth, validateBody(createSchema), async (req, res) => {
-  const userId = Number(req.auth?.sub);
-  const created = await createPerson({ userId, ...req.validatedBody });
+personsRouter.post('/', requireAuth, attachUserContext, validateBody(createSchema), async (req, res) => {
+  const calendarId = Number(req.ctx?.calendarId);
+  if (!Number.isFinite(calendarId) || calendarId <= 0) return res.status(400).json({ error: 'missing_calendar' });
+  const userId = Number(req.ctx?.userId);
+  const created = await createPerson({ calendarId, userId, ...req.validatedBody });
   res.status(201).json(created);
 });
 
-personsRouter.delete('/:id', requireAuth, async (req, res) => {
+personsRouter.delete('/:id', requireAuth, attachUserContext, async (req, res) => {
   const parsedId = idSchema.safeParse(req.params.id);
   if (!parsedId.success) return res.status(400).json({ error: 'invalid_id' });
 
-  const userId = Number(req.auth?.sub);
-  const ok = await deletePerson({ userId, id: parsedId.data });
+  const calendarId = Number(req.ctx?.calendarId);
+  if (!Number.isFinite(calendarId) || calendarId <= 0) return res.status(400).json({ error: 'missing_calendar' });
+  const ok = await deletePerson({ calendarId, id: parsedId.data });
   if (!ok) return res.status(404).json({ error: 'not_found' });
   res.status(204).end();
 });

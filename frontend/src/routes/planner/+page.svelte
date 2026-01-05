@@ -9,12 +9,18 @@
   import {
     createEvent,
     createScribble,
+    createTodo,
+    dismissRecurringSuggestion,
     fetchEvents,
+    fetchOutlookStatus,
     fetchSettings,
+    fetchTodos,
     getStoredToken,
+    listOutlookConnections,
     listPersons,
     listTags,
     type EventDto,
+    type OutlookConnectionDto,
     type PersonDto,
     type SettingsDto,
     type TagColorKey,
@@ -73,6 +79,37 @@
   let scribbleEnabled = false;
   let scribbleModalOpen = false;
   let scribbleSaving = false;
+
+  // Outlook ToDos
+  let outlookConnected = false;
+  let todoEnabled = true;
+  let outlookConnections: OutlookConnectionDto[] = [];
+  let todoListName = 'Dashbo';
+  let todoListNames: string[] = [];
+  let todoSelectedConnectionId: number | null = null;
+  let todoSelectedListName = '';
+  let todoAccountMenuOpen = false;
+  let todoText = '';
+  let todoSaving = false;
+  let todoError: string | null = null;
+
+  $: selectedTodoConnection =
+    todoSelectedConnectionId != null ? outlookConnections.find((c) => c.id === todoSelectedConnectionId) ?? null : null;
+
+  // Recurring Suggestions
+  interface PlannerSuggestionDto {
+    title: string;
+    date: Date;
+    startTime: string | null;
+    endTime: string | null;
+    allDay: boolean;
+    tagId: number | null;
+    personIds: number[];
+    signature: string;
+  }
+  let suggestionsAll: PlannerSuggestionDto[] = [];
+  let suggestions: PlannerSuggestionDto[] = [];
+  let dismissedSuggestions: string[] = [];
 
   const tagBg: Record<TagColorKey, string> = {
     fuchsia: 'bg-fuchsia-500',
@@ -311,6 +348,21 @@
     monthEventsByDay = m;
   }
 
+  let monthSuggestionsByDay = new Map<string, PlannerSuggestionDto[]>();
+  $: {
+    const m = new Map<string, PlannerSuggestionDto[]>();
+    for (const s of suggestionsAll) {
+      const k = dateKeyLocal(s.date);
+      const arr = m.get(k) ?? [];
+      arr.push(s);
+      m.set(k, arr);
+    }
+    for (const arr of m.values()) {
+      arr.sort((a, b) => a.date.getTime() - b.date.getTime());
+    }
+    monthSuggestionsByDay = m;
+  }
+
   function eventPersons(e: EventDto): Array<{ id: number; name: string; color: string }> {
     if (e.persons && e.persons.length > 0) return e.persons as any;
     if (e.person) return [e.person as any];
@@ -366,12 +418,197 @@
       agendaEvents = items
         .slice()
         .sort((a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime());
+      // Generate suggestions based on a wider window (needs past events to detect patterns)
+      try {
+        const today = startOfLocalDay(new Date());
+        const suggestFrom = startOfDay(addDays(today, -56));
+        // Include enough future events so the pattern can be inferred from already scheduled occurrences.
+        const suggestTo = endOfDay(addDays(today, 60));
+        const suggestEvents = await fetchEvents(suggestFrom, suggestTo);
+        generateSuggestions(suggestEvents);
+      } catch {
+        suggestions = [];
+      }
     } catch (err) {
       agendaError = err instanceof Error ? err.message : 'Fehler beim Laden.';
       agendaEvents = [];
     } finally {
       agendaLoading = false;
     }
+  }
+
+  // --- Suggestion generation (weekly recurring pattern detection) ---
+  function generateSuggestions(events: EventDto[]) {
+    const now = new Date();
+    const todayStart = startOfLocalDay(now);
+    const normalizeTitle = (t: string) => String(t || '').trim().toLowerCase().replace(/\s+/g, ' ');
+    const weekdayMon0 = (d: Date) => (d.getDay() + 6) % 7;
+    const dateKey = (d: Date) => `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+    const bucket15 = (mins: number) => Math.round(mins / 15) * 15;
+    const minutesSinceMidnight = (d: Date) => d.getHours() * 60 + d.getMinutes();
+    const hhmmFromMinutes = (mins: number) => {
+      const h = Math.floor(mins / 60);
+      const m = mins % 60;
+      return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+    };
+
+    const dismissedSet = new Set(dismissedSuggestions);
+
+    // Filter out sources/records that create noisy suggestions.
+    const candidates = (events ?? []).filter((e) => {
+      if (e.source === 'outlook') return false;
+      if (e.allDay) return false;
+      if (e.recurrence) return false;
+      if (!e.title || !String(e.title).trim()) return false;
+      return true;
+    });
+
+    // Aggregate weekly patterns (12-week lookback) using 15-min buckets.
+    // Also allow learning from already scheduled near-future events so month view can show upcoming suggestions.
+    const lookbackFrom = addDays(todayStart, -12 * 7);
+    const patternTo = addDays(todayStart, 60 + 1);
+    const weeklyAgg = new Map<
+      string,
+      { dates: Date[]; sample: EventDto; weekday: number; startBucket: number; titleNorm: string }
+    >();
+
+    for (const e of candidates) {
+      const start = new Date(e.startAt);
+      if (Number.isNaN(start.getTime())) continue;
+      if (start < lookbackFrom || start >= patternTo) continue;
+
+      const wd = weekdayMon0(start);
+      const startMin = bucket15(minutesSinceMidnight(start));
+      const titleNorm = normalizeTitle(e.title);
+      if (!titleNorm) continue;
+
+      const sig = `weekly|${wd}|${startMin}|${titleNorm}`;
+      const existing = weeklyAgg.get(sig);
+      if (existing) {
+        existing.dates.push(start);
+        const existingSampleStart = new Date(existing.sample.startAt).getTime();
+        const currentMs = start.getTime();
+        if (!Number.isNaN(existingSampleStart) && currentMs > existingSampleStart) {
+          existing.sample = e;
+        }
+      } else {
+        weeklyAgg.set(sig, { dates: [start], sample: e, weekday: wd, startBucket: startMin, titleNorm });
+      }
+    }
+
+    // Generate suggestions for the next ~2 months (month grid should show them too).
+    const upcomingDays: Date[] = [];
+    for (let i = 0; i <= 60; i++) upcomingDays.push(addDays(todayStart, i));
+
+    const result: PlannerSuggestionDto[] = [];
+    const addedKeys = new Set<string>();
+
+    for (const [sig, agg] of weeklyAgg) {
+      for (const day of upcomingDays) {
+        const dayStart = startOfLocalDay(day);
+        if (dayStart < todayStart) continue;
+        if (weekdayMon0(dayStart) !== agg.weekday) continue;
+
+        const datesBefore = agg.dates.filter((d) => d.getTime() < dayStart.getTime());
+        if (datesBefore.length < 3) continue;
+        const weeksBefore = new Set(
+          datesBefore.map((d) => {
+            const weekStart = new Date(d.getFullYear(), d.getMonth(), d.getDate() - weekdayMon0(d));
+            return dateKey(weekStart);
+          })
+        );
+        if (weeksBefore.size < 3) continue;
+
+        const dayDateKey = dateKey(dayStart);
+        const suggKey = `${sig}|${dayDateKey}`;
+        if (addedKeys.has(suggKey)) continue;
+        if (dismissedSet.has(suggKey)) continue;
+
+        // Check if event already exists on that day.
+        const hasExisting = (events ?? []).some((ev) => {
+          const evStart = new Date(ev.startAt);
+          return dateKey(evStart) === dayDateKey && normalizeTitle(ev.title) === agg.titleNorm;
+        });
+        if (hasExisting) continue;
+
+        addedKeys.add(suggKey);
+
+        let endTime: string | null = null;
+        try {
+          const sampleStart = new Date(agg.sample.startAt);
+          const sampleEnd = agg.sample.endAt ? new Date(agg.sample.endAt) : null;
+          if (sampleEnd && !Number.isNaN(sampleStart.getTime()) && !Number.isNaN(sampleEnd.getTime())) {
+            const deltaMs = sampleEnd.getTime() - sampleStart.getTime();
+            const minMs = 15 * 60 * 1000;
+            const maxMs = 12 * 60 * 60 * 1000;
+            if (deltaMs >= minMs && deltaMs <= maxMs) {
+              const durMins = Math.round(deltaMs / (60 * 1000));
+              const endMins = agg.startBucket + durMins;
+              if (endMins > 0 && endMins < 24 * 60) endTime = hhmmFromMinutes(endMins);
+            }
+          }
+        } catch {
+          // ignore
+        }
+
+        const ps = eventPersons(agg.sample);
+        result.push({
+          title: agg.sample.title,
+          date: new Date(dayStart),
+          allDay: false,
+          startTime: hhmmFromMinutes(agg.startBucket),
+          endTime,
+          tagId: agg.sample.tag?.id ?? null,
+          personIds: ps.map((p) => p.id),
+          signature: suggKey
+        });
+      }
+    }
+
+    result.sort((a, b) => a.date.getTime() - b.date.getTime());
+    suggestionsAll = result;
+    suggestions = result.slice(0, 5);
+  }
+
+  async function dismissSuggestion(s: PlannerSuggestionDto) {
+    dismissedSuggestions = [...dismissedSuggestions, s.signature];
+    suggestionsAll = suggestionsAll.filter((x) => x.signature !== s.signature);
+    suggestions = suggestions.filter((x) => x.signature !== s.signature);
+    try {
+      await dismissRecurringSuggestion(s.signature);
+    } catch {
+      // ignore
+    }
+  }
+
+  function acceptSuggestion(s: PlannerSuggestionDto) {
+    // Prefill the quick add form with suggestion data
+    newTitle = s.title;
+    newDate = toDateInputValue(s.date);
+    newAllDay = s.allDay;
+    newStartTime = s.startTime ?? '';
+    newEndTime = s.endTime ?? '';
+    newTagIdStr = s.tagId != null ? String(s.tagId) : '';
+    newPersonIds = s.personIds.slice();
+    quickAddOpen = true;
+    // Remove from suggestions
+    suggestionsAll = suggestionsAll.filter((x) => x.signature !== s.signature);
+    suggestions = suggestions.filter((x) => x.signature !== s.signature);
+  }
+
+  // Helper to parse ToDo lines from textarea
+  function parseTodoLines(text: string): string[] {
+    return text
+      .split(/\r?\n/)
+      .map((l) => l.trim())
+      .filter((l) => l.length > 0);
+  }
+
+  // Create ISO at local noon to avoid timezone offsets
+  function isoNoonLocal(d: Date): string {
+    const x = new Date(d);
+    x.setHours(12, 0, 0, 0);
+    return x.toISOString();
   }
 
   async function refreshMonth() {
@@ -399,12 +636,26 @@
     void refreshAgenda();
   }
 
+  // Build a map of suggestions by day key for quick lookup
+  let agendaSuggestionsByDay = new Map<string, PlannerSuggestionDto[]>();
+  $: {
+    const m = new Map<string, PlannerSuggestionDto[]>();
+    for (const s of suggestionsAll) {
+      const k = dateKeyLocal(s.date);
+      const arr = m.get(k) ?? [];
+      arr.push(s);
+      m.set(k, arr);
+    }
+    agendaSuggestionsByDay = m;
+  }
+
   $: agendaGroups = (() => {
-    const groups: { day: Date; items: EventDto[] }[] = [];
+    const groups: { day: Date; items: EventDto[]; suggestions: PlannerSuggestionDto[] }[] = [];
     for (let i = 0; i <= 7; i++) {
       const day = startOfLocalDay(addDays(selectedDate, i));
       const items = agendaEvents.filter((e) => sameDay(new Date(e.startAt), day));
-      groups.push({ day, items });
+      const daySuggestions = agendaSuggestionsByDay.get(dateKeyLocal(day)) ?? [];
+      groups.push({ day, items, suggestions: daySuggestions });
     }
     return groups;
   })();
@@ -458,11 +709,40 @@
         personIds: newPersonIds.length > 0 ? newPersonIds : null
       });
 
+      // Create Outlook ToDos if enabled
+      const todoLines = outlookConnected && todoEnabled ? parseTodoLines(todoText) : [];
+      if (todoLines.length > 0) {
+        todoSaving = true;
+        todoError = null;
+        const dueAt = isoNoonLocal(d);
+        const listName = todoSelectedListName || (todoListNames.length > 0 ? todoListNames[0] : todoListName) || '';
+        const connectionId = todoSelectedConnectionId;
+        try {
+          await Promise.all(
+            todoLines.map((t) =>
+              createTodo({
+                ...(connectionId != null ? { connectionId } : {}),
+                ...(listName ? { listName } : {}),
+                title: t,
+                description: null,
+                dueAt
+              })
+            )
+          );
+        } catch (e: any) {
+          todoError = e?.message || 'Fehler beim Speichern der ToDos';
+        } finally {
+          todoSaving = false;
+        }
+      }
+
       newTitle = '';
       newLocation = '';
       if (!newAllDay) newEndTime = '';
       newTagIdStr = '';
       newPersonIds = [];
+      todoText = '';
+      todoError = null;
       closePopovers();
 
       // Keep the agenda anchored to the event day
@@ -515,15 +795,43 @@
     metaError = null;
     void (async () => {
       try {
-        const [s, t, p] = await Promise.all([fetchSettings(), listTags(), listPersons()]);
+        const [s, t, p, outlookSt] = await Promise.all([
+          fetchSettings(),
+          listTags(),
+          listPersons(),
+          fetchOutlookStatus().catch(() => null)
+        ]);
         backgroundUrl = pickBackgroundFromSettings(s);
         scribbleEnabled = s.scribbleEnabled !== false;
+        todoEnabled = s.todoEnabled !== false;
+        dismissedSuggestions = Array.isArray(s.dismissedSuggestions) ? s.dismissedSuggestions : [];
         tags = (t ?? []).slice().sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || a.name.localeCompare(b.name));
         persons = (p ?? []).slice().sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || a.name.localeCompare(b.name));
+        outlookConnected = Boolean(outlookSt?.connected);
+
+        // Load Outlook ToDo metadata if connected
+        if (outlookConnected && todoEnabled) {
+          try {
+            const [conns, todoMeta] = await Promise.all([listOutlookConnections(), fetchTodos()]);
+            outlookConnections = Array.isArray(conns) ? conns : [];
+            todoListName = todoMeta?.listName || 'Dashbo';
+            todoListNames = Array.isArray(todoMeta?.listNames) ? todoMeta.listNames : [];
+            if (todoSelectedConnectionId == null && outlookConnections.length > 0) {
+              todoSelectedConnectionId = outlookConnections[0]!.id;
+            }
+            if (!todoSelectedListName) {
+              todoSelectedListName = (todoListNames.length > 0 ? todoListNames[0] : todoListName) || '';
+            }
+          } catch {
+            outlookConnections = [];
+          }
+        }
       } catch (err) {
         metaError = err instanceof Error ? err.message : 'Fehler beim Laden.';
       } finally {
         metaLoading = false;
+        // Recompute suggestions after settings (dismissed keys) are loaded.
+        void refreshAgenda();
       }
     })();
 
@@ -597,7 +905,54 @@
     {#if view === 'agenda'}
       <div class="relative z-10" in:fly={{ x: -30, duration: 200 }} out:fade={{ duration: 100 }}>
         <div class="flex items-center justify-between gap-3 mb-3">
-          <div class="text-white/85 text-sm">{formatDayTitle(selectedDate)} → +7 Tage</div>
+          <div class="flex items-center gap-2 text-white/85 text-sm">
+            <button
+              type="button"
+              class="h-9 w-9 flex items-center justify-center rounded-lg border border-white/10 hover:bg-white/10"
+              aria-label="Vorherige Woche"
+              title="Vorherige Woche"
+              on:click={() => {
+                selectedDate = addDays(selectedDate, -7);
+                monthAnchor = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1);
+                newDate = toDateInputValue(selectedDate);
+                closePopovers();
+                void refreshAgenda();
+              }}
+            >
+              <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" />
+              </svg>
+            </button>
+
+            <div class="min-w-0">
+              {selectedDate.toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' })}
+              –
+              {addDays(selectedDate, 6).toLocaleDateString('de-DE', {
+                weekday: 'short',
+                day: '2-digit',
+                month: '2-digit',
+                year: 'numeric'
+              })}
+            </div>
+
+            <button
+              type="button"
+              class="h-9 w-9 flex items-center justify-center rounded-lg border border-white/10 hover:bg-white/10"
+              aria-label="Nächste Woche"
+              title="Nächste Woche"
+              on:click={() => {
+                selectedDate = addDays(selectedDate, 7);
+                monthAnchor = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1);
+                newDate = toDateInputValue(selectedDate);
+                closePopovers();
+                void refreshAgenda();
+              }}
+            >
+              <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
+              </svg>
+            </button>
+          </div>
           <button
             type="button"
             class="h-9 px-3 rounded-lg text-sm font-medium border border-white/10 hover:bg-white/10"
@@ -627,25 +982,38 @@
 
           <div class={cx('space-y-3', agendaLoading && 'opacity-60')}>
             {#each agendaGroups as g (dateKeyLocal(g.day))}
-              <div class="bg-white/5 rounded-xl p-3 glass border border-white/10">
+              {@const isSelected = sameDay(g.day, selectedDate)}
+              <div
+                class={cx(
+                  'bg-white/5 rounded-xl p-3 glass border border-white/10',
+                  isSelected && 'border-white/25 ring-1 ring-white/15'
+                )}
+              >
               <div class="flex items-center justify-between">
-                <div class="text-sm font-medium">
+                <div class="text-sm font-medium flex items-center gap-2">
                   {g.day.toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit' })}
+                  {#if isSelected}
+                    <span class="text-[10px] px-2 py-0.5 rounded-full bg-white/10 text-white/70">Ausgewählt</span>
+                  {/if}
                 </div>
-                <button
-                  type="button"
-                  class="text-xs text-white/60 hover:text-white"
-                  on:click={() => {
-                    selectedDate = g.day;
-                    newDate = toDateInputValue(g.day);
-                    void refreshAgenda();
-                  }}
-                >
-                  Öffnen
-                </button>
+                {#if isSelected}
+                  <span class="text-xs text-white/40">Start</span>
+                {:else}
+                  <button
+                    type="button"
+                    class="text-xs text-white/60 hover:text-white"
+                    on:click={() => {
+                      selectedDate = g.day;
+                      newDate = toDateInputValue(g.day);
+                      void refreshAgenda();
+                    }}
+                  >
+                    Woche ab hier
+                  </button>
+                {/if}
               </div>
 
-              {#if g.items.length === 0}
+              {#if g.items.length === 0 && g.suggestions.length === 0}
                 <div class="text-white/40 text-sm mt-2">Keine Termine</div>
               {:else}
                 <div class="mt-2 space-y-2">
@@ -696,6 +1064,65 @@
                       </div>
                     </button>
                   {/each}
+
+                  <!-- Inline suggestions for this day -->
+                  {#each g.suggestions as s (s.signature)}
+                    {@const sPersons = persons.filter((p) => s.personIds.includes(p.id))}
+                    {@const sTag = tags.find((t) => t.id === s.tagId)}
+                    <div class="bg-gradient-to-r from-indigo-500/15 to-purple-500/15 border border-dashed border-indigo-400/40 rounded-lg px-2 py-2 -mx-2">
+                      <div class="flex items-start justify-between gap-2">
+                        <div class="min-w-0 flex items-start gap-2 flex-1">
+                          <div class="mt-1 h-2.5 w-2.5 rounded-full shrink-0 border-2 border-violet-400 border-dashed bg-transparent"></div>
+                          <div class="min-w-0">
+                            <div class="text-sm font-medium truncate text-white/80">{s.title}</div>
+                            <div class="text-xs text-white/50 truncate">
+                              {#if !s.allDay && s.startTime}
+                                {s.startTime}{s.endTime ? ` – ${s.endTime}` : ''}
+                              {:else if s.allDay}
+                                Ganztägig
+                              {/if}
+                              <span class="ml-1 text-violet-300/70">Vorschlag</span>
+                            </div>
+                            {#if sPersons.length > 0 || sTag}
+                              <div class="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                                {#if sTag}
+                                  <span class="text-xs px-1.5 py-0.5 rounded-full bg-white/10 text-white/60">{sTag.name}</span>
+                                {/if}
+                                {#each sPersons as p (p.id)}
+                                  <span
+                                    class="text-xs px-1.5 py-0.5 rounded-full bg-white/10"
+                                    style={isHexColor(p.color) ? `color: ${p.color}` : ''}
+                                  >{p.name}</span>
+                                {/each}
+                              </div>
+                            {/if}
+                          </div>
+                        </div>
+                        <div class="flex items-center gap-0.5 shrink-0">
+                          <button
+                            type="button"
+                            class="p-1 rounded hover:bg-white/10 text-white/50 hover:text-white transition"
+                            title="Vorschlag übernehmen"
+                            on:click={() => acceptSuggestion(s)}
+                          >
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                            </svg>
+                          </button>
+                          <button
+                            type="button"
+                            class="p-1 rounded hover:bg-white/10 text-white/50 hover:text-white transition"
+                            title="Vorschlag ignorieren"
+                            on:click={() => dismissSuggestion(s)}
+                          >
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  {/each}
                 </div>
               {/if}
               </div>
@@ -745,6 +1172,9 @@
             {#each monthDays as d (d.toISOString())}
               {@const k = dateKeyLocal(d)}
               {@const dayEvents = monthEventsByDay.get(k) ?? []}
+              {@const daySuggestions = monthSuggestionsByDay.get(k) ?? []}
+              {@const showSuggestion = daySuggestions.length > 0}
+              {@const maxEventDots = showSuggestion ? 2 : 3}
               <button
                 type="button"
                 class={cx(
@@ -755,14 +1185,23 @@
                 on:click={() => setSelected(d)}
               >
                 <div class="leading-none">{d.getDate()}</div>
-                {#if dayEvents.length > 0}
+                {#if dayEvents.length > 0 || showSuggestion}
                   <div class="mt-1 flex items-center justify-center gap-0.5">
-                    {#each dayEvents.slice(0, 3) as ev (eventKey(ev))}
+                    {#each dayEvents.slice(0, maxEventDots) as ev (eventKey(ev))}
                       {@const d0 = eventDot(ev)}
                       <div class={`h-1.5 w-1.5 rounded-full ${d0.cls}`} style={d0.style}></div>
                     {/each}
-                    {#if dayEvents.length > 3}
-                      <div class="text-[10px] text-white/60 leading-none">+{dayEvents.length - 3}</div>
+                    {#if showSuggestion}
+                      <div
+                        class="h-1.5 w-1.5 rounded-full border border-dashed border-violet-400/70 bg-violet-500/30"
+                        title={daySuggestions[0]?.title ? `Vorschlag: ${daySuggestions[0].title}` : 'Vorschlag'}
+                      ></div>
+                    {/if}
+                    {#if dayEvents.length > maxEventDots || (showSuggestion && daySuggestions.length > 1)}
+                      {@const extra = (dayEvents.length > maxEventDots ? dayEvents.length - maxEventDots : 0) + (showSuggestion ? Math.max(0, daySuggestions.length - 1) : 0)}
+                      {#if extra > 0}
+                        <div class="text-[10px] text-white/60 leading-none">+{extra}</div>
+                      {/if}
                     {/if}
                   </div>
                 {:else}
@@ -837,6 +1276,8 @@
   eventToEdit={editEvent}
   onClose={closeEdit}
   onCreated={onEventMutated}
+  {outlookConnected}
+  {todoEnabled}
 />
 
 <!-- Quick Add Event Modal -->
@@ -1068,6 +1509,69 @@
           {/if}
         </div>
 
+        <!-- ToDos (optional, Outlook) -->
+        {#if outlookConnected && todoEnabled}
+          <div class="border-t border-white/10 pt-3 mt-1">
+            <div class="text-xs text-white/50 mb-2">ToDos (optional)</div>
+
+            {#if outlookConnections.length === 0}
+              <div class="text-xs text-white/50">Keine Outlook-Verbindung gefunden.</div>
+            {:else}
+              <div class="space-y-2">
+                {#if outlookConnections.length > 1}
+                  <div class="relative">
+                    <button
+                      type="button"
+                      class="w-full h-10 px-3 rounded-lg bg-white/10 border border-white/10 text-sm text-white/90 flex items-center gap-2"
+                      on:click={() => (todoAccountMenuOpen = !todoAccountMenuOpen)}
+                    >
+                      <span class="flex-1 text-left truncate">{selectedTodoConnection ? (selectedTodoConnection.displayName || selectedTodoConnection.email) : 'Konto wählen'}</span>
+                      <span class="text-white/50">▾</span>
+                    </button>
+                    {#if todoAccountMenuOpen}
+                      <div class="absolute z-50 bottom-full mb-1 w-full rounded-lg bg-black/90 border border-white/10 max-h-40 overflow-auto">
+                        {#each outlookConnections as c (c.id)}
+                          <button
+                            type="button"
+                            class={`w-full px-3 py-2 text-left text-sm hover:bg-white/10 ${c.id === todoSelectedConnectionId ? 'bg-white/10' : ''}`}
+                            on:click={() => { todoSelectedConnectionId = c.id; todoAccountMenuOpen = false; }}
+                          >
+                            {c.displayName || c.email || `Outlook ${c.id}`}
+                          </button>
+                        {/each}
+                      </div>
+                    {/if}
+                  </div>
+                {/if}
+
+                {#if todoListNames.length > 1}
+                  <select
+                    class="w-full h-10 px-3 rounded-lg bg-white/10 border border-white/10 text-sm text-white/90 appearance-none"
+                    bind:value={todoSelectedListName}
+                  >
+                    {#each todoListNames as ln}
+                      <option class="bg-neutral-900" value={ln}>{ln}</option>
+                    {/each}
+                  </select>
+                {/if}
+
+                <textarea
+                  class="w-full min-h-[60px] px-3 py-2 rounded-lg bg-white/10 border border-white/10 text-sm placeholder:text-white/40 resize-none"
+                  placeholder="Eine Zeile = ein ToDo"
+                  bind:value={todoText}
+                ></textarea>
+                <div class="text-xs text-white/40 flex justify-between">
+                  <span>Fällig am Termin-Tag</span>
+                  <span>{parseTodoLines(todoText).length} ToDo(s)</span>
+                </div>
+                {#if todoError}
+                  <div class="text-xs text-rose-400">{todoError}</div>
+                {/if}
+              </div>
+            {/if}
+          </div>
+        {/if}
+
         {#if createError}
           <div class="text-red-400 text-sm">{createError}</div>
         {/if}
@@ -1149,6 +1653,20 @@
 
 <!-- Floating Buttons - hidden when any modal is open -->
 {#if !anyModalOpen}
+  <!-- Floating button on desktop: back to dashboard -->
+  <a
+    href="/"
+    class="fixed bottom-6 left-6 z-50 hidden md:flex items-center gap-2 px-4 py-3 rounded-full bg-white/20 backdrop-blur-md border border-white/10 shadow-lg text-white text-sm font-medium hover:bg-white/30 transition-colors"
+    aria-label="Zum Dashboard"
+    in:fly={{ y: 50, duration: 300 }}
+    out:fade={{ duration: 150 }}
+  >
+    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+    </svg>
+    Dashboard
+  </a>
+
   <!-- Floating Add Event Button -->
   <button
     type="button"

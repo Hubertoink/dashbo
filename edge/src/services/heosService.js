@@ -13,6 +13,11 @@ let lastScanAt = null;
 let lastError = null;
 let lastScanMethod = null;
 
+// Some sources stop reporting now-playing metadata when paused.
+// Cache the last known metadata per pid so UIs can keep showing title/cover during pause.
+// Key: pid -> { updatedAt, title, artist, album, imageUrl, source, url }
+const lastPlaybackMetaByPid = new Map();
+
 function normalizeHostsList(list) {
   return (Array.isArray(list) ? list : [])
     .map((s) => String(s || '').trim())
@@ -428,6 +433,26 @@ async function playStream(pid, url, name, opts) {
   return sendWithHostsFallback('browse', 'play_stream', attrs, { hosts });
 }
 
+async function playNext(pid, opts) {
+  const p = typeof pid === 'number' ? pid : Number(pid);
+  if (!Number.isFinite(p) || p === 0) throw new Error('Invalid pid');
+
+  const targetHost = await findHostForPid(p, opts?.hosts);
+  const hosts = targetHost ? [targetHost] : opts?.hosts;
+
+  return sendWithHostsFallback('player', 'play_next', { pid: p }, { hosts });
+}
+
+async function playPrevious(pid, opts) {
+  const p = typeof pid === 'number' ? pid : Number(pid);
+  if (!Number.isFinite(p) || p === 0) throw new Error('Invalid pid');
+
+  const targetHost = await findHostForPid(p, opts?.hosts);
+  const hosts = targetHost ? [targetHost] : opts?.hosts;
+
+  return sendWithHostsFallback('player', 'play_previous', { pid: p }, { hosts });
+}
+
 async function setPlayState(pid, state, opts) {
   const s = String(state || '').toLowerCase();
   if (!['play', 'pause', 'stop'].includes(s)) {
@@ -567,6 +592,38 @@ function parseNowPlayingPayload(resp) {
   };
 }
 
+function cachePlaybackMeta(pid, media) {
+  if (!Number.isFinite(pid) || pid === 0) return;
+  if (!media || typeof media !== 'object') return;
+  const hasAny = Boolean(media.title || media.artist || media.album || media.imageUrl || media.source || media.url);
+  if (!hasAny) return;
+
+  lastPlaybackMetaByPid.set(pid, {
+    updatedAt: Date.now(),
+    title: media.title ?? null,
+    artist: media.artist ?? null,
+    album: media.album ?? null,
+    imageUrl: media.imageUrl ?? null,
+    source: media.source ?? null,
+    url: media.url ?? null
+  });
+}
+
+function getCachedPlaybackMeta(pid, opts) {
+  const entry = lastPlaybackMetaByPid.get(pid);
+  if (!entry) return null;
+  const maxAgeMs = Number.isFinite(opts?.maxAgeMs) ? Math.max(1_000, Math.floor(opts.maxAgeMs)) : 10 * 60 * 1000;
+  if (Date.now() - entry.updatedAt > maxAgeMs) return null;
+  return {
+    title: entry.title ?? null,
+    artist: entry.artist ?? null,
+    album: entry.album ?? null,
+    imageUrl: entry.imageUrl ?? null,
+    source: entry.source ?? null,
+    url: entry.url ?? null
+  };
+}
+
 async function getPlaybackSummary(pid, opts) {
   const p = typeof pid === 'number' ? pid : Number(pid);
   if (!Number.isFinite(p) || p === 0) throw new Error('Invalid pid');
@@ -582,7 +639,17 @@ async function getPlaybackSummary(pid, opts) {
   const state = playStateResp ? parseHeosPlayState(playStateResp) : 'unknown';
   const isPlaying = state === 'play';
 
-  const media = nowPlayingResp ? parseNowPlayingPayload(nowPlayingResp) : parseNowPlayingPayload(null);
+  const mediaRaw = nowPlayingResp ? parseNowPlayingPayload(nowPlayingResp) : parseNowPlayingPayload(null);
+  const hasAnyMetaRaw = Boolean(
+    mediaRaw?.title || mediaRaw?.artist || mediaRaw?.album || mediaRaw?.imageUrl || mediaRaw?.source || mediaRaw?.url
+  );
+  if (hasAnyMetaRaw) cachePlaybackMeta(p, mediaRaw);
+
+  let media = mediaRaw;
+  if (!hasAnyMetaRaw && (state === 'pause' || state === 'unknown')) {
+    const cached = getCachedPlaybackMeta(p);
+    if (cached) media = cached;
+  }
 
   const hasAnyMeta = Boolean(media?.title || media?.artist || media?.album || media?.source || media?.url);
   const isActive = state === 'play' || state === 'pause' || (state === 'unknown' && hasAnyMeta);
@@ -640,6 +707,8 @@ module.exports = {
   scanPlayers,
   getStatus,
   playStream,
+  playNext,
+  playPrevious,
   setPlayState,
   getPlayState,
   getVolume,

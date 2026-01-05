@@ -131,6 +131,19 @@ export function setToken(token: string | null) {
   else localStorage.setItem('dashbo_token', token);
 }
 
+export function decodeJwtPayload<T = any>(token: string): T | null {
+  try {
+    const parts = String(token).split('.');
+    if (parts.length < 2) return null;
+    const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    const padded = base64.padEnd(Math.ceil(base64.length / 4) * 4, '=');
+    const json = atob(padded);
+    return JSON.parse(json) as T;
+  } catch {
+    return null;
+  }
+}
+
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const token = getToken();
   const resp = await fetch(`${API_BASE}${path}`, {
@@ -332,21 +345,100 @@ export async function login(email: string, password: string): Promise<LoginRespo
   return api<LoginResponse>('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) });
 }
 
+export async function register(email: string, name: string, password: string): Promise<LoginResponse> {
+  return api<LoginResponse>('/auth/register', { method: 'POST', body: JSON.stringify({ email, name, password }) });
+}
+
+export type MeDto = {
+  id: number;
+  email: string;
+  name: string;
+  isAdmin: boolean;
+  role: 'admin' | 'member' | string;
+  calendarId: number | null;
+  emailVerified?: boolean;
+};
+
+export async function fetchMe(): Promise<MeDto> {
+  return api<MeDto>('/auth/me');
+}
+
+export async function requestPasswordReset(email: string): Promise<{ ok: true }> {
+  return api<{ ok: true }>('/auth/request-password-reset', { method: 'POST', body: JSON.stringify({ email }) });
+}
+
+export async function resetPasswordWithToken(token: string, password: string): Promise<{ ok: true }> {
+  return api<{ ok: true }>('/auth/reset-password', { method: 'POST', body: JSON.stringify({ token, password }) });
+}
+
+export async function verifyEmailWithToken(token: string): Promise<{ ok: true }> {
+  return api<{ ok: true }>('/auth/verify-email', { method: 'POST', body: JSON.stringify({ token }) });
+}
+
+export async function requestEmailVerification(): Promise<{ ok: true }> {
+  return api<{ ok: true }>('/auth/request-email-verification', { method: 'POST' });
+}
+
 export type UserDto = {
   id: number;
   email: string;
   name: string;
   isAdmin: boolean;
-  createdAt: string;
-  updatedAt: string;
+  role?: string;
+  calendarId?: number | null;
+  invited?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
 };
 
 export async function listUsers(): Promise<UserDto[]> {
   return api<UserDto[]>('/users');
 }
 
+export type UserRosterDto = {
+  id: number;
+  email: string;
+  name: string;
+  isAdmin: boolean;
+  role: string;
+};
+
+export async function listUserRoster(): Promise<UserRosterDto[]> {
+  return api<UserRosterDto[]>('/users/roster');
+}
+
 export async function createUser(input: { email: string; name: string; password: string; isAdmin?: boolean }): Promise<UserDto> {
   return api<UserDto>('/users', { method: 'POST', body: JSON.stringify(input) });
+}
+
+export async function inviteUser(input: {
+  email: string;
+  name: string;
+  isAdmin?: boolean;
+}): Promise<{ ok: true; user: UserDto; mailSent: boolean; link: string }> {
+  return api<{ ok: true; user: UserDto; mailSent: boolean; link: string }>('/users/invite', {
+    method: 'POST',
+    body: JSON.stringify(input)
+  });
+}
+
+export async function createInviteLinkForUser(id: number): Promise<{ ok: true; link: string }> {
+  return api<{ ok: true; link: string }>(`/users/${id}/invite-link`, { method: 'POST' });
+}
+
+export async function createCalendarInviteLink(): Promise<{ ok: true; link: string }> {
+  return api<{ ok: true; link: string }>(`/users/calendar-invite-link`, { method: 'POST' });
+}
+
+export async function acceptCalendarInvite(
+  token: string,
+  input: { email: string; name: string; password: string }
+): Promise<{ ok: true }> {
+  return api<{ ok: true }>(`/auth/accept-calendar-invite`, { method: 'POST', body: JSON.stringify({ token, ...input }) });
+}
+
+export async function acceptInvite(token: string, input: { name: string; password: string }): Promise<{ ok: true }> {
+  return api<{ ok: true }>('/auth/accept-invite', { method: 'POST', body: JSON.stringify({ token, ...input }) });
 }
 
 export async function deleteUser(id: number): Promise<void> {
@@ -364,7 +456,14 @@ export type SettingsDto = {
   background: string | null;
   backgroundUrl: string | null;
   images: string[];
+  recurringSuggestionsEnabled?: boolean;
+  recurringSuggestionsWeekly?: boolean;
+  recurringSuggestionsBiweekly?: boolean;
+  recurringSuggestionsMonthly?: boolean;
+  recurringSuggestionsBirthdays?: boolean;
+  recurringSuggestionsDismissed?: string[];
   backgroundRotateEnabled?: boolean;
+  backgroundRotateImages?: string[];
   weatherLocation?: string | null;
   holidaysEnabled?: boolean;
   todoEnabled?: boolean;
@@ -423,6 +522,31 @@ export async function uploadBackground(file: File): Promise<{ filename: string; 
 
 export async function setBackgroundRotateEnabled(enabled: boolean): Promise<{ ok: true }> {
   return api<{ ok: true }>('/settings/background/rotate', { method: 'POST', body: JSON.stringify({ enabled }) });
+}
+
+export async function setBackgroundRotateImages(images: string[]): Promise<{ ok: true }> {
+  return api<{ ok: true }>('/settings/background/rotate-images', { method: 'POST', body: JSON.stringify({ images }) });
+}
+
+export type RecurringSuggestionsOptions = {
+  enabled?: boolean;
+  weekly?: boolean;
+  biweekly?: boolean;
+  monthly?: boolean;
+  birthdays?: boolean;
+};
+
+export async function setRecurringSuggestionsSettings(options: RecurringSuggestionsOptions): Promise<{ ok: true }> {
+  return api<{ ok: true }>('/settings/recurring-suggestions', { method: 'POST', body: JSON.stringify(options) });
+}
+
+/** @deprecated Use setRecurringSuggestionsSettings instead */
+export async function setRecurringSuggestionsEnabled(enabled: boolean): Promise<{ ok: true }> {
+  return setRecurringSuggestionsSettings({ enabled });
+}
+
+export async function dismissRecurringSuggestion(key: string): Promise<{ ok: true }> {
+  return api<{ ok: true }>('/settings/recurring-suggestions/dismiss', { method: 'POST', body: JSON.stringify({ key }) });
 }
 
 export function uploadBackgroundWithProgress(

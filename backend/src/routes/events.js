@@ -1,7 +1,7 @@
 const express = require('express');
 const { z } = require('zod');
 
-const { requireAuth } = require('../middleware/auth');
+const { requireAuth, attachUserContext } = require('../middleware/auth');
 
 const { listEvents, createEvent, updateEvent, deleteEvent } = require('../controllers/eventsController');
 
@@ -38,6 +38,7 @@ function validateBody(schema) {
 }
 
 eventsRouter.use(requireAuth);
+eventsRouter.use(attachUserContext);
 eventsRouter.get('/', listEvents);
 eventsRouter.post('/', validateBody(createSchema), createEvent);
 eventsRouter.put('/:id', validateBody(updateSchema), updateEvent);

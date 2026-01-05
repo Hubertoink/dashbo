@@ -9,6 +9,12 @@
   export let rotateError: string | null;
   export let saveBackgroundRotate: () => void | Promise<void>;
 
+  export let backgroundRotateImages: string[];
+  export let rotateImagesSaving: boolean;
+  export let rotateImagesError: string | null;
+  export let toggleRotateImage: (filename: string) => void;
+  export let saveBackgroundRotateImages: () => void | Promise<void>;
+
   export let uploadFiles: File[];
   export let savingBg: boolean;
   export let uploadProgress: number;
@@ -27,8 +33,13 @@
   // Toast state
   let showSaveSuccess = false;
   let showRotateSaveSuccess = false;
+  let showRotateImagesSaveSuccess = false;
 
   async function handleChooseBg(filename: string) {
+    if (backgroundRotateEnabled) {
+      toggleRotateImage(filename);
+      return;
+    }
     await chooseBg(filename);
     showSaveSuccess = true;
     setTimeout(() => (showSaveSuccess = false), 2000);
@@ -42,9 +53,18 @@
     }
   }
 
+  async function handleSaveRotateImages() {
+    await saveBackgroundRotateImages();
+    if (!rotateImagesError) {
+      showRotateImagesSaveSuccess = true;
+      setTimeout(() => (showRotateImagesSaveSuccess = false), 2000);
+    }
+  }
+
   $: selectedBg = settings?.background ?? null;
   $: images = settings?.images ?? [];
   $: hasImages = images.length > 0;
+  $: rotateSet = new Set(backgroundRotateImages ?? []);
 </script>
 
 <!-- Hintergründe -->
@@ -171,11 +191,30 @@
     <div class="mb-2 flex items-center justify-between">
       <div class="text-xs text-white/70 font-medium">
         {#if backgroundRotateEnabled}
-          Verfügbare Bilder ({images.length}) – wird zufällig gewählt
+          Bilder für Zufallsmodus ({images.length}) – anklicken zum (De-)Aktivieren
         {:else}
           Bild auswählen ({images.length})
         {/if}
       </div>
+      {#if backgroundRotateEnabled}
+        <div class="flex items-center gap-2">
+          {#if showRotateImagesSaveSuccess}
+            <span class="text-xs text-emerald-400 flex items-center gap-1">
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+              </svg>
+              Gespeichert
+            </span>
+          {/if}
+          <button
+            class="h-8 px-3 rounded-lg bg-white/20 hover:bg-white/25 text-xs font-medium disabled:opacity-50 transition-colors"
+            on:click={handleSaveRotateImages}
+            disabled={!authed || rotateImagesSaving}
+          >
+            {rotateImagesSaving ? 'Speichern…' : 'Auswahl speichern'}
+          </button>
+        </div>
+      {:else}
       {#if showSaveSuccess}
         <span class="text-xs text-emerald-400 flex items-center gap-1">
           <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -184,11 +223,17 @@
           Hintergrund gespeichert
         </span>
       {/if}
+      {/if}
     </div>
+
+    {#if backgroundRotateEnabled && rotateImagesError}
+      <div class="text-red-400 text-xs mb-2">{rotateImagesError}</div>
+    {/if}
 
     <div class="grid grid-cols-4 gap-2">
       {#each images as img}
         {@const isSelected = !backgroundRotateEnabled && selectedBg === img}
+        {@const isIncluded = backgroundRotateEnabled ? (rotateSet.size === 0 ? true : rotateSet.has(img)) : false}
         <div class="relative group">
           <button
             class={`w-full aspect-video rounded-lg overflow-hidden border-2 transition-all ${
@@ -206,6 +251,20 @@
             {#if isSelected}
               <div class="absolute inset-0 bg-emerald-500/20 flex items-center justify-center">
                 <div class="bg-emerald-500 rounded-full p-1.5">
+                  <svg class="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+                  </svg>
+                </div>
+              </div>
+            {/if}
+
+            {#if backgroundRotateEnabled}
+              <div class="absolute inset-0 flex items-center justify-center">
+                <div
+                  class={`rounded-full p-1.5 border transition-all ${
+                    isIncluded ? 'bg-emerald-500/80 border-emerald-300/40' : 'bg-black/35 border-white/20'
+                  }`}
+                >
                   <svg class="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
                   </svg>

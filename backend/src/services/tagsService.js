@@ -11,34 +11,34 @@ function toTag(row) {
   };
 }
 
-async function listTags({ userId }) {
+async function listTags({ calendarId }) {
   const pool = getPool();
   const result = await pool.query(
     `
     SELECT *
     FROM tags
-    WHERE user_id = $1
+    WHERE calendar_id = $1
     ORDER BY sort_order ASC, name ASC;
     `,
-    [userId]
+    [calendarId]
   );
   return result.rows.map(toTag);
 }
 
-async function createTag({ userId, name, color, sortOrder }) {
+async function createTag({ calendarId, userId, name, color, sortOrder }) {
   const pool = getPool();
   const result = await pool.query(
     `
-    INSERT INTO tags (user_id, name, color, sort_order)
-    VALUES ($1, $2, $3, $4)
+    INSERT INTO tags (calendar_id, user_id, name, color, sort_order)
+    VALUES ($1, $2, $3, $4, $5)
     RETURNING *;
     `,
-    [userId, name, color, Number.isFinite(sortOrder) ? Number(sortOrder) : 0]
+    [calendarId, userId ?? null, name, color, Number.isFinite(sortOrder) ? Number(sortOrder) : 0]
   );
   return toTag(result.rows[0]);
 }
 
-async function updateTag({ userId, id, patch }) {
+async function updateTag({ calendarId, id, patch }) {
   const pool = getPool();
 
   const fields = [];
@@ -54,7 +54,7 @@ async function updateTag({ userId, id, patch }) {
   if (patch.sortOrder !== undefined) add('sort_order', Number(patch.sortOrder) || 0);
 
   if (fields.length === 0) {
-    const existing = await pool.query('SELECT * FROM tags WHERE id = $1 AND user_id = $2;', [id, userId]);
+    const existing = await pool.query('SELECT * FROM tags WHERE id = $1 AND calendar_id = $2;', [id, calendarId]);
     if (existing.rowCount === 0) return null;
     return toTag(existing.rows[0]);
   }
@@ -65,19 +65,19 @@ async function updateTag({ userId, id, patch }) {
     `
     UPDATE tags
     SET ${fields.join(', ')}
-    WHERE id = $${values.length + 1} AND user_id = $${values.length + 2}
+    WHERE id = $${values.length + 1} AND calendar_id = $${values.length + 2}
     RETURNING *;
     `,
-    [...values, id, userId]
+    [...values, id, calendarId]
   );
 
   if (result.rowCount === 0) return null;
   return toTag(result.rows[0]);
 }
 
-async function deleteTag({ userId, id }) {
+async function deleteTag({ calendarId, id }) {
   const pool = getPool();
-  const result = await pool.query('DELETE FROM tags WHERE id = $1 AND user_id = $2;', [id, userId]);
+  const result = await pool.query('DELETE FROM tags WHERE id = $1 AND calendar_id = $2;', [id, calendarId]);
   return result.rowCount > 0;
 }
 

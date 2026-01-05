@@ -36,6 +36,16 @@ services:
       OUTLOOK_ERROR_REDIRECT: ${OUTLOOK_ERROR_REDIRECT:-/settings?outlook=error}
       DASHBO_DATA_REFRESH_MS: ${DASHBO_DATA_REFRESH_MS:-60000}
       TODO_LIST_NAME: ${TODO_LIST_NAME:-Dashbo}
+      # Public base URL of the frontend (used for email links)
+      PUBLIC_APP_URL: ${PUBLIC_APP_URL:-}
+      # SMTP (for password reset + email verification)
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-}
+      SMTP_SECURE: ${SMTP_SECURE:-}
+      SMTP_REQUIRE_TLS: ${SMTP_REQUIRE_TLS:-}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      MAIL_FROM: ${MAIL_FROM:-}
     depends_on:
       - db
     ports:

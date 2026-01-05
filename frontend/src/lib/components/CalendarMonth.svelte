@@ -3,11 +3,27 @@
   import type { EventDto, HolidayDto, TagColorKey } from '$lib/api';
   import { fade, fly } from 'svelte/transition';
 
+  export type DashboardSuggestionDto = {
+    suggestionKey: string;
+    title: string;
+    date: Date;
+    allDay: boolean;
+    startTime?: string; // HH:MM (local)
+    endTime?: string; // HH:MM (local)
+    tag?: import('$lib/api').EventDto['tag'];
+    person?: import('$lib/api').EventDto['person'];
+    persons?: import('$lib/api').EventDto['persons'];
+  };
+
   export let monthAnchor: Date;
   export let selected: Date;
   export let onSelect: (d: Date) => void;
   export let events: EventDto[] = [];
   export let holidays: HolidayDto[] = [];
+  export let suggestions: DashboardSuggestionDto[] = [];
+  export let onMonthChange: ((delta: number) => void) | null = null;
+  export let onAcceptSuggestion: ((s: DashboardSuggestionDto) => void) | null = null;
+  export let onJumpToToday: (() => void) | null = null;
   export let viewMode: 'month' | 'week' = 'month';
   export let onSetViewMode: (m: 'month' | 'week') => void;
   export let upcomingMode: boolean = false;
@@ -120,6 +136,18 @@
     holidaysByDay = m;
   }
 
+  let suggestionsByDay: Map<string, DashboardSuggestionDto[]> = new Map();
+  $: {
+    const m = new Map<string, DashboardSuggestionDto[]>();
+    for (const s of suggestions) {
+      const k = dateKey(s.date);
+      const arr = m.get(k) ?? [];
+      arr.push(s);
+      m.set(k, arr);
+    }
+    suggestionsByDay = m;
+  }
+
   const weekDays = [
     new Date(2024, 0, 1),
     new Date(2024, 0, 2),
@@ -207,6 +235,11 @@
   let touchStartX: number | null = null;
   let touchStartY: number | null = null;
 
+  // Track slide direction for animation: 1 = forward (right to left), -1 = backward (left to right)
+  let slideDirection = 1;
+  // Unique key for triggering grid animation
+  $: monthKey = `${monthAnchor.getFullYear()}-${monthAnchor.getMonth()}`;
+
   function clampDateToMonth(d: Date, anchor: Date) {
     const year = anchor.getFullYear();
     const month = anchor.getMonth();
@@ -216,6 +249,7 @@
   }
 
   function shiftMonth(delta: number) {
+    slideDirection = delta > 0 ? 1 : -1;
     const nextAnchor = new Date(monthAnchor.getFullYear(), monthAnchor.getMonth() + delta, 1);
     const nextSelected = clampDateToMonth(selected, nextAnchor);
     onSelect(nextSelected);
@@ -246,10 +280,68 @@
 </script>
 
 <div class="h-full min-h-0 flex flex-col" on:touchstart={onTouchStart} on:touchend={onTouchEnd}>
-  {#key monthTitle}
-    <div class="px-8 pt-8 pb-4" in:fly={{ y: -10, duration: 160 }} out:fade={{ duration: 120 }}>
+  <div class="relative overflow-hidden">
+    <div class="px-8 pt-8 pb-4 opacity-0 pointer-events-none select-none" aria-hidden="true">
       <div class="flex items-center justify-between gap-4">
         <div class="text-4xl font-semibold tracking-wide">{monthTitle}</div>
+        <div class="h-9 w-9"></div>
+      </div>
+    </div>
+
+    {#key monthTitle}
+      <div
+        class="absolute inset-0 px-8 pt-8 pb-4"
+        in:fly={{ x: slideDirection * 40, duration: 180 }}
+        out:fly|local={{ x: slideDirection * -40, duration: 180 }}
+      >
+        <div class="flex items-center justify-between gap-4">
+          <div class="grid items-center gap-3" style="grid-template-columns: 2rem auto 2rem;">
+            {#if onMonthChange}
+              <button
+                type="button"
+                class="h-8 w-8 rounded-lg bg-white/5 hover:bg-white/10 active:bg-white/15 text-white/50 hover:text-white/80 transition-all grid place-items-center"
+                aria-label="Vorheriger Monat"
+                on:click={() => {
+                  slideDirection = -1;
+                  onMonthChange?.(-1);
+                }}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M15 18l-6-6 6-6" />
+                </svg>
+              </button>
+            {:else}
+              <div class="h-8 w-8"></div>
+            {/if}
+
+          <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+          <div
+            class="text-4xl font-semibold tracking-wide cursor-pointer select-none"
+            aria-label="Zum aktuellen Monat"
+            title="Zum aktuellen Monat"
+            on:click={() => onJumpToToday?.()}
+          >
+            {monthTitle}
+          </div>
+
+          {#if onMonthChange}
+            <button
+              type="button"
+              class="h-8 w-8 rounded-lg bg-white/5 hover:bg-white/10 active:bg-white/15 text-white/50 hover:text-white/80 transition-all grid place-items-center"
+              aria-label="Nächster Monat"
+              on:click={() => {
+                slideDirection = 1;
+                onMonthChange?.(1);
+              }}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M9 18l6-6-6-6" />
+              </svg>
+            </button>
+          {:else}
+            <div class="h-8 w-8"></div>
+          {/if}
+        </div>
 
         <div class="flex items-center gap-2">
           <button
@@ -291,6 +383,7 @@
       </div>
     </div>
   {/key}
+  </div>
 
   <div class="px-8">
     <div class="grid grid-cols-7 gap-4 text-white/70">
@@ -300,8 +393,13 @@
     </div>
   </div>
 
-  <div class="px-8 pt-4 flex-1 min-h-0 overflow-hidden">
-    <div class="h-full min-h-0 grid grid-rows-6 gap-4">
+  <div class="px-8 pt-4 flex-1 min-h-0 overflow-hidden relative">
+    {#key monthKey}
+    <div
+      class="absolute inset-0 h-full min-h-0 grid grid-rows-6 gap-4"
+      in:fly={{ x: slideDirection * 50, duration: 200 }}
+      out:fly|local={{ x: slideDirection * -50, duration: 180 }}
+    >
       {#each weeks as week, wi}
         <div class="relative min-h-0">
           <div class="relative z-10 grid grid-cols-7 gap-4 h-full">
@@ -312,6 +410,7 @@
               {@const dayEvents = eventsByDay.get(dateKey(d)) ?? []}
               {@const singleDayEvents = dayEvents.filter((ev) => !isMultiDay(ev))}
               {@const dayHolidays = holidaysByDay.get(dateKey(d)) ?? []}
+              {@const daySuggestions = suggestionsByDay.get(dateKey(d)) ?? []}
               {@const maxEventDots = dayHolidays.length > 0 ? 2 : 3}
 
               <button
@@ -319,7 +418,7 @@
                 class={`relative h-full min-h-[58px] md:min-h-[72px] rounded-2xl text-left px-3 py-2 transition
                   ${inMonth ? 'text-white' : 'text-white/35'}
                   ${isSelected ? 'bg-white/15' : 'bg-white/0 hover:bg-white/10 active:bg-white/15'}
-                  ${isToday ? 'ring-2 ring-white/30' : ''}
+                  ${isToday ? 'ring-2 ring-inset ring-white/30' : ''}
                   active:scale-95
                 `}
                 on:click={() => onSelect(new Date(d))}
@@ -347,7 +446,7 @@
                     <div class="text-xs md:text-sm font-semibold leading-tight line-clamp-2 whitespace-normal break-words text-white/70">{dayHolidays[0]?.title}</div>
                   {/if}
                 </div>
-                {#if singleDayEvents.length > 0 || dayHolidays.length > 0}
+                {#if singleDayEvents.length > 0 || dayHolidays.length > 0 || daySuggestions.length > 0}
                   <div class="absolute right-4 bottom-3 flex flex-col items-end gap-1">
                     {#if dayHolidays.length > 0}
                       <div class="h-2.5 w-2.5 rounded-full border border-white/60 bg-white/0"></div>
@@ -365,6 +464,12 @@
                               : 'bg-white/25'
                         }`}
                         style={ev.tag && isHexColor(ev.tag.color) ? `background-color: ${ev.tag.color}` : ''}
+                      ></div>
+                    {/each}
+                    {#each daySuggestions.slice(0, 1) as sg (sg.suggestionKey)}
+                      <div
+                        class="h-2.5 w-2.5 rounded-full border border-dashed border-violet-400/60 bg-violet-500/30"
+                        title="Vorschlag: {sg.title}"
                       ></div>
                     {/each}
                   </div>
@@ -402,5 +507,6 @@
         </div>
       {/each}
     </div>
+    {/key}
   </div>
 </div>
