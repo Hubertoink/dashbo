@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onDestroy } from 'svelte';
   import {
     createEvent,
     createTodo,
@@ -77,6 +78,21 @@
   let showDeleteConfirm = false;
 
   let prevOpen = false;
+
+  let prevBodyOverflow: string | null = null;
+  function lockBodyScroll() {
+    if (typeof document === 'undefined') return;
+    if (prevBodyOverflow !== null) return;
+    prevBodyOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+  }
+
+  function unlockBodyScroll() {
+    if (typeof document === 'undefined') return;
+    if (prevBodyOverflow === null) return;
+    document.body.style.overflow = prevBodyOverflow;
+    prevBodyOverflow = null;
+  }
 
   const tagBg: Record<TagColorKey, string> = {
     fuchsia: 'bg-fuchsia-500',
@@ -192,6 +208,13 @@
     prefilledForKey = null;
     todoAccountMenuOpen = false;
   }
+
+  $: if (open) lockBodyScroll();
+  $: if (!open) unlockBodyScroll();
+
+  onDestroy(() => {
+    unlockBodyScroll();
+  });
 
   function resetFormForNewEvent() {
     title = '';
@@ -495,7 +518,7 @@
   >
     <!-- Modal Panel -->
     <div
-      class="w-full sm:max-w-2xl lg:max-w-3xl max-h-[92vh] bg-neutral-900/95 backdrop-blur-xl border-t sm:border border-white/10 sm:rounded-2xl overflow-hidden flex flex-col"
+      class="w-full sm:max-w-2xl lg:max-w-3xl max-h-[92vh] max-h-[92svh] max-h-[92dvh] bg-neutral-900/95 backdrop-blur-xl border-t sm:border border-white/10 sm:rounded-2xl overflow-hidden flex flex-col"
       in:fly={{ y: 100, duration: 250, delay: 50 }}
       out:fly={{ y: 100, duration: 200 }}
     >
@@ -531,7 +554,7 @@
       </div>
 
       <!-- Form -->
-      <form on:submit|preventDefault={submit} class="p-4 grid grid-cols-1 sm:grid-cols-2 gap-4 overflow-auto flex-1 min-h-0">
+      <form on:submit|preventDefault={submit} class="p-4 grid grid-cols-1 sm:grid-cols-2 gap-4 overflow-auto overscroll-contain flex-1 min-h-0">
         <!-- Title -->
         <div class="sm:col-span-2">
           <input
