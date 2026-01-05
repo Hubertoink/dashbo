@@ -1,9 +1,8 @@
 <script lang="ts">
   import { fetchTodos, updateTodo, type EventDto, type HolidayDto, type TodoItemDto } from '$lib/api';
-  import { formatGermanShortDate, sameDay } from '$lib/date';
-  import { onDestroy } from 'svelte';
+  import { formatGermanShortDate } from '$lib/date';
   import { fade, fly } from 'svelte/transition';
-  import WeekPlannerDay from './WeekPlannerDay.svelte';
+  import WeekPlannerTimeGrid from './WeekPlannerTimeGrid.svelte';
   import QuickAddEventModal from './QuickAddEventModal.svelte';
   import TodoModal from './TodoModal.svelte';
   import WeekPlannerTodoBar from './WeekPlannerTodoBar.svelte';
@@ -171,46 +170,6 @@
   $: weekEnd = days[6] ?? addLocalDays(weekStart, 6);
   $: weekNumber = getWeekNumber(selectedDate);
 
-  $: eventsByDay = (() => {
-    const m = new Map<string, EventDto[]>();
-    for (const e of events) {
-      const start = startOfLocalDay(new Date(e.startAt));
-      const end = e.endAt ? startOfLocalDay(new Date(e.endAt)) : start;
-      const maxSpanDays = 62;
-      const spanDays = Math.min(
-        maxSpanDays,
-        Math.max(0, Math.round((end.getTime() - start.getTime()) / (24 * 3600 * 1000)))
-      );
-      for (let i = 0; i <= spanDays; i++) {
-        const day = addLocalDays(start, i);
-        const k = dateKey(day);
-        const arr = m.get(k) ?? [];
-        arr.push(e);
-        m.set(k, arr);
-      }
-    }
-    for (const arr of m.values()) {
-      arr.sort((a, b) => {
-        if (a.allDay && !b.allDay) return -1;
-        if (!a.allDay && b.allDay) return 1;
-        return new Date(a.startAt).getTime() - new Date(b.startAt).getTime();
-      });
-    }
-    return m;
-  })();
-
-  $: holidaysByDay = (() => {
-    const m = new Map<string, HolidayDto[]>();
-    for (const h of holidays) {
-      const d = new Date(`${h.date}T00:00:00`);
-      const k = dateKey(d);
-      const arr = m.get(k) ?? [];
-      arr.push(h);
-      m.set(k, arr);
-    }
-    return m;
-  })();
-
   $: todosByDay = (() => {
     const m = new Map<string, TodoItemDto[]>();
     for (const t of todoItems) {
@@ -291,27 +250,15 @@
 
   <!-- Week Grid -->
   <div class="flex-1 min-h-0 p-4 overflow-hidden" in:fade={{ duration: 200, delay: 100 }}>
-    <div class="h-full grid grid-cols-7 gap-3">
-      {#each days as day, i (dateKey(day))}
-        {@const isToday = sameDay(day, new Date())}
-        {@const dayEvents = eventsByDay.get(dateKey(day)) ?? []}
-        {@const dayHolidays = holidaysByDay.get(dateKey(day)) ?? []}
-        {@const dayTodos = todosByDay.get(dateKey(day)) ?? []}
-        <div in:fly={{ y: 20, duration: 220, delay: 120 + i * 30 }}>
-          <WeekPlannerDay
-            {day}
-            {isToday}
-            events={dayEvents}
-            holidays={dayHolidays}
-            todos={dayTodos}
-            {outlookConnected}
-            onAddEvent={() => openQuickAdd(day)}
-            onEditEvent={onEditEvent}
-            onEventDeleted={handleEventDeleted}
-            onToggleTodo={toggleTodo}
-          />
-        </div>
-      {/each}
+    <div class="h-full" in:fly={{ y: 20, duration: 220, delay: 120 }}>
+      <WeekPlannerTimeGrid
+        {days}
+        {events}
+        {holidays}
+        onAddEvent={(d) => openQuickAdd(d)}
+        onEditEvent={onEditEvent}
+        onEventDeleted={handleEventDeleted}
+      />
     </div>
   </div>
 
