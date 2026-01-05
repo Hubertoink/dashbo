@@ -1745,6 +1745,7 @@
       {recurringSuggestionsBiweekly}
       {recurringSuggestionsMonthly}
       {recurringSuggestionsBirthdays}
+      {backgroundUrl}
       onSelect={onSelect}
       onEditEvent={openEditEventModal}
       onBack={closePlanner}

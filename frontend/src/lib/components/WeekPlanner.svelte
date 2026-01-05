@@ -31,6 +31,7 @@
   export let onEditEvent: (e: EventDto) => void;
   export let onBack: () => void;
   export let onEventsChanged: () => void = () => {};
+  export let backgroundUrl: string = '';
 
   // Quick Add Modal state
   let quickAddOpen = false;
@@ -49,6 +50,17 @@
     quickAddPrefillStartTime = null;
     quickAddPrefillEndTime = null;
     quickAddPrefillAllDay = null;
+    quickAddPrefillPersonIds = null;
+    quickAddPrefillTagId = null;
+    quickAddOpen = true;
+  }
+
+  function openQuickAddAllDay(day: Date) {
+    quickAddDate = day;
+    quickAddPrefillTitle = null;
+    quickAddPrefillStartTime = null;
+    quickAddPrefillEndTime = null;
+    quickAddPrefillAllDay = true;
     quickAddPrefillPersonIds = null;
     quickAddPrefillTagId = null;
     quickAddOpen = true;
@@ -762,7 +774,9 @@
         {events}
         {holidays}
         suggestions={suggestions}
+        {backgroundUrl}
         onAddEvent={(d) => openQuickAdd(d)}
+        onAddAllDayEvent={(d) => openQuickAddAllDay(d)}
         onEditEvent={onEditEvent}
         onEventDeleted={handleEventDeleted}
         onAcceptSuggestion={acceptSuggestion}

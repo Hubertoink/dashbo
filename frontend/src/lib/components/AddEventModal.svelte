@@ -53,6 +53,7 @@
   let todoText = '';
   let todoSaving = false;
   let todoError: string | null = null;
+  let todoSectionOpen = false;
 
   let outlookConnections: OutlookConnectionDto[] = [];
   let todoListName = 'Dashbo';
@@ -406,7 +407,7 @@
       else await createEvent(payload);
 
       // Optional: create ToDos from textarea lines (also allowed when editing)
-      const todoLines = outlookConnected && todoEnabled ? parseTodos(todoText) : [];
+      const todoLines = todoSectionOpen && outlookConnected && todoEnabled ? parseTodos(todoText) : [];
       if (todoLines.length > 0) {
         todoSaving = true;
         todoError = null;
@@ -745,7 +746,14 @@
         <!-- ToDos (optional, Outlook) -->
         {#if outlookConnected && todoEnabled}
           <div class="sm:col-span-2">
-            <div class="text-xs text-white/50 mb-2">ToDos (optional)</div>
+            <button
+              type="button"
+              class="mb-2 px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-xs text-white/70 hover:bg-white/10 transition"
+              on:click={() => (todoSectionOpen = !todoSectionOpen)}
+            >
+              {todoSectionOpen ? 'ToDos ausblenden' : 'ToDo(s) hinzufügen'}
+            </button>
+          {#if todoSectionOpen}
 
             {#if outlookConnections.length === 0}
               <div class="text-xs text-white/50">Keine Outlook-Verbindung gefunden.</div>
@@ -855,6 +863,7 @@
                 {/if}
               </div>
             </div>
+          {/if}
           </div>
         {/if}
 
