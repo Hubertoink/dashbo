@@ -510,6 +510,7 @@
   <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
   <div
     class="fixed inset-0 z-[1000] bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center"
+    style="padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom);"
     transition:fade={{ duration: 200 }}
     on:click|self={onClose}
     role="dialog"
@@ -518,12 +519,12 @@
   >
     <!-- Modal Panel -->
     <div
-      class="w-full sm:max-w-2xl lg:max-w-3xl max-h-[92vh] max-h-[92svh] max-h-[92dvh] bg-neutral-900/95 backdrop-blur-xl border-t sm:border border-white/10 sm:rounded-2xl overflow-hidden flex flex-col"
+      class="w-full h-full sm:h-auto sm:max-w-2xl lg:max-w-3xl sm:max-h-[92vh] sm:max-h-[92svh] sm:max-h-[92dvh] bg-neutral-900/95 backdrop-blur-xl sm:border border-white/10 sm:rounded-2xl overflow-hidden flex flex-col"
       in:fly={{ y: 100, duration: 250, delay: 50 }}
       out:fly={{ y: 100, duration: 200 }}
     >
       <!-- Header -->
-      <div class="flex items-center justify-between px-4 py-3 pt-[calc(0.75rem+env(safe-area-inset-top))] border-b border-white/10 shrink-0">
+      <div class="flex items-center justify-between px-4 py-3 border-b border-white/10 shrink-0">
         <div>
           <h2 id="add-event-title" class="text-lg font-semibold">{eventToEdit ? 'Termin bearbeiten' : 'Neuer Termin'}</h2>
           <p class="text-sm text-white/60">{dateLabel}</p>
