@@ -500,7 +500,7 @@
       out:fly={{ y: 100, duration: 200 }}
     >
       <!-- Header -->
-      <div class="flex items-center justify-between px-4 py-3 border-b border-white/10 shrink-0">
+      <div class="flex items-center justify-between px-4 py-3 pt-[calc(0.75rem+env(safe-area-inset-top))] border-b border-white/10 shrink-0">
         <div>
           <h2 id="add-event-title" class="text-lg font-semibold">{eventToEdit ? 'Termin bearbeiten' : 'Neuer Termin'}</h2>
           <p class="text-sm text-white/60">{dateLabel}</p>

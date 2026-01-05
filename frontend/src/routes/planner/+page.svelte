@@ -905,7 +905,54 @@
     {#if view === 'agenda'}
       <div class="relative z-10" in:fly={{ x: -30, duration: 200 }} out:fade={{ duration: 100 }}>
         <div class="flex items-center justify-between gap-3 mb-3">
-          <div class="text-white/85 text-sm">{formatDayTitle(selectedDate)} → +7 Tage</div>
+          <div class="flex items-center gap-2 text-white/85 text-sm">
+            <button
+              type="button"
+              class="h-9 w-9 flex items-center justify-center rounded-lg border border-white/10 hover:bg-white/10"
+              aria-label="Vorherige Woche"
+              title="Vorherige Woche"
+              on:click={() => {
+                selectedDate = addDays(selectedDate, -7);
+                monthAnchor = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1);
+                newDate = toDateInputValue(selectedDate);
+                closePopovers();
+                void refreshAgenda();
+              }}
+            >
+              <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" />
+              </svg>
+            </button>
+
+            <div class="min-w-0">
+              {selectedDate.toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' })}
+              –
+              {addDays(selectedDate, 6).toLocaleDateString('de-DE', {
+                weekday: 'short',
+                day: '2-digit',
+                month: '2-digit',
+                year: 'numeric'
+              })}
+            </div>
+
+            <button
+              type="button"
+              class="h-9 w-9 flex items-center justify-center rounded-lg border border-white/10 hover:bg-white/10"
+              aria-label="Nächste Woche"
+              title="Nächste Woche"
+              on:click={() => {
+                selectedDate = addDays(selectedDate, 7);
+                monthAnchor = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1);
+                newDate = toDateInputValue(selectedDate);
+                closePopovers();
+                void refreshAgenda();
+              }}
+            >
+              <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
+              </svg>
+            </button>
+          </div>
           <button
             type="button"
             class="h-9 px-3 rounded-lg text-sm font-medium border border-white/10 hover:bg-white/10"
@@ -935,22 +982,35 @@
 
           <div class={cx('space-y-3', agendaLoading && 'opacity-60')}>
             {#each agendaGroups as g (dateKeyLocal(g.day))}
-              <div class="bg-white/5 rounded-xl p-3 glass border border-white/10">
+              {@const isSelected = sameDay(g.day, selectedDate)}
+              <div
+                class={cx(
+                  'bg-white/5 rounded-xl p-3 glass border border-white/10',
+                  isSelected && 'border-white/25 ring-1 ring-white/15'
+                )}
+              >
               <div class="flex items-center justify-between">
-                <div class="text-sm font-medium">
+                <div class="text-sm font-medium flex items-center gap-2">
                   {g.day.toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit' })}
+                  {#if isSelected}
+                    <span class="text-[10px] px-2 py-0.5 rounded-full bg-white/10 text-white/70">Ausgewählt</span>
+                  {/if}
                 </div>
-                <button
-                  type="button"
-                  class="text-xs text-white/60 hover:text-white"
-                  on:click={() => {
-                    selectedDate = g.day;
-                    newDate = toDateInputValue(g.day);
-                    void refreshAgenda();
-                  }}
-                >
-                  Öffnen
-                </button>
+                {#if isSelected}
+                  <span class="text-xs text-white/40">Start</span>
+                {:else}
+                  <button
+                    type="button"
+                    class="text-xs text-white/60 hover:text-white"
+                    on:click={() => {
+                      selectedDate = g.day;
+                      newDate = toDateInputValue(g.day);
+                      void refreshAgenda();
+                    }}
+                  >
+                    Woche ab hier
+                  </button>
+                {/if}
               </div>
 
               {#if g.items.length === 0 && g.suggestions.length === 0}
