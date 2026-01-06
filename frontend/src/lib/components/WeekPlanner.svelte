@@ -800,25 +800,13 @@
       </button>
     </div>
 
-    <div class="flex items-center gap-2">
-      {#if outlookConnected && todoEnabled}
-        <button
-          type="button"
-          class="h-11 px-4 rounded-xl bg-white/10 hover:bg-white/15 active:scale-95 transition text-sm font-medium"
-          on:click={() => openTodoCreate(null)}
-        >
-          + ToDo
-        </button>
-      {/if}
-
-      <button
-        type="button"
-        class="h-11 px-4 rounded-xl bg-white/10 hover:bg-white/15 active:scale-95 transition text-sm font-medium"
-        on:click={() => onSelect(new Date())}
-      >
-        Heute
-      </button>
-    </div>
+    <button
+      type="button"
+      class="h-11 px-4 rounded-xl bg-white/10 hover:bg-white/15 active:scale-95 transition text-sm font-medium"
+      on:click={() => onSelect(new Date())}
+    >
+      Heute
+    </button>
   </div>
 
   <!-- Week Grid -->
@@ -857,6 +845,21 @@
     <div class="px-6 py-3 border-t border-white/10 text-center text-sm text-white/50" in:fade={{ duration: 200, delay: 200 }}>
       Tippe in einen Tag um einen Termin hinzuzufügen · Tippe auf einen Termin zum Bearbeiten · Wische für Wochenwechsel
     </div>
+  {/if}
+
+  <!-- Floating ToDo button -->
+  {#if outlookConnected && todoEnabled}
+    <button
+      type="button"
+      class="fixed z-[60] h-14 w-14 rounded-full bg-gradient-to-br from-emerald-400 to-teal-500 shadow-xl flex items-center justify-center hover:scale-105 active:scale-95 transition-transform ring-2 ring-emerald-300/20"
+      style="bottom: calc(1.5rem + env(safe-area-inset-bottom)); right: 1.5rem;"
+      aria-label="ToDo erstellen"
+      on:click={() => openTodoCreate(null)}
+    >
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
+      </svg>
+    </button>
   {/if}
 </div>
 

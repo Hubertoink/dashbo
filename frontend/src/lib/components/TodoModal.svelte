@@ -103,7 +103,8 @@
       title = '';
       description = '';
       dateStr = yyyymmddLocalFromIso(new Date().toISOString());
-      dueDateStr = yyyymmddLocalFromIso(prefillDueAt);
+      // Only prefill due date if explicitly provided, otherwise leave empty (no due date)
+      dueDateStr = prefillDueAt ? yyyymmddLocalFromIso(prefillDueAt) : '';
     }
 
     prevOpen = true;
