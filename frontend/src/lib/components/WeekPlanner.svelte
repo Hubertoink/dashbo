@@ -876,7 +876,6 @@
       items={inboxTodos}
       {selectedDate}
       onToggleTodo={toggleTodo}
-      onAddTodo={openTodoCreate}
       quickAddText={todoQuickText}
       quickAddSaving={todoQuickSaving}
       onQuickAdd={submitQuickTodo}

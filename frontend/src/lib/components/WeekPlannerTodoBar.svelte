@@ -4,7 +4,6 @@
   export let items: TodoItemDto[] = [];
   export let selectedDate: Date;
   export let onToggleTodo: (item: TodoItemDto) => void;
-  export let onAddTodo: (dueDate: Date) => void;
 
   // Quick add (title-only)
   export let quickAddText: string = '';
@@ -57,14 +56,33 @@
 
     <div class="flex-1 overflow-x-auto">
       <div class="flex items-center gap-2 min-w-max">
-        <div class="min-w-[240px]">
+        <div class="min-w-[260px] flex items-center gap-2">
           <input
             class="w-full h-10 px-3 rounded-xl bg-white/10 border border-white/10 text-sm text-white/90 placeholder:text-white/40 focus:outline-none focus:ring-2 focus:ring-white/20"
-            placeholder="ToDo hinzufügen… (Enter)"
+            placeholder="ToDo hinzufügen…"
             bind:value={quickAddText}
             on:keydown={onQuickKeyDown}
             disabled={quickAddSaving}
           />
+          <button
+            type="button"
+            class="h-10 w-10 rounded-xl bg-white/10 hover:bg-white/15 active:scale-95 transition grid place-items-center disabled:opacity-50"
+            aria-label="ToDo hinzufügen"
+            title="ToDo hinzufügen"
+            on:click={() => onQuickAdd()}
+            disabled={quickAddSaving || !quickAddText.trim()}
+          >
+            {#if quickAddSaving}
+              <svg class="w-5 h-5 text-white/80 animate-spin" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+            {:else}
+              <svg class="w-5 h-5 text-white/80" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
+              </svg>
+            {/if}
+          </button>
         </div>
 
         {#each items as t (t.taskId + ':' + t.listId + ':' + t.connectionId)}
@@ -110,22 +128,7 @@
           </div>
         {/each}
 
-        {#if items.length === 0}
-          <div class="text-sm text-white/40">Alle ToDos haben ein Fälligkeitsdatum</div>
-        {/if}
       </div>
     </div>
-
-    <button
-      type="button"
-      class="h-10 w-10 rounded-xl bg-white/10 hover:bg-white/15 active:scale-95 transition grid place-items-center"
-      on:click={() => onAddTodo(selectedDate)}
-      aria-label="ToDo hinzufügen"
-      title="ToDo hinzufügen"
-    >
-      <svg class="w-5 h-5 text-white/80" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-        <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
-      </svg>
-    </button>
   </div>
 </div>
