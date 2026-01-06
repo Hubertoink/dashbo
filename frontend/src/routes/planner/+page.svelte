@@ -87,7 +87,7 @@
 
   type MobileFabKey = 'event' | 'todo' | 'scribble';
   const MOBILE_FAB_STEP = '4rem';
-  $: mobileFabBaseBottom = scribbleEnabled ? '7rem' : '1.5rem';
+  $: mobileFabBaseBottom = 'calc(1.5rem + env(safe-area-inset-bottom))';
   $: mobileFabOrder = (
     [
       'event',
@@ -100,7 +100,7 @@
     const idx = mobileFabOrder.indexOf(key);
     if (idx < 0) return null;
     // idx=0 is the first action above the trigger button
-    return `calc(${mobileFabBaseBottom} + ${(idx + 1).toString()} * ${MOBILE_FAB_STEP})`;
+    return `calc(1.5rem + env(safe-area-inset-bottom) + ${(idx + 1).toString()} * ${MOBILE_FAB_STEP})`;
   }
 
   function mobileFabFlyY(key: MobileFabKey) {
@@ -2051,21 +2051,6 @@
     </svg>
   </button>
 
-  <TodoModal
-    open={todoCreateOpen}
-    onClose={() => (todoCreateOpen = false)}
-    onSaved={() => void refreshTodoMeta()}
-    mode="create"
-    item={null}
-    listNames={todoListNames && todoListNames.length > 0 ? todoListNames : [todoListName]}
-    selectedListName={todoCreateListName}
-    onChangeListName={(v) => (todoCreateListName = v)}
-    connections={(outlookConnections ?? []).map((c) => ({ id: c.id, label: outlookConnectionLabel(c), color: c.color }))}
-    selectedConnectionId={todoCreateConnectionId}
-    onChangeConnectionId={(v) => (todoCreateConnectionId = v)}
-    prefillDueAt={isoNoonLocal(selectedDate)}
-  />
-
   <!-- Desktop scribble (if enabled) -->
   {#if scribbleEnabled}
     <button
@@ -2082,6 +2067,21 @@
     </button>
   {/if}
 {/if}
+
+<TodoModal
+  open={todoCreateOpen}
+  onClose={() => (todoCreateOpen = false)}
+  onSaved={() => void refreshTodoMeta()}
+  mode="create"
+  item={null}
+  listNames={todoListNames && todoListNames.length > 0 ? todoListNames : [todoListName]}
+  selectedListName={todoCreateListName}
+  onChangeListName={(v) => (todoCreateListName = v)}
+  connections={(outlookConnections ?? []).map((c) => ({ id: c.id, label: outlookConnectionLabel(c), color: c.color }))}
+  selectedConnectionId={todoCreateConnectionId}
+  onChangeConnectionId={(v) => (todoCreateConnectionId = v)}
+  prefillDueAt={isoNoonLocal(selectedDate)}
+/>
 
 <ScribbleModal
   bind:open={scribbleModalOpen}
