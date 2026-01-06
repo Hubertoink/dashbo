@@ -876,7 +876,7 @@
       items={inboxTodos}
       {selectedDate}
       onToggleTodo={toggleTodo}
-      quickAddText={todoQuickText}
+      bind:quickAddText={todoQuickText}
       quickAddSaving={todoQuickSaving}
       onQuickAdd={submitQuickTodo}
       onTodoDragActiveChange={(v) => (todoDragActive = v)}
