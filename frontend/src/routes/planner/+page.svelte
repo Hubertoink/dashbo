@@ -85,6 +85,29 @@
   let fabDockOpen = false;
   let fabDockTimer: ReturnType<typeof setTimeout> | null = null;
 
+  type MobileFabKey = 'event' | 'todo' | 'scribble';
+  const MOBILE_FAB_STEP = '4rem';
+  $: mobileFabBaseBottom = scribbleEnabled ? '7rem' : '1.5rem';
+  $: mobileFabOrder = (
+    [
+      'event',
+      ...(outlookConnected && todoEnabled ? (['todo'] as const) : []),
+      ...(scribbleEnabled ? (['scribble'] as const) : [])
+    ] satisfies readonly MobileFabKey[]
+  ) as MobileFabKey[];
+
+  function mobileFabBottom(key: MobileFabKey) {
+    const idx = mobileFabOrder.indexOf(key);
+    if (idx < 0) return null;
+    // idx=0 is the first action above the trigger button
+    return `calc(${mobileFabBaseBottom} + ${(idx + 1).toString()} * ${MOBILE_FAB_STEP})`;
+  }
+
+  function mobileFabFlyY(key: MobileFabKey) {
+    const idx = mobileFabOrder.indexOf(key);
+    return 60 + Math.max(0, idx) * 50;
+  }
+
   function clearFabDockTimer() {
     if (fabDockTimer) {
       clearTimeout(fabDockTimer);
@@ -1927,7 +1950,7 @@
   </a>
 
   <!-- Mobile: docked side launcher (expands to bottom-right positions) -->
-  <div class="fixed right-4 z-50 md:hidden" style="bottom: {scribbleEnabled ? '7rem' : '1.5rem'};">
+  <div class="fixed right-4 z-50 md:hidden" style="bottom: {mobileFabBaseBottom};">
     <!-- Trigger button -->
     <button
       type="button"
@@ -1949,7 +1972,7 @@
     <button
       type="button"
       class="fixed right-4 z-50 h-14 w-14 rounded-full bg-gradient-to-br from-blue-400 to-indigo-500 shadow-xl flex items-center justify-center hover:scale-105 active:scale-95 transition-transform md:hidden ring-2 ring-blue-300/20"
-      style="bottom: {scribbleEnabled ? 'calc(7rem + 4rem)' : 'calc(1.5rem + 4rem)'};"
+      style="bottom: {mobileFabBottom('event')};"
       aria-label="Neuen Termin erstellen"
       on:click={() => {
         clearFabDockTimer();
@@ -1957,8 +1980,8 @@
         todoSectionOpen = false;
         quickAddOpen = true;
       }}
-      in:fly={{ y: 60, duration: 250 }}
-      out:fly={{ y: 60, duration: 180 }}
+      in:fly={{ y: mobileFabFlyY('event'), duration: 250 }}
+      out:fly={{ y: mobileFabFlyY('event'), duration: 180 }}
     >
       <svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
         <path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
@@ -1971,15 +1994,15 @@
     <button
       type="button"
       class="fixed right-4 z-50 h-14 w-14 rounded-full bg-gradient-to-br from-emerald-400 to-teal-500 shadow-xl flex items-center justify-center hover:scale-105 active:scale-95 transition-transform md:hidden ring-2 ring-emerald-300/20"
-      style="bottom: {scribbleEnabled ? 'calc(7rem + 8rem)' : 'calc(1.5rem + 8rem)'};"
+      style="bottom: {mobileFabBottom('todo')};"
       aria-label="ToDo erstellen"
       on:click={() => {
         clearFabDockTimer();
         fabDockOpen = false;
         openTodoCreateModal();
       }}
-      in:fly={{ y: 110, duration: 270, delay: 20 }}
-      out:fly={{ y: 110, duration: 180 }}
+      in:fly={{ y: mobileFabFlyY('todo'), duration: 270, delay: 20 }}
+      out:fly={{ y: mobileFabFlyY('todo'), duration: 180 }}
     >
       <svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
         <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
@@ -1992,15 +2015,15 @@
     <button
       type="button"
       class="fixed right-4 z-50 h-14 w-14 rounded-full bg-gradient-to-br from-amber-400 to-orange-500 shadow-xl flex items-center justify-center hover:scale-105 active:scale-95 transition-transform md:hidden ring-2 ring-amber-300/20"
-      style="bottom: calc(7rem + 8rem);"
+      style="bottom: {mobileFabBottom('scribble')};"
       aria-label="Scribble Notiz erstellen"
       on:click={() => {
         clearFabDockTimer();
         fabDockOpen = false;
         scribbleModalOpen = true;
       }}
-      in:fly={{ y: 120, duration: 280, delay: 40 }}
-      out:fly={{ y: 120, duration: 180 }}
+      in:fly={{ y: mobileFabFlyY('scribble'), duration: 280, delay: 40 }}
+      out:fly={{ y: mobileFabFlyY('scribble'), duration: 180 }}
     >
       <svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
         <path stroke-linecap="round" stroke-linejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
