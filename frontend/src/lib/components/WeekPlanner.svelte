@@ -779,6 +779,7 @@
         onAddAllDayEvent={(d) => openQuickAddAllDay(d)}
         onEditEvent={onEditEvent}
         onEventDeleted={handleEventDeleted}
+        onEventMoved={handleEventDeleted}
         onAcceptSuggestion={acceptSuggestion}
         onDismissSuggestion={dismissSuggestion}
       />

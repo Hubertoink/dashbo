@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onDestroy, onMount } from 'svelte';
   import type { EventDto, HolidayDto, TagColorKey } from '$lib/api';
-  import { deleteEvent } from '$lib/api';
+  import { deleteEvent, updateEvent } from '$lib/api';
   import { formatGermanDayLabel, sameDay } from '$lib/date';
   import { fade, scale } from 'svelte/transition';
   import { layoutWeekTimedSegments, type PositionedSegment, type WeekPlannerConfig } from '$lib/weekPlannerLayout';
@@ -26,6 +26,7 @@
   export let onAddAllDayEvent: (d: Date) => void = () => {};
   export let onEditEvent: (e: EventDto) => void;
   export let onEventDeleted: () => void = () => {};
+  export let onEventMoved: () => void = () => {};
   export let onAcceptSuggestion: (s: EventSuggestionDto) => void = () => {};
   export let onDismissSuggestion: (s: EventSuggestionDto) => void = () => {};
 
@@ -207,6 +208,351 @@
     deleteConfirmEvent = null;
   }
 
+  // Drag & Drop state
+  let dragEvent: EventDto | null = null;
+  let dragStartClientX = 0;
+  let dragStartClientY = 0;
+  let dragOffsetX = 0; // offset within tile where user grabbed (x)
+  let dragOffsetY = 0; // offset within tile where user grabbed
+  let dragCurrentX = 0;
+  let dragCurrentY = 0;
+  let dragTileW = 0;
+  let dragTileH = 0;
+  let dragGridRect: DOMRect | null = null;
+  let dragDayRects: { day: Date; left: number; right: number }[] = [];
+  let dragTargetDay: Date | null = null;
+  let dragTargetMinutes: number | null = null;
+  let dragMoving = false;
+  let dragDropping = false;
+  let dragSaving = false;
+
+  // Floating "paper" overlay (pixel-accurate drag with inertia)
+  let dragFloatX = 0;
+  let dragFloatY = 0;
+  let dragFloatW = 0;
+  let dragFloatH = 0;
+  let dragFloatTargetX = 0;
+  let dragFloatTargetY = 0;
+  let dragFloatTargetW = 0;
+  let dragFloatTargetH = 0;
+  let dragFloatVX = 0;
+  let dragFloatVY = 0;
+  let dragFloatVW = 0;
+  let dragFloatVH = 0;
+  let dragRaf: number | null = null;
+  let dragFloatEl: HTMLDivElement | null = null;
+  let dragFlutterEnergy = 0;
+
+  function startDragLoop() {
+    if (dragRaf != null) return;
+    const tick = () => {
+      if (!dragEvent) {
+        dragRaf = null;
+        return;
+      }
+
+      // Keep the loop alive even before dragMoving flips true.
+      // This avoids a "tiny tile at 0,0" when the floating element appears.
+      if (!dragMoving && !dragDropping) {
+        dragRaf = requestAnimationFrame(tick);
+        return;
+      }
+
+      {
+        // Soft/heavy follow while dragging (no snapping): mild spring towards pointer
+        // Stronger settle on drop to land into the grid.
+        const stiffness = dragDropping ? 0.18 : 0.16;
+        const damping = dragDropping ? 0.76 : 0.80;
+
+        let nextVX = (dragFloatVX + (dragFloatTargetX - dragFloatX) * stiffness) * damping;
+        let nextVY = (dragFloatVY + (dragFloatTargetY - dragFloatY) * stiffness) * damping;
+        let nextVW = (dragFloatVW + (dragFloatTargetW - dragFloatW) * stiffness) * damping;
+        let nextVH = (dragFloatVH + (dragFloatTargetH - dragFloatH) * stiffness) * damping;
+
+        // Avoid big "swing" on fast pointer moves.
+        if (!dragDropping) {
+          const maxSpeed = 28; // px per frame
+          const s = Math.hypot(nextVX, nextVY);
+          if (s > maxSpeed) {
+            const k = maxSpeed / s;
+            nextVX *= k;
+            nextVY *= k;
+          }
+        }
+
+        dragFloatVX = nextVX;
+        dragFloatVY = nextVY;
+        dragFloatVW = nextVW;
+        dragFloatVH = nextVH;
+
+        dragFloatX += dragFloatVX;
+        dragFloatY += dragFloatVY;
+        dragFloatW += dragFloatVW;
+        dragFloatH += dragFloatVH;
+      }
+
+      // Paper flutter effect based on velocity
+      const speed = Math.hypot(dragFloatVX, dragFloatVY);
+      const targetEnergy = Math.min(1, speed / 22);
+      // Smooth the flutter so it feels soft (no jitter)
+      dragFlutterEnergy = dragFlutterEnergy * 0.92 + targetEnergy * 0.08;
+      const flutterAmt = dragDropping ? dragFlutterEnergy * 0.35 : dragFlutterEnergy;
+      const t = Date.now();
+      const tilt = clamp(dragFloatVX * 0.25, -10, 10);
+      const fold = clamp(-dragFloatVY * 0.14, -8, 8);
+      const wobbleZ = Math.sin(t * 0.010) * (1.2 + 3.2 * flutterAmt);
+      const flutterX = Math.sin(t * 0.014) * (0.9 + 3.8 * flutterAmt);
+      const flutterY = Math.cos(t * 0.012) * (0.6 + 2.6 * flutterAmt);
+      const scalePulse = 1 + (dragDropping ? 0 : Math.sin(t * 0.009) * 0.0035 * flutterAmt);
+
+      // Update DOM directly for smooth 60fps
+      if (dragFloatEl) {
+        const x = Math.round(dragFloatX);
+        const y = Math.round(dragFloatY);
+        const w = Math.max(40, Math.round(dragFloatW));
+        const h = Math.max(18, Math.round(dragFloatH));
+        const ox = Math.max(0, Math.min(w, dragOffsetX));
+        const oy = Math.max(0, Math.min(h, dragOffsetY));
+        const scale = dragDropping ? 1.0 : 1.035;
+        dragFloatEl.style.cssText = `
+          position: fixed; left: 0; top: 0; z-index: 80; pointer-events: none;
+          width: ${w}px; height: ${h}px;
+          transform: translate3d(${x}px, ${y}px, 0) rotate(${tilt + wobbleZ}deg) rotateX(${fold + flutterX}deg) rotateY(${flutterY}deg) scale(${scale * scalePulse});
+          transform-origin: ${ox}px ${oy}px;
+          will-change: transform;
+        `;
+      }
+
+      dragRaf = requestAnimationFrame(tick);
+    };
+    dragRaf = requestAnimationFrame(tick);
+  }
+
+  function stopDragLoop() {
+    if (dragRaf != null) cancelAnimationFrame(dragRaf);
+    dragRaf = null;
+  }
+
+  function snapToGrid(minutes: number): number {
+    return Math.round(minutes / config.snapMinutes) * config.snapMinutes;
+  }
+
+  function clampMinutes(minutes: number, durationMin: number): number {
+    const startMinOfDay = config.startHour * 60;
+    const endMinOfDay = config.endHour * 60;
+    const clamped = Math.max(startMinOfDay, Math.min(endMinOfDay - durationMin, minutes));
+    return snapToGrid(clamped);
+  }
+
+  function startDrag(e: PointerEvent, event: EventDto, tileEl: HTMLElement) {
+    if (dragSaving) return;
+    const rect = tileEl.getBoundingClientRect();
+    dragOffsetX = e.clientX - rect.left;
+    dragOffsetY = e.clientY - rect.top;
+    dragStartClientX = e.clientX;
+    dragStartClientY = e.clientY;
+    dragCurrentX = e.clientX;
+    dragCurrentY = e.clientY;
+    dragEvent = event;
+    dragMoving = false;
+    dragDropping = false;
+
+    // Initialize floating overlay at the tile position/size
+    dragTileW = rect.width;
+    dragTileH = rect.height;
+    dragFloatX = rect.left;
+    dragFloatY = rect.top;
+    dragFloatW = rect.width;
+    dragFloatH = rect.height;
+    dragFloatTargetX = rect.left;
+    dragFloatTargetY = rect.top;
+    dragFloatTargetW = rect.width;
+    dragFloatTargetH = rect.height;
+    dragFloatVX = 0;
+    dragFloatVY = 0;
+    dragFloatVW = 0;
+    dragFloatVH = 0;
+
+    // Capture grid and day column positions
+    const gridEl = document.getElementById('weekplanner-timegrid-scroll');
+    if (gridEl) {
+      dragGridRect = gridEl.getBoundingClientRect();
+      // Find day column elements
+      const dayColumns = gridEl.querySelectorAll('[data-day-key]');
+      dragDayRects = [];
+      dayColumns.forEach((col) => {
+        const dayKey = col.getAttribute('data-day-key');
+        if (dayKey) {
+          const colRect = col.getBoundingClientRect();
+          const day = days.find(d => dateKey(d).toString() === dayKey);
+          if (day) {
+            dragDayRects.push({ day, left: colRect.left, right: colRect.right });
+          }
+        }
+      });
+    }
+
+    tileEl.setPointerCapture(e.pointerId);
+    startDragLoop();
+    e.preventDefault();
+  }
+
+  function moveDrag(e: PointerEvent) {
+    if (!dragEvent) return;
+    dragCurrentX = e.clientX;
+    dragCurrentY = e.clientY;
+
+    // Always update the floating target position (pixel-accurate)
+    dragFloatTargetX = e.clientX - dragOffsetX;
+    dragFloatTargetY = e.clientY - dragOffsetY;
+    dragFloatTargetW = dragTileW;
+    dragFloatTargetH = dragTileH;
+
+    // Start actual drag after threshold (5px) to distinguish from click
+    if (!dragMoving) {
+      const dx = dragCurrentX - dragStartClientX;
+      const dy = dragCurrentY - dragStartClientY;
+      if (Math.abs(dx) > 5 || Math.abs(dy) > 5) {
+        dragMoving = true;
+      }
+    }
+
+    if (dragMoving && dragGridRect) {
+      // Find target day
+      dragTargetDay = null;
+      for (const dr of dragDayRects) {
+        if (dragCurrentX >= dr.left && dragCurrentX < dr.right) {
+          dragTargetDay = dr.day;
+          break;
+        }
+      }
+
+      // Calculate target time
+      const scrollEl = document.getElementById('weekplanner-timegrid-scroll');
+      const scrollOffset = scrollEl?.scrollTop ?? 0;
+      const gridTop = dragGridRect.top;
+      const yInGrid = dragCurrentY - gridTop + scrollOffset - dragOffsetY;
+      const rawMinutes = (yInGrid / config.pxPerMinute) + (config.startHour * 60);
+      const eventDuration = dragEvent.endAt
+        ? Math.round((new Date(dragEvent.endAt).getTime() - new Date(dragEvent.startAt).getTime()) / 60000)
+        : config.defaultDurationMinutes;
+      dragTargetMinutes = clampMinutes(rawMinutes, eventDuration);
+    }
+  }
+
+  async function endDrag(e: PointerEvent) {
+    if (!dragEvent) return;
+
+    (e.currentTarget as HTMLElement | null)?.releasePointerCapture?.(e.pointerId);
+
+    if (!dragMoving || !dragTargetDay || dragTargetMinutes == null) {
+      // Was a click, not a drag
+      dragEvent = null;
+      dragMoving = false;
+      dragDropping = false;
+      dragTargetDay = null;
+      dragTargetMinutes = null;
+      stopDragLoop();
+      return;
+    }
+
+    // Calculate new start/end times
+    const eventDuration = dragEvent.endAt
+      ? Math.round((new Date(dragEvent.endAt).getTime() - new Date(dragEvent.startAt).getTime()) / 60000)
+      : config.defaultDurationMinutes;
+
+    const targetHour = Math.floor(dragTargetMinutes / 60);
+    const targetMin = dragTargetMinutes % 60;
+
+    const newStart = new Date(dragTargetDay);
+    newStart.setHours(targetHour, targetMin, 0, 0);
+
+    const newEnd = new Date(newStart.getTime() + eventDuration * 60000);
+
+    // Check if actually moved
+    const oldStart = new Date(dragEvent.startAt);
+    if (newStart.getTime() === oldStart.getTime()) {
+      dragEvent = null;
+      dragMoving = false;
+      dragDropping = false;
+      dragTargetDay = null;
+      dragTargetMinutes = null;
+      stopDragLoop();
+      return;
+    }
+
+    // Animate the floating tile into the snapped grid target ("weight")
+    dragDropping = true;
+    if (dragGridRect) {
+      const scrollEl = document.getElementById('weekplanner-timegrid-scroll') as HTMLDivElement | null;
+      const scrollOffset = scrollEl?.scrollTop ?? 0;
+      const topPx = (dragTargetMinutes - config.startHour * 60) * config.pxPerMinute;
+      const dropY = dragGridRect.top - scrollOffset + topPx;
+
+      const dayRect = dragDayRects.find((dr) => sameDay(dr.day, dragTargetDay!));
+      if (dayRect) {
+        const dropX = dayRect.left + 2;
+        const dropW = Math.max(60, dayRect.right - dayRect.left - 4);
+        const dropH = Math.max(18, eventDuration * config.pxPerMinute);
+        dragFloatTargetX = dropX;
+        dragFloatTargetY = dropY;
+        dragFloatTargetW = dropW;
+        dragFloatTargetH = dropH;
+      } else {
+        dragFloatTargetY = dropY;
+        dragFloatTargetH = Math.max(18, eventDuration * config.pxPerMinute);
+      }
+    }
+
+    // Save to API
+    dragSaving = true;
+    try {
+      const settleMs = 240;
+      await Promise.all([
+        updateEvent(dragEvent.id, {
+          startAt: newStart.toISOString(),
+          endAt: newEnd.toISOString()
+        }),
+        new Promise((r) => setTimeout(r, settleMs))
+      ]);
+      onEventMoved();
+    } catch (err) {
+      console.error('Failed to move event:', err);
+    } finally {
+      dragSaving = false;
+      dragEvent = null;
+      dragMoving = false;
+      dragDropping = false;
+      dragTargetDay = null;
+      dragTargetMinutes = null;
+      stopDragLoop();
+    }
+  }
+
+  function cancelDrag() {
+    dragEvent = null;
+    dragMoving = false;
+    dragDropping = false;
+    dragTargetDay = null;
+    dragTargetMinutes = null;
+    stopDragLoop();
+  }
+
+  // dragFloatStyle is now set directly in the RAF loop for smooth animation
+
+  // Computed drag ghost position
+  $: dragGhostStyle = (() => {
+    if (!dragMoving || !dragEvent || !dragTargetDay || dragTargetMinutes == null) return '';
+    const eventDuration = dragEvent.endAt
+      ? Math.round((new Date(dragEvent.endAt).getTime() - new Date(dragEvent.startAt).getTime()) / 60000)
+      : config.defaultDurationMinutes;
+    const top = (dragTargetMinutes - config.startHour * 60) * config.pxPerMinute;
+    const height = Math.max(18, eventDuration * config.pxPerMinute);
+    return `top: ${top}px; height: ${height}px;`;
+  })();
+
+  $: dragGhostDayIndex = dragTargetDay ? days.findIndex(d => sameDay(d, dragTargetDay!)) : -1;
+
   function isContinuation(event: EventDto, day: Date): boolean {
     return !sameDay(new Date(event.startAt), day);
   }
@@ -338,6 +684,10 @@
       });
     }
   });
+
+  onDestroy(() => {
+    stopDragLoop();
+  });
 </script>
 
 <div class="h-full flex flex-col rounded-2xl border border-white/10 bg-black/20 overflow-hidden relative">
@@ -467,12 +817,13 @@
       </div>
 
       <!-- Day columns -->
-      {#each days as day (dateKey(day))}
+      {#each days as day, dayIndex (dateKey(day))}
         {@const k = dateKey(day)}
         {@const segs = timedByDay.get(k) ?? []}
         <div
           class="relative border-l border-white/10"
           style={`height: ${gridHeightPx}px;`}
+          data-day-key={k}
           role="button"
           tabindex="0"
           on:click={() => onAddEvent(day)}
@@ -489,45 +840,74 @@
             <div class="absolute left-0 right-0 border-t border-white/5" style={`top: ${y}px;`}></div>
           {/each}
 
+          <!-- Drag ghost preview intentionally hidden (floating tile only) -->
+
           {#each segs as seg (seg.event.occurrenceId ?? `${seg.event.id}:${seg.event.startAt}:${k}:${seg.startMin}`)}
             {@const e = seg.event}
             {@const color = eventBaseColor(e)}
             {@const ePersons = eventPersons(e)}
-            <div class="absolute px-1" style={segmentStyle(seg)}>
+            {@const isCompact = seg.colCount > 1}
+            {@const isDragging = dragEvent?.id === e.id && (dragMoving || dragDropping)}
+            <div
+              class={`absolute px-0.5 ${isDragging ? 'opacity-0 pointer-events-none' : ''}`}
+              style={segmentStyle(seg)}
+            >
               <div class="relative h-full">
-                <button
-                  type="button"
-                  class={`w-full h-full text-left rounded-xl px-2 py-1 pr-9 border text-xs leading-tight transition active:scale-[0.99] overflow-hidden ${eventTileBgClass(color)} ${seg.isContinuation ? 'border-dashed opacity-90' : ''}`}
+                <!-- svelte-ignore a11y_no_static_element_interactions a11y_click_events_have_key_events -->
+                <div
+                  class={`w-full h-full text-left rounded-xl px-2 py-1 border text-xs leading-tight overflow-hidden cursor-grab select-none touch-none ${eventTileBgClass(color)} ${seg.isContinuation ? 'border-dashed opacity-90' : ''} ${isCompact ? '' : 'pr-9'} ${dragSaving && dragEvent?.id === e.id ? 'animate-pulse' : ''}`}
                   style={eventTileStyle(color)}
-                  on:click|stopPropagation={() => onEditEvent(e)}
+                  role="button"
+                  tabindex="0"
+                  on:pointerdown={(ev) => startDrag(ev, e, ev.currentTarget as HTMLElement)}
+                  on:pointermove={moveDrag}
+                  on:pointerup={endDrag}
+                  on:pointercancel={cancelDrag}
+                  on:click|stopPropagation={() => {
+                    if (!dragMoving) onEditEvent(e);
+                  }}
+                  on:keydown={(ev) => {
+                    if (ev.key === 'Enter' || ev.key === ' ') {
+                      ev.preventDefault();
+                      onEditEvent(e);
+                    }
+                  }}
                 >
-                  <div class="flex items-baseline gap-1 min-w-0">
+                  {#if isCompact}
+                    <!-- Compact mode: only title -->
                     <div class="font-semibold truncate min-w-0">{e.title}</div>
-                    <div class="text-[10px] text-white/60 whitespace-nowrap">({fmtTimeRange(e.startAt, e.endAt)})</div>
-                  </div>
-                  {#if e.location}
-                    <div class="text-[10px] text-white/50 truncate">📍 {e.location}</div>
+                  {:else}
+                    <!-- Full mode: title + time + location + persons -->
+                    <div class="flex items-baseline gap-1 min-w-0">
+                      <div class="font-semibold truncate min-w-0">{e.title}</div>
+                      <div class="text-[10px] text-white/60 whitespace-nowrap">({fmtTimeRange(e.startAt, e.endAt)})</div>
+                    </div>
+                    {#if e.location}
+                      <div class="text-[10px] text-white/50 truncate">📍 {e.location}</div>
+                    {/if}
+                    {#if ePersons.length > 0}
+                      <div class="text-[10px] text-white/50 truncate">{ePersons.map(p => p.name).join(', ')}</div>
+                    {/if}
                   {/if}
-                  {#if ePersons.length > 0}
-                    <div class="text-[10px] text-white/50 truncate">{ePersons.map(p => p.name).join(', ')}</div>
-                  {/if}
-                </button>
+                </div>
 
-                <button
-                  type="button"
-                  class="absolute top-1 right-1 h-7 w-7 rounded-lg bg-white/5 hover:bg-white/10 active:bg-white/15 transition grid place-items-center text-white/60 hover:text-rose-300"
-                  aria-label="Termin löschen"
-                  title="Löschen"
-                  on:click|stopPropagation={() => requestDelete(e)}
-                >
-                  <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                    <path
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                    />
-                  </svg>
-                </button>
+                {#if !isCompact && !isDragging}
+                  <button
+                    type="button"
+                    class="absolute top-1 right-1 h-7 w-7 rounded-lg bg-white/5 hover:bg-white/10 active:bg-white/15 transition grid place-items-center text-white/60 hover:text-rose-300"
+                    aria-label="Termin löschen"
+                    title="Löschen"
+                    on:click|stopPropagation={() => requestDelete(e)}
+                  >
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                      <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                      />
+                    </svg>
+                  </button>
+                {/if}
               </div>
             </div>
           {/each}
@@ -535,6 +915,26 @@
       {/each}
       </div>
     </div>
+
+    <!-- Floating dragged tile (smooth, pixel-accurate "paper") -->
+    {#if dragEvent && (dragMoving || dragDropping)}
+      {@const floatColor = eventBaseColor(dragEvent)}
+      <div bind:this={dragFloatEl} class="fixed left-0 top-0 z-[80] pointer-events-none">
+        <div
+          class={`relative h-full rounded-xl border text-xs leading-tight overflow-hidden select-none ${eventTileBgClass(floatColor)} shadow-xl shadow-black/40 ${dragSaving ? 'animate-pulse' : ''}`}
+          style={`${eventTileStyle(floatColor)} backdrop-filter: blur(2px); perspective: 800px;`}
+        >
+          <!-- Paper texture overlay -->
+          <div class="absolute inset-0 rounded-xl bg-gradient-to-br from-white/15 via-transparent to-black/15 opacity-80"></div>
+          <!-- Subtle fold line -->
+          <div class="absolute inset-y-0 left-1/2 w-px bg-gradient-to-b from-transparent via-white/10 to-transparent"></div>
+          <div class="relative px-2 py-1 font-semibold truncate">{dragEvent.title}</div>
+          {#if dragEvent.location}
+            <div class="relative px-2 text-[10px] text-white/60 truncate">📍 {dragEvent.location}</div>
+          {/if}
+        </div>
+      </div>
+    {/if}
 
     {#if scrollbarVisible}
       <div

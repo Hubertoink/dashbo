@@ -80,6 +80,34 @@
   let scribbleModalOpen = false;
   let scribbleSaving = false;
 
+  // Mobile FAB launcher (dock)
+  let fabDockOpen = false;
+  let fabDockTimer: ReturnType<typeof setTimeout> | null = null;
+
+  function clearFabDockTimer() {
+    if (fabDockTimer) {
+      clearTimeout(fabDockTimer);
+      fabDockTimer = null;
+    }
+  }
+
+  function startFabDockTimer() {
+    clearFabDockTimer();
+    fabDockTimer = setTimeout(() => {
+      fabDockOpen = false;
+      fabDockTimer = null;
+    }, 8000);
+  }
+
+  function toggleFabDock() {
+    fabDockOpen = !fabDockOpen;
+    if (fabDockOpen) {
+      startFabDockTimer();
+    } else {
+      clearFabDockTimer();
+    }
+  }
+
   // Outlook ToDos
   let outlookConnected = false;
   let todoEnabled = true;
@@ -363,6 +391,42 @@
     monthSuggestionsByDay = m;
   }
 
+  // Selected day detail for month view
+  $: selectedDayKey = dateKeyLocal(selectedDate);
+  $: selectedDayEvents = monthEventsByDay.get(selectedDayKey) ?? [];
+  $: selectedDaySuggestions = monthSuggestionsByDay.get(selectedDayKey) ?? [];
+
+  // View swipe gesture state
+  let viewSwipeStartX = 0;
+  let viewSwipeDeltaX = 0;
+  let viewSwiping = false;
+  const VIEW_SWIPE_THRESHOLD = 80;
+
+  function onViewSwipeStart(e: TouchEvent) {
+    viewSwiping = true;
+    viewSwipeStartX = e.touches[0].clientX;
+    viewSwipeDeltaX = 0;
+  }
+
+  function onViewSwipeMove(e: TouchEvent) {
+    if (!viewSwiping) return;
+    viewSwipeDeltaX = e.touches[0].clientX - viewSwipeStartX;
+  }
+
+  function onViewSwipeEnd() {
+    if (!viewSwiping) return;
+    viewSwiping = false;
+    if (view === 'month' && viewSwipeDeltaX < -VIEW_SWIPE_THRESHOLD) {
+      // Swipe left in month -> go to agenda
+      view = 'agenda';
+    } else if (view === 'agenda' && viewSwipeDeltaX > VIEW_SWIPE_THRESHOLD) {
+      // Swipe right in agenda -> go to month
+      view = 'month';
+      void refreshMonth();
+    }
+    viewSwipeDeltaX = 0;
+  }
+
   function eventPersons(e: EventDto): Array<{ id: number; name: string; color: string }> {
     if (e.persons && e.persons.length > 0) return e.persons as any;
     if (e.person) return [e.person as any];
@@ -631,8 +695,8 @@
   function setSelected(d: Date) {
     selectedDate = d;
     newDate = toDateInputValue(d);
-    view = 'agenda';
     closePopovers();
+    // Refresh agenda in background so it's ready if user switches
     void refreshAgenda();
   }
 
@@ -791,6 +855,26 @@
       return;
     }
 
+    // One-time teaser animation for the mobile dock launcher
+    try {
+      const isMobile = window.matchMedia('(max-width: 767px)').matches;
+      const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      const key = 'dashbo-planner-fab-teaser-seen';
+      const seen = localStorage.getItem(key) === '1';
+      if (isMobile && !reduceMotion && !seen) {
+        localStorage.setItem(key, '1');
+        window.setTimeout(() => {
+          if (anyModalOpen) return;
+          fabDockOpen = true;
+          window.setTimeout(() => {
+            fabDockOpen = false;
+          }, 1200);
+        }, 600);
+      }
+    } catch {
+      // ignore teaser if storage/matchMedia unavailable
+    }
+
     metaLoading = true;
     metaError = null;
     void (async () => {
@@ -804,7 +888,10 @@
         backgroundUrl = pickBackgroundFromSettings(s);
         scribbleEnabled = s.scribbleEnabled !== false;
         todoEnabled = s.todoEnabled !== false;
-        dismissedSuggestions = Array.isArray(s.dismissedSuggestions) ? s.dismissedSuggestions : [];
+        {
+          const ds = (s as any)?.dismissedSuggestions;
+          dismissedSuggestions = Array.isArray(ds) ? (ds as string[]) : [];
+        }
         tags = (t ?? []).slice().sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || a.name.localeCompare(b.name));
         persons = (p ?? []).slice().sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || a.name.localeCompare(b.name));
         outlookConnected = Boolean(outlookSt?.connected);
@@ -861,7 +948,12 @@
     ></div>
   </div>
 
-  <div class="relative z-10 max-w-xl mx-auto px-4 py-4">
+  <div
+    class="relative z-10 max-w-xl mx-auto px-4 py-4"
+    on:touchstart={onViewSwipeStart}
+    on:touchmove={onViewSwipeMove}
+    on:touchend={onViewSwipeEnd}
+  >
     <div class="flex items-center justify-between gap-3 mb-3">
       <div class="text-xl font-semibold tracking-wide">Dashbo</div>
       <div class="flex items-center gap-2">
@@ -983,6 +1075,7 @@
           <div class={cx('space-y-3', agendaLoading && 'opacity-60')}>
             {#each agendaGroups as g (dateKeyLocal(g.day))}
               {@const isSelected = sameDay(g.day, selectedDate)}
+              {@const isToday = sameDay(g.day, new Date())}
               <div
                 class={cx(
                   'bg-white/5 rounded-xl p-3 glass border border-white/10',
@@ -992,6 +1085,9 @@
               <div class="flex items-center justify-between">
                 <div class="text-sm font-medium flex items-center gap-2">
                   {g.day.toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit' })}
+                  {#if isToday}
+                    <span class="text-[10px] px-2 py-0.5 rounded-full bg-emerald-400/10 text-emerald-200 ring-1 ring-emerald-400/25">Heute</span>
+                  {/if}
                   {#if isSelected}
                     <span class="text-[10px] px-2 py-0.5 rounded-full bg-white/10 text-white/70">Ausgewählt</span>
                   {/if}
@@ -1211,6 +1307,105 @@
             {/each}
           </div>
         {/if}
+
+        <!-- Selected day detail panel -->
+        <div class="mt-4 bg-white/5 rounded-xl p-3 border border-white/10">
+          <div class="flex items-center justify-between mb-2">
+            <div class="text-sm font-medium">
+              {selectedDate.toLocaleDateString('de-DE', { weekday: 'long', day: '2-digit', month: 'long' })}
+              {#if sameDay(selectedDate, new Date())}
+                <span class="ml-2 text-[10px] px-2 py-0.5 rounded-full bg-emerald-400/15 text-emerald-300 ring-1 ring-emerald-400/25">Heute</span>
+              {/if}
+            </div>
+            <button
+              type="button"
+              class="text-xs text-white/60 hover:text-white transition px-2 py-1 rounded hover:bg-white/10"
+              on:click={() => { view = 'agenda'; }}
+            >
+              Zur Agenda →
+            </button>
+          </div>
+
+          {#if selectedDayEvents.length === 0 && selectedDaySuggestions.length === 0}
+            <div class="text-white/40 text-sm py-2">Keine Termine an diesem Tag</div>
+          {:else}
+            <div class="space-y-2">
+              {#each selectedDayEvents as e (eventKey(e))}
+                {@const ps = eventPersons(e)}
+                {@const dot = eventDot(e)}
+                <button
+                  type="button"
+                  class="w-full text-left rounded-lg bg-white/5 hover:bg-white/10 px-3 py-2 transition"
+                  on:click={() => (openEvent = e)}
+                >
+                  <div class="flex items-start gap-2">
+                    <div class={`mt-1.5 h-2.5 w-2.5 rounded-full shrink-0 ${dot.cls}`} style={dot.style}></div>
+                    <div class="min-w-0 flex-1">
+                      <div class="text-sm font-medium truncate">{e.title}</div>
+                      <div class="text-xs text-white/55">
+                        {#if e.allDay}
+                          Ganztägig
+                        {:else}
+                          {formatTime(new Date(e.startAt))}{e.endAt ? ` – ${formatTime(new Date(e.endAt))}` : ''}
+                        {/if}
+                        {#if e.location}
+                          · {e.location}
+                        {/if}
+                      </div>
+                      {#if ps.length > 0}
+                        <div class="text-xs text-white/50 mt-0.5">{ps.map(p => p.name).join(', ')}</div>
+                      {/if}
+                    </div>
+                  </div>
+                </button>
+              {/each}
+
+              {#each selectedDaySuggestions as s (s.signature)}
+                {@const sTag = s.tagId != null ? tags.find(t => t.id === s.tagId) : undefined}
+                {@const sPersons = s.personIds.map(id => persons.find(p => p.id === id)).filter(Boolean) as PersonDto[]}
+                <div class="rounded-lg border border-dashed border-violet-400/40 bg-violet-500/10 px-3 py-2">
+                  <div class="flex items-start justify-between gap-2">
+                    <div class="min-w-0 flex-1">
+                      <div class="text-sm font-medium text-violet-200 truncate">{s.title}</div>
+                      <div class="text-xs text-white/50">
+                        {#if s.allDay}
+                          Ganztägig
+                        {:else if s.startTime}
+                          {s.startTime}{s.endTime ? ` – ${s.endTime}` : ''}
+                        {/if}
+                        · Vorschlag
+                      </div>
+                    </div>
+                    <div class="flex items-center gap-1">
+                      <button
+                        type="button"
+                        class="p-1 rounded hover:bg-white/10 text-white/50 hover:text-white transition"
+                        title="Übernehmen"
+                        on:click={() => acceptSuggestion(s)}
+                      >
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                        </svg>
+                      </button>
+                      <button
+                        type="button"
+                        class="p-1 rounded hover:bg-white/10 text-white/50 hover:text-white transition"
+                        title="Ignorieren"
+                        on:click={() => dismissSuggestion(s)}
+                      >
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              {/each}
+            </div>
+          {/if}
+
+          <div class="mt-3 text-center text-xs text-white/40">← Nach links wischen für Agenda</div>
+        </div>
       </div>
     {/if}
   </div>
@@ -1230,7 +1425,7 @@
             <button
               type="button"
               class="h-9 px-3 rounded-lg bg-white/10 hover:bg-white/15 text-sm"
-              on:click={() => openEditFromEvent(openEvent)}
+              on:click={() => openEditFromEvent(openEvent!)}
             >
               Bearbeiten
             </button>
@@ -1315,6 +1510,7 @@
         <input
           class="h-12 w-full px-4 rounded-xl bg-white/10 border-0 text-base placeholder:text-white/40"
           placeholder="Titel"
+          aria-label="Titel"
           bind:value={newTitle}
         />
 
@@ -1322,6 +1518,7 @@
           <input
             class="h-12 w-full px-4 pl-10 rounded-xl bg-white/10 border-0 text-sm placeholder:text-white/40"
             placeholder="Ort (optional)"
+            aria-label="Ort"
             bind:value={newLocation}
           />
           <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-white/40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1346,7 +1543,7 @@
         {#if !newAllDay}
           <div class="grid grid-cols-2 gap-3">
             <div class="relative">
-              <label class="absolute left-4 top-1 text-[10px] text-white/50 uppercase tracking-wide">Von</label>
+              <span class="absolute left-4 top-1 text-[10px] text-white/50 uppercase tracking-wide">Von</span>
               <input
                 class="h-12 w-full px-4 pt-4 rounded-xl bg-white/10 border-0 text-sm"
                 type="time"
@@ -1354,7 +1551,7 @@
               />
             </div>
             <div class="relative">
-              <label class="absolute left-4 top-1 text-[10px] text-white/50 uppercase tracking-wide">Bis</label>
+              <span class="absolute left-4 top-1 text-[10px] text-white/50 uppercase tracking-wide">Bis</span>
               <input
                 class="h-12 w-full px-4 pt-4 rounded-xl bg-white/10 border-0 text-sm"
                 type="time"
@@ -1667,10 +1864,70 @@
     Dashboard
   </a>
 
-  <!-- Floating Add Event Button -->
+  <!-- Mobile: docked side launcher (expands to bottom-right positions) -->
+  <div class="fixed right-4 z-50 md:hidden" style="bottom: {scribbleEnabled ? '7rem' : '1.5rem'};">
+    <!-- Trigger button -->
+    <button
+      type="button"
+      class="h-14 w-14 rounded-full shadow-xl flex items-center justify-center active:scale-95 transition-all duration-200 {fabDockOpen ? 'bg-white/25 backdrop-blur-lg border border-white/20' : 'bg-gradient-to-br from-indigo-500 to-purple-600 border border-indigo-400/30'}"
+      aria-label={fabDockOpen ? 'Aktionen schließen' : 'Aktionen öffnen'}
+      aria-expanded={fabDockOpen}
+      on:click={toggleFabDock}
+    >
+      <div class={cx('transition-transform duration-300', fabDockOpen && 'rotate-45')}>
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
+        </svg>
+      </div>
+    </button>
+  </div>
+
+  {#if fabDockOpen}
+    <!-- Add Event - flies up from trigger -->
+    <button
+      type="button"
+      class="fixed right-4 z-50 h-14 w-14 rounded-full bg-gradient-to-br from-blue-400 to-indigo-500 shadow-xl flex items-center justify-center hover:scale-105 active:scale-95 transition-transform md:hidden ring-2 ring-blue-300/20"
+      style="bottom: {scribbleEnabled ? 'calc(7rem + 4rem)' : 'calc(1.5rem + 4rem)'};"
+      aria-label="Neuen Termin erstellen"
+      on:click={() => {
+        clearFabDockTimer();
+        fabDockOpen = false;
+        quickAddOpen = true;
+      }}
+      in:fly={{ y: 60, duration: 250 }}
+      out:fly={{ y: 60, duration: 180 }}
+    >
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+      </svg>
+    </button>
+  {/if}
+
+  <!-- Scribble - separate block so it gets its own transition -->
+  {#if fabDockOpen && scribbleEnabled}
+    <button
+      type="button"
+      class="fixed right-4 z-50 h-14 w-14 rounded-full bg-gradient-to-br from-amber-400 to-orange-500 shadow-xl flex items-center justify-center hover:scale-105 active:scale-95 transition-transform md:hidden ring-2 ring-amber-300/20"
+      style="bottom: calc(7rem + 8rem);"
+      aria-label="Scribble Notiz erstellen"
+      on:click={() => {
+        clearFabDockTimer();
+        fabDockOpen = false;
+        scribbleModalOpen = true;
+      }}
+      in:fly={{ y: 120, duration: 280, delay: 40 }}
+      out:fly={{ y: 120, duration: 180 }}
+    >
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+      </svg>
+    </button>
+  {/if}
+
+  <!-- Desktop: keep classic floating add button -->
   <button
     type="button"
-    class="fixed z-50 h-14 w-14 rounded-full bg-gradient-to-br from-blue-400 to-indigo-500 shadow-lg flex items-center justify-center hover:scale-105 active:scale-95 transition-transform"
+    class="fixed z-50 h-14 w-14 rounded-full bg-gradient-to-br from-blue-400 to-indigo-500 shadow-lg hidden md:flex items-center justify-center hover:scale-105 active:scale-95 transition-transform"
     class:bottom-24={scribbleEnabled}
     class:bottom-6={!scribbleEnabled}
     class:right-6={true}
@@ -1684,11 +1941,11 @@
     </svg>
   </button>
 
-  <!-- Floating Scribble Button (mobile) -->
+  <!-- Desktop scribble (if enabled) -->
   {#if scribbleEnabled}
     <button
       type="button"
-      class="fixed bottom-6 right-6 z-50 h-14 w-14 rounded-full bg-gradient-to-br from-amber-400 to-orange-500 shadow-lg flex items-center justify-center hover:scale-105 active:scale-95 transition-transform"
+      class="fixed bottom-6 right-6 z-50 h-14 w-14 rounded-full bg-gradient-to-br from-amber-400 to-orange-500 shadow-lg hidden md:flex items-center justify-center hover:scale-105 active:scale-95 transition-transform"
       aria-label="Scribble Notiz erstellen"
       on:click={() => (scribbleModalOpen = true)}
       in:fly={{ y: 50, duration: 300 }}
