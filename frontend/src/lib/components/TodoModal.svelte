@@ -143,7 +143,7 @@
           title: title.trim(),
           description: desc,
           startAt,
-          dueAt,
+          ...(dueAt ? { dueAt } : {}),
         });
         pushToast('ToDo erstellt', 'success');
       }

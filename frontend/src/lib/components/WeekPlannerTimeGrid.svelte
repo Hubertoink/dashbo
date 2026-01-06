@@ -95,6 +95,33 @@
     return d.getHours() * 60 + d.getMinutes();
   }
 
+  function clamp(v: number, min: number, max: number): number {
+    return Math.max(min, Math.min(max, v));
+  }
+
+  function snapMinutes(mins: number): number {
+    const step = Math.max(1, Math.floor(config.snapMinutes || 1));
+    return Math.round(mins / step) * step;
+  }
+
+  function dateAtGridClick(day: Date, ev: MouseEvent): Date {
+    const target = ev.currentTarget as HTMLElement | null;
+    if (!target) return new Date(day);
+
+    const rect = target.getBoundingClientRect();
+    const y = clamp(ev.clientY - rect.top, 0, gridHeightPx);
+    const rawMins = config.startHour * 60 + y / config.pxPerMinute;
+    const snapped = snapMinutes(rawMins);
+    const minStart = config.startHour * 60;
+    const maxStart = config.endHour * 60 - Math.max(1, Math.floor(config.snapMinutes || 1));
+    const mins = clamp(snapped, minStart, maxStart);
+
+    const d = new Date(day);
+    d.setHours(0, 0, 0, 0);
+    d.setMinutes(Math.floor(mins));
+    return d;
+  }
+
   function fmtSuggestionTime(s: EventSuggestionDto): string {
     if (s.allDay) return 'Ganztägig';
     return fmtTimeRange(s.startAt, s.endAt);
@@ -899,11 +926,14 @@
           data-day-key={k}
           role="button"
           tabindex="0"
-          on:click={() => onAddEvent(day)}
+          on:click={(ev) => onAddEvent(dateAtGridClick(day, ev))}
           on:keydown={(e) => {
             if (e.key === 'Enter' || e.key === ' ') {
               e.preventDefault();
-              onAddEvent(day);
+              // Keyboard can't infer click position; use start of the visible grid.
+              const d = new Date(day);
+              d.setHours(config.startHour, 0, 0, 0);
+              onAddEvent(d);
             }
           }}
         >

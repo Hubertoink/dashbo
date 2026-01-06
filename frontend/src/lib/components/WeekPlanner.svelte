@@ -48,7 +48,9 @@
   function openQuickAdd(day: Date) {
     quickAddDate = day;
     quickAddPrefillTitle = null;
-    quickAddPrefillStartTime = null;
+    // If caller passes a Date with a time (e.g. click position in the grid), prefill that time.
+    const mins = minutesSinceMidnight(day);
+    quickAddPrefillStartTime = mins > 0 ? hhmmFromMinutes(bucket15(mins)) : null;
     quickAddPrefillEndTime = null;
     quickAddPrefillAllDay = null;
     quickAddPrefillPersonIds = null;
@@ -849,6 +851,18 @@
 
   <!-- Floating ToDo button -->
   {#if outlookConnected && todoEnabled}
+    <button
+      type="button"
+      class="fixed z-[60] h-14 w-14 rounded-full bg-gradient-to-br from-blue-400 to-indigo-500 shadow-xl flex items-center justify-center hover:scale-105 active:scale-95 transition-transform ring-2 ring-blue-300/20"
+      style="bottom: calc(1.5rem + env(safe-area-inset-bottom) + 4rem); right: 1.5rem;"
+      aria-label="Neuen Termin erstellen"
+      on:click={() => openQuickAdd(new Date(selectedDate))}
+    >
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+      </svg>
+    </button>
+
     <button
       type="button"
       class="fixed z-[60] h-14 w-14 rounded-full bg-gradient-to-br from-emerald-400 to-teal-500 shadow-xl flex items-center justify-center hover:scale-105 active:scale-95 transition-transform ring-2 ring-emerald-300/20"
