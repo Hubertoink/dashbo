@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onDestroy, onMount } from 'svelte';
-  import type { EventDto, HolidayDto, TagColorKey } from '$lib/api';
+  import type { EventDto, HolidayDto, TagColorKey, TodoItemDto } from '$lib/api';
   import { deleteEvent, updateEvent } from '$lib/api';
   import { formatGermanDayLabel, sameDay } from '$lib/date';
   import { fade, scale } from 'svelte/transition';
@@ -29,6 +29,11 @@
   export let onEventMoved: () => void = () => {};
   export let onAcceptSuggestion: (s: EventSuggestionDto) => void = () => {};
   export let onDismissSuggestion: (s: EventSuggestionDto) => void = () => {};
+
+  // ToDo props
+  export let todosByDay: Map<number, TodoItemDto[]> = new Map();
+  export let onToggleTodo: (item: TodoItemDto) => void = () => {};
+  export let onAddTodo: (dueDate: Date) => void = () => {};
 
   const config: WeekPlannerConfig = {
     startHour: 6,
@@ -740,12 +745,13 @@
         {@const k = dateKey(day)}
         {@const allDayEvents = allDayByDay.get(k) ?? []}
         {@const daySuggestions = suggestionsByDay.get(k) ?? []}
+        {@const dayTodos = todosByDay.get(k) ?? []}
         <!-- svelte-ignore a11y_no_static_element_interactions a11y_click_events_have_key_events -->
         <div
           class="px-2 py-2 border-l border-white/10 min-h-[64px] text-left hover:bg-white/5 transition cursor-pointer"
           on:click|self={() => onAddAllDayEvent(day)}
         >
-          <div class="space-y-1 max-h-[88px] overflow-y-auto pr-1">
+          <div class="space-y-1 max-h-[120px] overflow-y-auto pr-1">
             {#each allDayEvents as e (e.occurrenceId ?? `${e.id}:${e.startAt}`)}
               {@const color = eventBaseColor(e)}
               {@const cont = isContinuation(e, day)}
@@ -774,6 +780,28 @@
                   </svg>
                 </button>
               </div>
+            {/each}
+
+            <!-- ToDos with due date on this day -->
+            {#each dayTodos as todo (todo.taskId + ':' + todo.listId + ':' + todo.connectionId)}
+              <button
+                type="button"
+                class="w-full text-left rounded-lg px-2 py-1.5 border text-xs transition active:scale-[0.99] bg-emerald-500/20 border-emerald-400/30 hover:bg-emerald-500/30 flex items-center gap-2"
+                on:click|stopPropagation={() => onToggleTodo(todo)}
+                title={todo.dueAt ? `Fällig: ${new Date(todo.dueAt).toLocaleDateString('de-DE')}` : 'ToDo'}
+              >
+                <span
+                  class="w-4 h-4 shrink-0 rounded border grid place-items-center border-emerald-400/50 bg-emerald-500/10"
+                  aria-hidden="true"
+                >
+                  {#if todo.completed}
+                    <svg class="w-3 h-3 text-emerald-300" viewBox="0 0 20 20" fill="currentColor">
+                      <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
+                    </svg>
+                  {/if}
+                </span>
+                <span class="truncate flex-1 text-emerald-100">{todo.title}</span>
+              </button>
             {/each}
 
             {#each daySuggestions as s (s.suggestionKey)}

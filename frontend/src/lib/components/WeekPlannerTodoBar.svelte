@@ -16,7 +16,7 @@
 
 <div class="border-t border-white/10 px-4 py-3">
   <div class="flex items-center gap-2">
-    <div class="text-xs text-white/50 shrink-0">ToDos</div>
+    <div class="text-xs text-white/50 shrink-0" title="ToDos ohne Fälligkeitsdatum">📥 Inbox</div>
 
     <div class="flex-1 overflow-x-auto">
       <div class="flex items-center gap-2 min-w-max">
@@ -56,7 +56,7 @@
         {/each}
 
         {#if items.length === 0}
-          <div class="text-sm text-white/40">Keine offenen ToDos</div>
+          <div class="text-sm text-white/40">Alle ToDos haben ein Fälligkeitsdatum</div>
         {/if}
       </div>
     </div>

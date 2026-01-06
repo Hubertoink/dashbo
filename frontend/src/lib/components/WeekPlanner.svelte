@@ -561,6 +561,30 @@
     void loadTodos();
   }
 
+  // Group todos by their due date (ISO date string -> todos)
+  $: todosByDay = (() => {
+    const m = new Map<number, TodoItemDto[]>();
+    for (const t of todoItems) {
+      if (t.completed) continue; // skip completed
+      if (!t.dueAt) continue; // only those with due date
+      const d = new Date(t.dueAt);
+      if (Number.isNaN(d.getTime())) continue;
+      const dayStart = startOfLocalDay(d);
+      const k = dayStart.getTime();
+      const arr = m.get(k) ?? [];
+      arr.push(t);
+      m.set(k, arr);
+    }
+    // Sort each day's todos by title
+    for (const arr of m.values()) {
+      arr.sort((a, b) => a.title.localeCompare(b.title));
+    }
+    return m;
+  })();
+
+  // Todos without due date (for inbox bar)
+  $: inboxTodos = todoItems.filter((t) => !t.completed && !t.dueAt);
+
   async function toggleTodo(item: TodoItemDto) {
     const newCompleted = !item.completed;
     // optimistic
@@ -661,18 +685,6 @@
     suggestions = [];
     suggestionsForWeekKey = '';
   }
-  $: todosByDay = (() => {
-    const m = new Map<string, TodoItemDto[]>();
-    for (const t of todoItems) {
-      if (!t.dueAt) continue;
-      const d = startOfLocalDay(new Date(t.dueAt));
-      const k = dateKey(d);
-      const arr = m.get(k) ?? [];
-      arr.push(t);
-      m.set(k, arr);
-    }
-    return m;
-  })();
 
   $: suggestionsByDay = (() => {
     const m = new Map<string, EventSuggestionDto[]>();
@@ -775,6 +787,9 @@
         {holidays}
         suggestions={suggestions}
         {backgroundUrl}
+        {todosByDay}
+        onToggleTodo={toggleTodo}
+        onAddTodo={openTodoCreate}
         onAddEvent={(d) => openQuickAdd(d)}
         onAddAllDayEvent={(d) => openQuickAddAllDay(d)}
         onEditEvent={onEditEvent}
@@ -786,9 +801,9 @@
     </div>
   </div>
 
-  {#if outlookConnected && todoEnabled}
+  {#if outlookConnected && todoEnabled && inboxTodos.length > 0}
     <WeekPlannerTodoBar
-      items={todoItems.filter((t) => !t.completed)}
+      items={inboxTodos}
       {selectedDate}
       onToggleTodo={toggleTodo}
       onAddTodo={openTodoCreate}
