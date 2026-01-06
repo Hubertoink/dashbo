@@ -36,6 +36,9 @@
   export let onAddTodo: (dueDate: Date) => void = () => {};
   export let onTodoDrop: (todoData: { connectionId: number; listId: string; taskId: string; title: string }, targetDate: Date) => void = () => {};
 
+  // When dragging a todo from the inbox bar, lightly highlight the all-day drop lane.
+  export let todoDragActive: boolean = false;
+
   // Drag-over state for drop zones
   let dragOverDay: number | null = null;
 
@@ -776,7 +779,7 @@
         {@const isDragOver = dragOverDay === k}
         <!-- svelte-ignore a11y_no_static_element_interactions a11y_click_events_have_key_events -->
         <div
-          class="px-2 py-2 border-l border-white/10 min-h-[64px] text-left transition cursor-pointer {isDragOver ? 'bg-emerald-500/20 ring-2 ring-emerald-400/50 ring-inset' : 'hover:bg-white/5'}"
+          class="px-2 py-2 border-l border-white/10 min-h-[64px] text-left transition cursor-pointer {isDragOver ? 'bg-emerald-500/20 ring-2 ring-emerald-400/50 ring-inset' : todoDragActive ? 'bg-emerald-500/10 ring-1 ring-emerald-400/25 ring-inset' : 'hover:bg-white/5'}"
           on:click|self={() => onAddAllDayEvent(day)}
           on:dragover={(e) => {
             if (e.dataTransfer?.types.includes('application/x-dashbo-todo')) {

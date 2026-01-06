@@ -1,6 +1,7 @@
 <script lang="ts">
   import {
     dismissRecurringSuggestion,
+    createTodo,
     fetchEvents,
     fetchSettings,
     fetchTodos,
@@ -539,6 +540,11 @@
   let todoModalConnectionId: number | null = null;
   let todoPrefillDueAt: string | null = null;
 
+  // Quick add todo (title-only)
+  let todoQuickText = '';
+  let todoQuickSaving = false;
+  let todoDragActive = false;
+
   // Use local noon to avoid timezone offsets pushing the ISO date to the previous/next day.
   function isoNoonLocal(d: Date): string {
     const x = new Date(d);
@@ -657,6 +663,35 @@
 
   function closeTodoModal() {
     todoModalOpen = false;
+  }
+
+  async function submitQuickTodo() {
+    const title = todoQuickText.trim();
+    if (!title) return;
+    if (!outlookConnected || !todoEnabled) return;
+    if (todoQuickSaving) return;
+
+    todoQuickSaving = true;
+    try {
+      const listName = (todoListNames && todoListNames.length > 0 ? todoListNames[0] : todoListName) || '';
+      const connectionId = todoItems.length > 0 ? todoItems[0]!.connectionId : undefined;
+      await createTodo({
+        ...(connectionId != null ? { connectionId } : {}),
+        ...(listName ? { listName } : {}),
+        title,
+        description: null,
+        startAt: null,
+        dueAt: null
+      });
+      todoQuickText = '';
+      await loadTodos();
+      pushToast('ToDo erstellt', 'success');
+    } catch (err) {
+      console.error('Quick todo create failed', err);
+      pushToast('Fehler beim ToDo anlegen', 'error');
+    } finally {
+      todoQuickSaving = false;
+    }
   }
 
   function mondayStart(d: Date) {
@@ -821,6 +856,7 @@
         suggestions={suggestions}
         {backgroundUrl}
         {todosByDay}
+        todoDragActive={todoDragActive}
         onToggleTodo={toggleTodo}
         onAddTodo={openTodoCreate}
         onTodoDrop={handleTodoDrop}
@@ -835,12 +871,16 @@
     </div>
   </div>
 
-  {#if outlookConnected && todoEnabled && inboxTodos.length > 0}
+  {#if outlookConnected && todoEnabled}
     <WeekPlannerTodoBar
       items={inboxTodos}
       {selectedDate}
       onToggleTodo={toggleTodo}
       onAddTodo={openTodoCreate}
+      quickAddText={todoQuickText}
+      quickAddSaving={todoQuickSaving}
+      onQuickAdd={submitQuickTodo}
+      onTodoDragActiveChange={(v) => (todoDragActive = v)}
     />
   {:else}
     <!-- Footer hint -->

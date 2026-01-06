@@ -6,6 +6,14 @@
   export let onToggleTodo: (item: TodoItemDto) => void;
   export let onAddTodo: (dueDate: Date) => void;
 
+  // Quick add (title-only)
+  export let quickAddText: string = '';
+  export let quickAddSaving: boolean = false;
+  export let onQuickAdd: () => void = () => {};
+
+  // Drag hinting
+  export let onTodoDragActiveChange: (active: boolean) => void = () => {};
+
   function dueLabel(iso: string | null): string {
     if (!iso) return '';
     const d = new Date(iso);
@@ -22,6 +30,19 @@
       taskId: todo.taskId,
       title: todo.title
     }));
+    onTodoDragActiveChange(true);
+  }
+
+  function handleDragEnd() {
+    onTodoDragActiveChange(false);
+  }
+
+  function onQuickKeyDown(e: KeyboardEvent) {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    if (quickAddSaving) return;
+    if (!quickAddText || !quickAddText.trim()) return;
+    onQuickAdd();
   }
 </script>
 
@@ -36,11 +57,22 @@
 
     <div class="flex-1 overflow-x-auto">
       <div class="flex items-center gap-2 min-w-max">
+        <div class="min-w-[240px]">
+          <input
+            class="w-full h-10 px-3 rounded-xl bg-white/10 border border-white/10 text-sm text-white/90 placeholder:text-white/40 focus:outline-none focus:ring-2 focus:ring-white/20"
+            placeholder="ToDo hinzufügen… (Enter)"
+            bind:value={quickAddText}
+            on:keydown={onQuickKeyDown}
+            disabled={quickAddSaving}
+          />
+        </div>
+
         {#each items as t (t.taskId + ':' + t.listId + ':' + t.connectionId)}
           <!-- svelte-ignore a11y_no_static_element_interactions -->
           <div
             draggable="true"
             on:dragstart={(e) => handleDragStart(e, t)}
+            on:dragend={handleDragEnd}
             class="cursor-grab active:cursor-grabbing"
           >
             <button
