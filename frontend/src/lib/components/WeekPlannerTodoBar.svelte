@@ -12,25 +12,42 @@
     if (Number.isNaN(d.getTime())) return '';
     return d.toLocaleDateString('de-DE', { weekday: 'short' });
   }
+
+  function handleDragStart(e: DragEvent, todo: TodoItemDto) {
+    if (!e.dataTransfer) return;
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('application/x-dashbo-todo', JSON.stringify({
+      connectionId: todo.connectionId,
+      listId: todo.listId,
+      taskId: todo.taskId,
+      title: todo.title
+    }));
+  }
 </script>
 
 <div class="border-t border-white/10 px-4 py-3">
   <div class="flex items-center gap-2">
-    <div class="text-xs text-white/50 shrink-0" title="ToDos ohne Fälligkeitsdatum">📥 Inbox</div>
+    <div class="text-xs text-white/50 shrink-0" title="ToDos ohne Fälligkeitsdatum – auf einen Tag ziehen um Fälligkeit zu setzen">📥 Inbox</div>
 
     <div class="flex-1 overflow-x-auto">
       <div class="flex items-center gap-2 min-w-max">
         {#each items as t (t.taskId + ':' + t.listId + ':' + t.connectionId)}
-          <button
-            type="button"
-            class={`inline-flex items-center gap-2 px-3 py-2 rounded-full border text-sm transition active:scale-[0.98] ${
-              t.completed
-                ? 'bg-white/5 border-white/10 text-white/40'
-                : 'bg-white/10 border-white/15 text-white/85 hover:bg-white/15'
-            }`}
-            on:click={() => onToggleTodo(t)}
-            title={t.dueAt ? `Fällig: ${new Date(t.dueAt).toLocaleDateString('de-DE')}` : 'Ohne Fälligkeit'}
+          <!-- svelte-ignore a11y_no_static_element_interactions -->
+          <div
+            draggable="true"
+            on:dragstart={(e) => handleDragStart(e, t)}
+            class="cursor-grab active:cursor-grabbing"
           >
+            <button
+              type="button"
+              class={`inline-flex items-center gap-2 px-3 py-2 rounded-full border text-sm transition active:scale-[0.98] ${
+                t.completed
+                  ? 'bg-white/5 border-white/10 text-white/40'
+                  : 'bg-white/10 border-white/15 text-white/85 hover:bg-white/15'
+              }`}
+              on:click={() => onToggleTodo(t)}
+              title="Klicken zum Abhaken · Ziehen um Fälligkeit zu setzen"
+            >
             <span
               class={`w-4 h-4 rounded border grid place-items-center ${
                 t.completed ? 'bg-emerald-500/40 border-emerald-400/70' : 'border-white/30'
@@ -52,7 +69,8 @@
             {#if t.dueAt}
               <span class="text-xs text-white/45">({dueLabel(t.dueAt)})</span>
             {/if}
-          </button>
+            </button>
+          </div>
         {/each}
 
         {#if items.length === 0}

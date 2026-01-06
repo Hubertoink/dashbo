@@ -615,6 +615,35 @@
     }
   }
 
+  async function handleTodoDrop(
+    todoData: { connectionId: number; listId: string; taskId: string; title: string },
+    targetDate: Date
+  ) {
+    // Set dueAt to noon on the target date
+    const dueAt = isoNoonLocal(targetDate);
+
+    // Optimistic update: move from inbox to day
+    todoItems = todoItems.map((t) =>
+      t.connectionId === todoData.connectionId &&
+      t.listId === todoData.listId &&
+      t.taskId === todoData.taskId
+        ? { ...t, dueAt }
+        : t
+    );
+
+    try {
+      await updateTodo({
+        connectionId: todoData.connectionId,
+        listId: todoData.listId,
+        taskId: todoData.taskId,
+        dueAt
+      });
+      await loadTodos();
+    } catch {
+      await loadTodos();
+    }
+  }
+
   function openTodoCreate(dueDate: Date) {
     todoModalListName = (todoListNames && todoListNames.length > 0 ? todoListNames[0] : todoListName) || '';
     todoModalConnectionId = todoItems.length > 0 ? todoItems[0]!.connectionId : null;
@@ -790,6 +819,7 @@
         {todosByDay}
         onToggleTodo={toggleTodo}
         onAddTodo={openTodoCreate}
+        onTodoDrop={handleTodoDrop}
         onAddEvent={(d) => openQuickAdd(d)}
         onAddAllDayEvent={(d) => openQuickAddAllDay(d)}
         onEditEvent={onEditEvent}

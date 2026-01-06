@@ -34,6 +34,10 @@
   export let todosByDay: Map<number, TodoItemDto[]> = new Map();
   export let onToggleTodo: (item: TodoItemDto) => void = () => {};
   export let onAddTodo: (dueDate: Date) => void = () => {};
+  export let onTodoDrop: (todoData: { connectionId: number; listId: string; taskId: string; title: string }, targetDate: Date) => void = () => {};
+
+  // Drag-over state for drop zones
+  let dragOverDay: number | null = null;
 
   const config: WeekPlannerConfig = {
     startHour: 6,
@@ -746,10 +750,34 @@
         {@const allDayEvents = allDayByDay.get(k) ?? []}
         {@const daySuggestions = suggestionsByDay.get(k) ?? []}
         {@const dayTodos = todosByDay.get(k) ?? []}
+        {@const isDragOver = dragOverDay === k}
         <!-- svelte-ignore a11y_no_static_element_interactions a11y_click_events_have_key_events -->
         <div
-          class="px-2 py-2 border-l border-white/10 min-h-[64px] text-left hover:bg-white/5 transition cursor-pointer"
+          class="px-2 py-2 border-l border-white/10 min-h-[64px] text-left transition cursor-pointer {isDragOver ? 'bg-emerald-500/20 ring-2 ring-emerald-400/50 ring-inset' : 'hover:bg-white/5'}"
           on:click|self={() => onAddAllDayEvent(day)}
+          on:dragover={(e) => {
+            if (e.dataTransfer?.types.includes('application/x-dashbo-todo')) {
+              e.preventDefault();
+              e.dataTransfer.dropEffect = 'move';
+              dragOverDay = k;
+            }
+          }}
+          on:dragleave={() => {
+            if (dragOverDay === k) dragOverDay = null;
+          }}
+          on:drop={(e) => {
+            e.preventDefault();
+            dragOverDay = null;
+            const data = e.dataTransfer?.getData('application/x-dashbo-todo');
+            if (data) {
+              try {
+                const todoData = JSON.parse(data);
+                onTodoDrop(todoData, day);
+              } catch {
+                // ignore parse errors
+              }
+            }
+          }}
         >
           <div class="space-y-1 max-h-[120px] overflow-y-auto pr-1">
             {#each allDayEvents as e (e.occurrenceId ?? `${e.id}:${e.startAt}`)}
