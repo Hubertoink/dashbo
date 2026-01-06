@@ -5,6 +5,7 @@
 
   import AddEventModal from '$lib/components/AddEventModal.svelte';
   import ScribbleModal from '$lib/components/ScribbleModal.svelte';
+  import TodoModal from '$lib/components/TodoModal.svelte';
 
   import {
     createEvent,
@@ -122,8 +123,44 @@
   let todoSaving = false;
   let todoError: string | null = null;
 
+  // Standalone ToDo create modal (from FAB dock)
+  let todoCreateOpen = false;
+  let todoCreateListName = '';
+  let todoCreateConnectionId: number | null = null;
+
   $: selectedTodoConnection =
     todoSelectedConnectionId != null ? outlookConnections.find((c) => c.id === todoSelectedConnectionId) ?? null : null;
+
+  function outlookConnectionLabel(c: OutlookConnectionDto | null | undefined): string {
+    if (!c) return '';
+    const name = c.displayName || c.email || `Outlook ${c.id}`;
+    if (c.email && c.displayName && c.displayName !== c.email) return `${c.displayName} (${c.email})`;
+    return name;
+  }
+
+  function openTodoCreateModal() {
+    todoCreateListName = (todoListNames.length > 0 ? todoListNames[0] : todoListName) || '';
+    todoCreateConnectionId = outlookConnections.length > 0 ? outlookConnections[0]!.id : null;
+    todoCreateOpen = true;
+  }
+
+  async function refreshTodoMeta() {
+    if (!outlookConnected || !todoEnabled) return;
+    try {
+      const [conns, todoMeta] = await Promise.all([listOutlookConnections(), fetchTodos()]);
+      outlookConnections = Array.isArray(conns) ? conns : [];
+      todoListName = todoMeta?.listName || 'Dashbo';
+      todoListNames = Array.isArray(todoMeta?.listNames) ? todoMeta.listNames : [];
+      if (todoSelectedConnectionId == null && outlookConnections.length > 0) {
+        todoSelectedConnectionId = outlookConnections[0]!.id;
+      }
+      if (!todoSelectedListName) {
+        todoSelectedListName = (todoListNames.length > 0 ? todoListNames[0] : todoListName) || '';
+      }
+    } catch {
+      // ignore
+    }
+  }
 
   // Recurring Suggestions
   interface PlannerSuggestionDto {
@@ -849,7 +886,7 @@
 
   $: swipeProgress = Math.min(1, swipeCurrentX / SWIPE_THRESHOLD);
   $: canSubmit = newTitle.trim().length > 0;
-  $: anyModalOpen = quickAddOpen || scribbleModalOpen || editOpen || openEvent !== null;
+  $: anyModalOpen = quickAddOpen || scribbleModalOpen || editOpen || openEvent !== null || todoCreateOpen;
 
   onMount(() => {
     if (!getStoredToken()) {
@@ -1735,7 +1772,12 @@
                           class="w-full h-10 px-3 rounded-lg bg-white/10 border border-white/10 text-sm text-white/90 flex items-center gap-2"
                           on:click={() => (todoAccountMenuOpen = !todoAccountMenuOpen)}
                         >
-                          <span class="flex-1 text-left truncate">{selectedTodoConnection ? (selectedTodoConnection.displayName || selectedTodoConnection.email) : 'Konto wählen'}</span>
+                          <span class="flex-1 text-left min-w-0">
+                            <span class="block truncate">{selectedTodoConnection ? (selectedTodoConnection.displayName || selectedTodoConnection.email || `Outlook ${selectedTodoConnection.id}`) : 'Konto wählen'}</span>
+                            {#if selectedTodoConnection?.email}
+                              <span class="block truncate text-xs text-white/50">{selectedTodoConnection.email}</span>
+                            {/if}
+                          </span>
                           <span class="text-white/50">▾</span>
                         </button>
                         {#if todoAccountMenuOpen}
@@ -1746,7 +1788,12 @@
                                 class={`w-full px-3 py-2 text-left text-sm hover:bg-white/10 ${c.id === todoSelectedConnectionId ? 'bg-white/10' : ''}`}
                                 on:click={() => { todoSelectedConnectionId = c.id; todoAccountMenuOpen = false; }}
                               >
-                                {c.displayName || c.email || `Outlook ${c.id}`}
+                                <div class="min-w-0">
+                                  <div class="truncate text-white/90">{c.displayName || c.email || `Outlook ${c.id}`}</div>
+                                  {#if c.email}
+                                    <div class="truncate text-xs text-white/50">{c.email}</div>
+                                  {/if}
+                                </div>
                               </button>
                             {/each}
                           </div>
@@ -1919,6 +1966,27 @@
     </button>
   {/if}
 
+  {#if fabDockOpen && outlookConnected && todoEnabled}
+    <!-- Add ToDo - appears under the '+' dock, like dashboard -->
+    <button
+      type="button"
+      class="fixed right-4 z-50 h-14 w-14 rounded-full bg-gradient-to-br from-emerald-400 to-teal-500 shadow-xl flex items-center justify-center hover:scale-105 active:scale-95 transition-transform md:hidden ring-2 ring-emerald-300/20"
+      style="bottom: {scribbleEnabled ? 'calc(7rem + 8rem)' : 'calc(1.5rem + 8rem)'};"
+      aria-label="ToDo erstellen"
+      on:click={() => {
+        clearFabDockTimer();
+        fabDockOpen = false;
+        openTodoCreateModal();
+      }}
+      in:fly={{ y: 110, duration: 270, delay: 20 }}
+      out:fly={{ y: 110, duration: 180 }}
+    >
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
+      </svg>
+    </button>
+  {/if}
+
   <!-- Scribble - separate block so it gets its own transition -->
   {#if fabDockOpen && scribbleEnabled}
     <button
@@ -1959,6 +2027,21 @@
       <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
     </svg>
   </button>
+
+  <TodoModal
+    open={todoCreateOpen}
+    onClose={() => (todoCreateOpen = false)}
+    onSaved={() => void refreshTodoMeta()}
+    mode="create"
+    item={null}
+    listNames={todoListNames && todoListNames.length > 0 ? todoListNames : [todoListName]}
+    selectedListName={todoCreateListName}
+    onChangeListName={(v) => (todoCreateListName = v)}
+    connections={(outlookConnections ?? []).map((c) => ({ id: c.id, label: outlookConnectionLabel(c), color: c.color }))}
+    selectedConnectionId={todoCreateConnectionId}
+    onChangeConnectionId={(v) => (todoCreateConnectionId = v)}
+    prefillDueAt={isoNoonLocal(selectedDate)}
+  />
 
   <!-- Desktop scribble (if enabled) -->
   {#if scribbleEnabled}
