@@ -118,6 +118,7 @@
   let todoSelectedListName = '';
   let todoAccountMenuOpen = false;
   let todoText = '';
+  let todoSectionOpen = false;
   let todoSaving = false;
   let todoError: string | null = null;
 
@@ -654,6 +655,7 @@
     newEndTime = s.endTime ?? '';
     newTagIdStr = s.tagId != null ? String(s.tagId) : '';
     newPersonIds = s.personIds.slice();
+    todoSectionOpen = false;
     quickAddOpen = true;
     // Remove from suggestions
     suggestionsAll = suggestionsAll.filter((x) => x.signature !== s.signature);
@@ -1709,60 +1711,73 @@
         <!-- ToDos (optional, Outlook) -->
         {#if outlookConnected && todoEnabled}
           <div class="border-t border-white/10 pt-3 mt-1">
-            <div class="text-xs text-white/50 mb-2">ToDos (optional)</div>
+            <div class="flex items-center justify-between">
+              <div class="text-xs text-white/50">ToDos (optional)</div>
+              <button
+                type="button"
+                class="h-8 px-3 rounded-lg bg-white/10 hover:bg-white/15 active:scale-[0.98] transition text-xs font-medium"
+                on:click={() => (todoSectionOpen = !todoSectionOpen)}
+              >
+                {todoSectionOpen ? 'ToDos ausblenden' : 'ToDo(s) hinzufügen'}
+              </button>
+            </div>
 
-            {#if outlookConnections.length === 0}
-              <div class="text-xs text-white/50">Keine Outlook-Verbindung gefunden.</div>
-            {:else}
-              <div class="space-y-2">
-                {#if outlookConnections.length > 1}
-                  <div class="relative">
-                    <button
-                      type="button"
-                      class="w-full h-10 px-3 rounded-lg bg-white/10 border border-white/10 text-sm text-white/90 flex items-center gap-2"
-                      on:click={() => (todoAccountMenuOpen = !todoAccountMenuOpen)}
-                    >
-                      <span class="flex-1 text-left truncate">{selectedTodoConnection ? (selectedTodoConnection.displayName || selectedTodoConnection.email) : 'Konto wählen'}</span>
-                      <span class="text-white/50">▾</span>
-                    </button>
-                    {#if todoAccountMenuOpen}
-                      <div class="absolute z-50 bottom-full mb-1 w-full rounded-lg bg-black/90 border border-white/10 max-h-40 overflow-auto">
-                        {#each outlookConnections as c (c.id)}
-                          <button
-                            type="button"
-                            class={`w-full px-3 py-2 text-left text-sm hover:bg-white/10 ${c.id === todoSelectedConnectionId ? 'bg-white/10' : ''}`}
-                            on:click={() => { todoSelectedConnectionId = c.id; todoAccountMenuOpen = false; }}
-                          >
-                            {c.displayName || c.email || `Outlook ${c.id}`}
-                          </button>
-                        {/each}
+            {#if todoSectionOpen}
+              <div class="mt-3">
+                {#if outlookConnections.length === 0}
+                  <div class="text-xs text-white/50">Keine Outlook-Verbindung gefunden.</div>
+                {:else}
+                  <div class="space-y-2">
+                    {#if outlookConnections.length > 1}
+                      <div class="relative">
+                        <button
+                          type="button"
+                          class="w-full h-10 px-3 rounded-lg bg-white/10 border border-white/10 text-sm text-white/90 flex items-center gap-2"
+                          on:click={() => (todoAccountMenuOpen = !todoAccountMenuOpen)}
+                        >
+                          <span class="flex-1 text-left truncate">{selectedTodoConnection ? (selectedTodoConnection.displayName || selectedTodoConnection.email) : 'Konto wählen'}</span>
+                          <span class="text-white/50">▾</span>
+                        </button>
+                        {#if todoAccountMenuOpen}
+                          <div class="absolute z-50 bottom-full mb-1 w-full rounded-lg bg-black/90 border border-white/10 max-h-40 overflow-auto">
+                            {#each outlookConnections as c (c.id)}
+                              <button
+                                type="button"
+                                class={`w-full px-3 py-2 text-left text-sm hover:bg-white/10 ${c.id === todoSelectedConnectionId ? 'bg-white/10' : ''}`}
+                                on:click={() => { todoSelectedConnectionId = c.id; todoAccountMenuOpen = false; }}
+                              >
+                                {c.displayName || c.email || `Outlook ${c.id}`}
+                              </button>
+                            {/each}
+                          </div>
+                        {/if}
                       </div>
                     {/if}
+
+                    {#if todoListNames.length > 1}
+                      <select
+                        class="w-full h-10 px-3 rounded-lg bg-white/10 border border-white/10 text-sm text-white/90 appearance-none"
+                        bind:value={todoSelectedListName}
+                      >
+                        {#each todoListNames as ln}
+                          <option class="bg-neutral-900" value={ln}>{ln}</option>
+                        {/each}
+                      </select>
+                    {/if}
+
+                    <textarea
+                      class="w-full min-h-[60px] px-3 py-2 rounded-lg bg-white/10 border border-white/10 text-sm placeholder:text-white/40 resize-none"
+                      placeholder="Eine Zeile = ein ToDo"
+                      bind:value={todoText}
+                    ></textarea>
+                    <div class="text-xs text-white/40 flex justify-between">
+                      <span>Fällig am Termin-Tag</span>
+                      <span>{parseTodoLines(todoText).length} ToDo(s)</span>
+                    </div>
+                    {#if todoError}
+                      <div class="text-xs text-rose-400">{todoError}</div>
+                    {/if}
                   </div>
-                {/if}
-
-                {#if todoListNames.length > 1}
-                  <select
-                    class="w-full h-10 px-3 rounded-lg bg-white/10 border border-white/10 text-sm text-white/90 appearance-none"
-                    bind:value={todoSelectedListName}
-                  >
-                    {#each todoListNames as ln}
-                      <option class="bg-neutral-900" value={ln}>{ln}</option>
-                    {/each}
-                  </select>
-                {/if}
-
-                <textarea
-                  class="w-full min-h-[60px] px-3 py-2 rounded-lg bg-white/10 border border-white/10 text-sm placeholder:text-white/40 resize-none"
-                  placeholder="Eine Zeile = ein ToDo"
-                  bind:value={todoText}
-                ></textarea>
-                <div class="text-xs text-white/40 flex justify-between">
-                  <span>Fällig am Termin-Tag</span>
-                  <span>{parseTodoLines(todoText).length} ToDo(s)</span>
-                </div>
-                {#if todoError}
-                  <div class="text-xs text-rose-400">{todoError}</div>
                 {/if}
               </div>
             {/if}
@@ -1892,6 +1907,7 @@
       on:click={() => {
         clearFabDockTimer();
         fabDockOpen = false;
+        todoSectionOpen = false;
         quickAddOpen = true;
       }}
       in:fly={{ y: 60, duration: 250 }}
@@ -1932,7 +1948,10 @@
     class:bottom-6={!scribbleEnabled}
     class:right-6={true}
     aria-label="Neuen Termin erstellen"
-    on:click={() => (quickAddOpen = true)}
+    on:click={() => {
+      todoSectionOpen = false;
+      quickAddOpen = true;
+    }}
     in:fly={{ y: 50, duration: 300 }}
     out:fade={{ duration: 150 }}
   >

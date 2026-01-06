@@ -82,6 +82,10 @@
     return start;
   }
 
+  function minutesOfDay(d: Date): number {
+    return d.getHours() * 60 + d.getMinutes();
+  }
+
   function fmtSuggestionTime(s: EventSuggestionDto): string {
     if (s.allDay) return 'Ganztägig';
     return fmtTimeRange(s.startAt, s.endAt);
@@ -577,6 +581,10 @@
   let dragStartScrollTop = 0;
   let resizeObs: ResizeObserver | null = null;
 
+  // Current time indicator
+  let now = new Date();
+  let nowTimer: ReturnType<typeof setInterval> | null = null;
+
   function clamp(v: number, lo: number, hi: number): number {
     return Math.max(lo, Math.min(hi, v));
   }
@@ -683,10 +691,17 @@
         resizeObs = null;
       });
     }
+
+    // tick "now" periodically for the current-time line
+    nowTimer = setInterval(() => {
+      now = new Date();
+    }, 30_000);
   });
 
   onDestroy(() => {
     stopDragLoop();
+    if (nowTimer) clearInterval(nowTimer);
+    nowTimer = null;
   });
 </script>
 
@@ -820,6 +835,8 @@
       {#each days as day, dayIndex (dateKey(day))}
         {@const k = dateKey(day)}
         {@const segs = timedByDay.get(k) ?? []}
+        {@const isToday = sameDay(day, now)}
+        {@const nowMin = minutesOfDay(now)}
         <div
           class="relative border-l border-white/10"
           style={`height: ${gridHeightPx}px;`}
@@ -839,6 +856,21 @@
             {@const y = (h - config.startHour) * 60 * config.pxPerMinute}
             <div class="absolute left-0 right-0 border-t border-white/5" style={`top: ${y}px;`}></div>
           {/each}
+
+          <!-- Current time line (today only) -->
+          {#if isToday && nowMin >= config.startHour * 60 && nowMin <= config.endHour * 60}
+            {@const nowTop = (nowMin - config.startHour * 60) * config.pxPerMinute}
+            <div class="absolute left-0 right-0 z-20 pointer-events-none" style={`top: ${nowTop}px;`}
+              aria-hidden="true"
+            >
+              <div class="absolute left-0 right-0 h-px bg-white/60"></div>
+              <div class="absolute -top-2 left-1 flex items-center">
+                <div class="text-[10px] text-white/75 bg-black/35 px-1.5 py-0.5 rounded-md border border-white/10">
+                  {fmtTime(now.toISOString())}
+                </div>
+              </div>
+            </div>
+          {/if}
 
           <!-- Drag ghost preview intentionally hidden (floating tile only) -->
 
@@ -876,12 +908,11 @@
                   {#if isCompact}
                     <!-- Compact mode: only title -->
                     <div class="font-semibold truncate min-w-0">{e.title}</div>
+                    <div class="text-[10px] text-white/60 whitespace-nowrap mt-0.5">{fmtTimeRange(e.startAt, e.endAt)}</div>
                   {:else}
                     <!-- Full mode: title + time + location + persons -->
-                    <div class="flex items-baseline gap-1 min-w-0">
-                      <div class="font-semibold truncate min-w-0">{e.title}</div>
-                      <div class="text-[10px] text-white/60 whitespace-nowrap">({fmtTimeRange(e.startAt, e.endAt)})</div>
-                    </div>
+                    <div class="font-semibold truncate min-w-0">{e.title}</div>
+                    <div class="text-[10px] text-white/60 whitespace-nowrap mt-0.5">{fmtTimeRange(e.startAt, e.endAt)}</div>
                     {#if e.location}
                       <div class="text-[10px] text-white/50 truncate">📍 {e.location}</div>
                     {/if}
@@ -929,6 +960,7 @@
           <!-- Subtle fold line -->
           <div class="absolute inset-y-0 left-1/2 w-px bg-gradient-to-b from-transparent via-white/10 to-transparent"></div>
           <div class="relative px-2 py-1 font-semibold truncate">{dragEvent.title}</div>
+          <div class="relative px-2 text-[10px] text-white/65 whitespace-nowrap">{fmtTimeRange(dragEvent.startAt, dragEvent.endAt)}</div>
           {#if dragEvent.location}
             <div class="relative px-2 text-[10px] text-white/60 truncate">📍 {dragEvent.location}</div>
           {/if}
