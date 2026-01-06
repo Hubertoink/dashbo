@@ -95,10 +95,6 @@
     return d.getHours() * 60 + d.getMinutes();
   }
 
-  function clamp(v: number, min: number, max: number): number {
-    return Math.max(min, Math.min(max, v));
-  }
-
   function snapMinutes(mins: number): number {
     const step = Math.max(1, Math.floor(config.snapMinutes || 1));
     return Math.round(mins / step) * step;
