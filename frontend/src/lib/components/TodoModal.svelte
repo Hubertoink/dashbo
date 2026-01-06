@@ -1,5 +1,6 @@
 <script lang="ts">
   import { createTodo, updateTodo, type TodoItemDto } from '$lib/api';
+  import { pushToast } from '$lib/stores/toast';
 
   export let open: boolean;
   export let onClose: () => void;
@@ -133,6 +134,7 @@
           startAt,
           dueAt,
         });
+        pushToast('ToDo gespeichert', 'success');
       } else {
         await createTodo({
           ...(selectedConnectionId != null ? { connectionId: selectedConnectionId } : {}),
@@ -142,6 +144,7 @@
           startAt,
           dueAt,
         });
+        pushToast('ToDo erstellt', 'success');
       }
 
       onSaved();

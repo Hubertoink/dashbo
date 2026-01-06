@@ -10,6 +10,7 @@
     type TodoItemDto
   } from '$lib/api';
   import { formatGermanShortDate, sameDay } from '$lib/date';
+  import { pushToast } from '$lib/stores/toast';
   import { onMount } from 'svelte';
   import { fade, fly } from 'svelte/transition';
   import WeekPlannerTimeGrid from './WeekPlannerTimeGrid.svelte';
@@ -610,6 +611,7 @@
         completed: newCompleted
       });
       await loadTodos();
+      if (newCompleted) pushToast('ToDo erledigt', 'success');
     } catch {
       await loadTodos();
     }
@@ -644,10 +646,10 @@
     }
   }
 
-  function openTodoCreate(dueDate: Date) {
+  function openTodoCreate(dueDate?: Date | null) {
     todoModalListName = (todoListNames && todoListNames.length > 0 ? todoListNames[0] : todoListName) || '';
     todoModalConnectionId = todoItems.length > 0 ? todoItems[0]!.connectionId : null;
-    todoPrefillDueAt = isoNoonLocal(dueDate);
+    todoPrefillDueAt = dueDate ? isoNoonLocal(dueDate) : null;
     todoModalOpen = true;
   }
 
@@ -798,13 +800,25 @@
       </button>
     </div>
 
-    <button
-      type="button"
-      class="h-11 px-4 rounded-xl bg-white/10 hover:bg-white/15 active:scale-95 transition text-sm font-medium"
-      on:click={() => onSelect(new Date())}
-    >
-      Heute
-    </button>
+    <div class="flex items-center gap-2">
+      {#if outlookConnected && todoEnabled}
+        <button
+          type="button"
+          class="h-11 px-4 rounded-xl bg-white/10 hover:bg-white/15 active:scale-95 transition text-sm font-medium"
+          on:click={() => openTodoCreate(null)}
+        >
+          + ToDo
+        </button>
+      {/if}
+
+      <button
+        type="button"
+        class="h-11 px-4 rounded-xl bg-white/10 hover:bg-white/15 active:scale-95 transition text-sm font-medium"
+        on:click={() => onSelect(new Date())}
+      >
+        Heute
+      </button>
+    </div>
   </div>
 
   <!-- Week Grid -->

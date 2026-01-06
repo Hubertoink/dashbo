@@ -50,10 +50,12 @@
   let saving = false;
 
   // Optional ToDos created alongside the event (new events only)
-  let todoText = '';
-  let todoSaving = false;
   let todoError: string | null = null;
   let todoSectionOpen = false;
+  let todoText = '';
+  let todoSaving = false;
+  let todoDueDateStr = '';
+  let todoDueAutofill = true;
 
   let outlookConnections: OutlookConnectionDto[] = [];
   let todoListName = 'Dashbo';
@@ -208,6 +210,8 @@
     prefilledForEventId = null;
     prefilledForKey = null;
     todoAccountMenuOpen = false;
+    todoDueAutofill = true;
+    todoDueDateStr = '';
   }
 
   $: if (open) lockBodyScroll();
@@ -230,6 +234,8 @@
     personIds = [];
     recurrence = null;
     todoText = '';
+    todoDueAutofill = true;
+    todoDueDateStr = '';
     todoSaving = false;
     todoError = null;
     prefilledForEventId = null;
@@ -412,7 +418,7 @@
         todoSaving = true;
         todoError = null;
 
-        const dueAt = isoNoonLocalFromDateStr(startDateStr || yyyymmddLocal(selectedDate));
+        const dueAt = todoDueDateStr ? isoNoonLocalFromDateStr(todoDueDateStr) : null;
         const listName =
           todoSelectedListName ||
           (todoListNames && todoListNames.length > 0 ? todoListNames[0] : todoListName) ||
@@ -451,6 +457,8 @@
       personIds = [];
       recurrence = null;
       todoText = '';
+      todoDueAutofill = true;
+      todoDueDateStr = '';
       todoSaving = false;
       todoError = null;
       todoAccountMenuOpen = false;
@@ -502,6 +510,11 @@
     day: 'numeric',
     month: 'long'
   });
+
+  // Keep ToDo due date in sync with the selected event date until the user edits it.
+  $: if (open && todoDueAutofill) {
+    todoDueDateStr = startDateStr || yyyymmddLocal(selectedDate);
+  }
 </script>
 
 <svelte:window on:keydown={onGlobalKeyDown} />
@@ -854,8 +867,31 @@
                   bind:value={todoText}
                 ></textarea>
                 <div class="mt-1 flex items-center justify-between">
-                  <div class="text-xs text-white/40">Fällig am ausgewählten Tag</div>
-                  <div class="text-xs text-white/50">{parseTodos(todoText).length} ToDo(s)</div>
+                  <div class="flex items-center gap-2 min-w-0">
+                    <div class="text-xs text-white/40 whitespace-nowrap">Fällig (optional)</div>
+                    <div class="flex items-center gap-1">
+                      <input
+                        type="date"
+                        class="h-8 px-2 rounded-lg bg-white/10 border border-white/10 text-xs text-white/90 focus:outline-none focus:ring-2 focus:ring-white/10"
+                        bind:value={todoDueDateStr}
+                        on:input={() => (todoDueAutofill = false)}
+                      />
+                      {#if todoDueDateStr}
+                        <button
+                          type="button"
+                          class="h-8 w-8 rounded-lg bg-white/10 hover:bg-white/15 active:scale-95 transition grid place-items-center text-white/70"
+                          aria-label="Fälligkeit löschen"
+                          on:click={() => {
+                            todoDueDateStr = '';
+                            todoDueAutofill = false;
+                          }}
+                        >
+                          ✕
+                        </button>
+                      {/if}
+                    </div>
+                  </div>
+                  <div class="text-xs text-white/50 whitespace-nowrap">{parseTodos(todoText).length} ToDo(s)</div>
                 </div>
 
                 {#if todoError}

@@ -2080,7 +2080,7 @@
   connections={(outlookConnections ?? []).map((c) => ({ id: c.id, label: outlookConnectionLabel(c), color: c.color }))}
   selectedConnectionId={todoCreateConnectionId}
   onChangeConnectionId={(v) => (todoCreateConnectionId = v)}
-  prefillDueAt={isoNoonLocal(selectedDate)}
+  prefillDueAt={null}
 />
 
 <ScribbleModal
