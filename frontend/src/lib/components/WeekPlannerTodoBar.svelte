@@ -1,9 +1,15 @@
 <script lang="ts">
+  import { onDestroy } from 'svelte';
   import type { TodoItemDto } from '$lib/api';
   import { fly, fade } from 'svelte/transition';
 
   export let items: TodoItemDto[] = [];
   export let onToggleTodo: (item: TodoItemDto) => void;
+
+  // Needed for pointer-based drop target mapping
+  export let days: Date[] = [];
+  export let onTodoDrop: (todoData: { connectionId: number; listId: string; taskId: string; title: string }, targetDate: Date) => void = () => {};
+  export let onTodoDragOverDayChange: (dayKey: number | null) => void = () => {};
 
   // Quick add (title-only)
   export let quickAddText: string = '';
@@ -35,20 +41,133 @@
     return d.toLocaleDateString('de-DE', { weekday: 'short' });
   }
 
-  function handleDragStart(e: DragEvent, todo: TodoItemDto) {
-    if (!e.dataTransfer) return;
-    e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('application/x-dashbo-todo', JSON.stringify({
-      connectionId: todo.connectionId,
-      listId: todo.listId,
-      taskId: todo.taskId,
-      title: todo.title
-    }));
-    onTodoDragActiveChange(true);
+  function startOfLocalDay(d: Date): Date {
+    const x = new Date(d);
+    x.setHours(0, 0, 0, 0);
+    return x;
   }
 
-  function handleDragEnd() {
-    onTodoDragActiveChange(false);
+  function dayKey(d: Date): number {
+    return startOfLocalDay(d).getTime();
+  }
+
+  $: dayByKey = new Map(days.map((d) => [dayKey(d), d] as const));
+
+  type DragTodoData = { connectionId: number; listId: string; taskId: string; title: string };
+  let dragTodo: {
+    pointerId: number;
+    todo: TodoItemDto;
+    data: DragTodoData;
+    startX: number;
+    startY: number;
+    offsetX: number;
+    offsetY: number;
+    x: number;
+    y: number;
+    dragging: boolean;
+    overDayKey: number | null;
+  } | null = null;
+
+  let suppressNextClick = false;
+
+  function findDayKeyAtPoint(x: number, y: number): number | null {
+    const el = document.elementFromPoint(x, y) as HTMLElement | null;
+    const host = (el?.closest?.('[data-weekplanner-daykey]') as HTMLElement | null) ?? null;
+    if (!host) return null;
+    const raw = host.getAttribute('data-weekplanner-daykey') || (host as any).dataset?.weekplannerDaykey;
+    const n = raw != null ? Number(raw) : Number.NaN;
+    return Number.isFinite(n) ? n : null;
+  }
+
+  function clearPointerDrag() {
+    if (dragTodo?.dragging) {
+      onTodoDragActiveChange(false);
+      onTodoDragOverDayChange(null);
+    }
+    dragTodo = null;
+  }
+
+  onDestroy(() => {
+    clearPointerDrag();
+  });
+
+  function startTodoPointerDrag(e: PointerEvent, todo: TodoItemDto, el: HTMLElement) {
+    // Only left mouse button; touch/pen always ok
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    if (dragTodo) return;
+
+    const rect = el.getBoundingClientRect();
+    const offsetX = clamp(e.clientX - rect.left, 0, rect.width);
+    const offsetY = clamp(e.clientY - rect.top, 0, rect.height);
+
+    dragTodo = {
+      pointerId: e.pointerId,
+      todo,
+      data: { connectionId: todo.connectionId, listId: todo.listId, taskId: todo.taskId, title: todo.title },
+      startX: e.clientX,
+      startY: e.clientY,
+      offsetX,
+      offsetY,
+      x: e.clientX - offsetX,
+      y: e.clientY - offsetY,
+      dragging: false,
+      overDayKey: null
+    };
+
+    el.setPointerCapture(e.pointerId);
+  }
+
+  function moveTodoPointerDrag(e: PointerEvent) {
+    if (!dragTodo || e.pointerId !== dragTodo.pointerId) return;
+    dragTodo.x = e.clientX - dragTodo.offsetX;
+    dragTodo.y = e.clientY - dragTodo.offsetY;
+
+    if (!dragTodo.dragging) {
+      const dx = e.clientX - dragTodo.startX;
+      const dy = e.clientY - dragTodo.startY;
+      if (Math.abs(dx) > 6 || Math.abs(dy) > 6) {
+        dragTodo.dragging = true;
+        onTodoDragActiveChange(true);
+      }
+    }
+
+    if (dragTodo.dragging) {
+      const k = findDayKeyAtPoint(e.clientX, e.clientY);
+      if (k !== dragTodo.overDayKey) {
+        dragTodo.overDayKey = k;
+        onTodoDragOverDayChange(k);
+      }
+    }
+  }
+
+  function endTodoPointerDrag(e: PointerEvent, el: HTMLElement) {
+    if (!dragTodo || e.pointerId !== dragTodo.pointerId) return;
+    el.releasePointerCapture?.(e.pointerId);
+
+    if (dragTodo.dragging) {
+      suppressNextClick = true;
+      queueMicrotask(() => (suppressNextClick = false));
+
+      const k = dragTodo.overDayKey;
+      if (k != null) {
+        const day = dayByKey.get(k);
+        if (day) {
+          onTodoDrop(dragTodo.data, new Date(day));
+        }
+      }
+    }
+
+    clearPointerDrag();
+  }
+
+  function cancelTodoPointerDrag(e: PointerEvent, el: HTMLElement) {
+    if (!dragTodo || e.pointerId !== dragTodo.pointerId) return;
+    el.releasePointerCapture?.(e.pointerId);
+    clearPointerDrag();
+  }
+
+  function clamp(v: number, lo: number, hi: number): number {
+    return Math.max(lo, Math.min(hi, v));
   }
 
   function onQuickKeyDown(e: KeyboardEvent) {
@@ -175,49 +294,87 @@
       <div class="flex-1 overflow-x-auto">
         <div class="flex items-center gap-2 min-w-max">
           {#each items as t (t.taskId + ':' + t.listId + ':' + t.connectionId)}
-            <!-- svelte-ignore a11y_no_static_element_interactions -->
-            <div
-              draggable="true"
-              on:dragstart={(e) => handleDragStart(e, t)}
-              on:dragend={handleDragEnd}
-              class="cursor-grab active:cursor-grabbing"
+            <button
+              type="button"
+              class={`inline-flex items-center gap-2 px-3 py-2 rounded-full border text-sm transition active:scale-[0.98] select-none touch-none cursor-grab active:cursor-grabbing ${
+                t.completed
+                  ? 'bg-white/5 border-white/10 text-white/40'
+                  : 'bg-white/10 border-white/15 text-white/85 hover:bg-white/15'
+              }`}
+              on:pointerdown={(e) => startTodoPointerDrag(e, t, e.currentTarget as HTMLElement)}
+              on:pointermove={moveTodoPointerDrag}
+              on:pointerup={(e) => endTodoPointerDrag(e, e.currentTarget as HTMLElement)}
+              on:pointercancel={(e) => cancelTodoPointerDrag(e, e.currentTarget as HTMLElement)}
+              on:click={(e) => {
+                if (suppressNextClick) {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  return;
+                }
+                onToggleTodo(t);
+              }}
+              title="Klicken zum Abhaken · Ziehen um Fälligkeit zu setzen"
+              style="-webkit-touch-callout: none;"
             >
-              <button
-                type="button"
-                class={`inline-flex items-center gap-2 px-3 py-2 rounded-full border text-sm transition active:scale-[0.98] ${
-                  t.completed
-                    ? 'bg-white/5 border-white/10 text-white/40'
-                    : 'bg-white/10 border-white/15 text-white/85 hover:bg-white/15'
+              <span
+                class={`w-4 h-4 rounded border grid place-items-center ${
+                  t.completed ? 'bg-emerald-500/40 border-emerald-400/70' : 'border-white/30'
                 }`}
-                on:click={() => onToggleTodo(t)}
-                title="Klicken zum Abhaken · Ziehen um Fälligkeit zu setzen"
+                aria-hidden="true"
               >
-                <span
-                  class={`w-4 h-4 rounded border grid place-items-center ${
-                    t.completed ? 'bg-emerald-500/40 border-emerald-400/70' : 'border-white/30'
-                  }`}
-                  aria-hidden="true"
-                >
-                  {#if t.completed}
-                    <svg class="w-3 h-3 text-emerald-200" viewBox="0 0 20 20" fill="currentColor">
-                      <path
-                        fill-rule="evenodd"
-                        d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                        clip-rule="evenodd"
-                      />
-                    </svg>
-                  {/if}
-                </span>
-
-                <span class={`truncate max-w-[240px] ${t.completed ? 'line-through' : ''}`}>{t.title}</span>
-                {#if t.dueAt}
-                  <span class="text-xs text-white/45">({dueLabel(t.dueAt)})</span>
+                {#if t.completed}
+                  <svg class="w-3 h-3 text-emerald-200" viewBox="0 0 20 20" fill="currentColor">
+                    <path
+                      fill-rule="evenodd"
+                      d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                      clip-rule="evenodd"
+                    />
+                  </svg>
                 {/if}
-              </button>
-            </div>
+              </span>
+
+              <span class={`truncate max-w-[240px] ${t.completed ? 'line-through' : ''}`}>{t.title}</span>
+              {#if t.dueAt}
+                <span class="text-xs text-white/45">({dueLabel(t.dueAt)})</span>
+              {/if}
+            </button>
           {/each}
         </div>
       </div>
+    </div>
+  </div>
+{/if}
+
+{#if dragTodo && dragTodo.dragging}
+  <div
+    class="fixed left-0 top-0 z-[80] pointer-events-none"
+    style={`transform: translate3d(${Math.round(dragTodo.x)}px, ${Math.round(dragTodo.y)}px, 0) rotate(-2deg) scale(1.03); transform-origin: ${Math.round(dragTodo.offsetX)}px ${Math.round(dragTodo.offsetY)}px; will-change: transform;`}
+  >
+    <div
+      class={`inline-flex items-center gap-2 px-3 py-2 rounded-full border text-sm shadow-xl backdrop-blur-xl ${
+        dragTodo.todo.completed
+          ? 'bg-white/10 border-white/15 text-white/55'
+          : 'bg-white/15 border-white/20 text-white/90'
+      }`}
+    >
+      <span
+        class={`w-4 h-4 rounded border grid place-items-center ${
+          dragTodo.todo.completed ? 'bg-emerald-500/40 border-emerald-400/70' : 'border-white/30'
+        }`}
+        aria-hidden="true"
+      >
+        {#if dragTodo.todo.completed}
+          <svg class="w-3 h-3 text-emerald-200" viewBox="0 0 20 20" fill="currentColor">
+            <path
+              fill-rule="evenodd"
+              d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+              clip-rule="evenodd"
+            />
+          </svg>
+        {/if}
+      </span>
+
+      <span class={`truncate max-w-[240px] ${dragTodo.todo.completed ? 'line-through' : ''}`}>{dragTodo.todo.title}</span>
     </div>
   </div>
 {/if}

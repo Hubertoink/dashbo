@@ -544,6 +544,7 @@
   let todoQuickText = '';
   let todoQuickSaving = false;
   let todoDragActive = false;
+  let todoDragOverDayKey: number | null = null;
 
   // Use local noon to avoid timezone offsets pushing the ISO date to the previous/next day.
   function isoNoonLocal(d: Date): string {
@@ -869,6 +870,7 @@
         {backgroundUrl}
         {todosByDay}
         todoDragActive={todoDragActive}
+        todoDragOverDayKey={todoDragOverDayKey}
         onToggleTodo={toggleTodo}
         onAddTodo={openTodoCreate}
         onTodoDrop={handleTodoDrop}
@@ -887,11 +889,17 @@
     <WeekPlannerTodoBar
       items={inboxTodos}
       onToggleTodo={toggleTodo}
+      {days}
+      onTodoDrop={handleTodoDrop}
       bind:quickAddText={todoQuickText}
       quickAddSaving={todoQuickSaving}
       onQuickAdd={submitQuickTodo}
       onOpenCreateModal={() => openTodoCreate(null)}
-      onTodoDragActiveChange={(v) => (todoDragActive = v)}
+      onTodoDragActiveChange={(v) => {
+        todoDragActive = v;
+        if (!v) todoDragOverDayKey = null;
+      }}
+      onTodoDragOverDayChange={(k) => (todoDragOverDayKey = k)}
     />
   {:else}
     <!-- Footer hint -->

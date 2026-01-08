@@ -39,6 +39,10 @@
   // When dragging a todo from the inbox bar, lightly highlight the all-day drop lane.
   export let todoDragActive: boolean = false;
 
+  // Pointer-based todo dragging can provide the currently hovered day key.
+  // If set, it takes precedence over HTML5 drag-over tracking.
+  export let todoDragOverDayKey: number | null = null;
+
   // Drag-over state for drop zones
   let dragOverDay: number | null = null;
 
@@ -776,9 +780,10 @@
         {@const allDayEvents = allDayByDay.get(k) ?? []}
         {@const daySuggestions = suggestionsByDay.get(k) ?? []}
         {@const dayTodos = todosByDay.get(k) ?? []}
-        {@const isDragOver = dragOverDay === k}
+        {@const isDragOver = (todoDragOverDayKey ?? dragOverDay) === k}
         <!-- svelte-ignore a11y_no_static_element_interactions a11y_click_events_have_key_events -->
         <div
+          data-weekplanner-daykey={k}
           class="px-2 py-2 border-l border-white/10 min-h-[64px] text-left transition cursor-pointer {isDragOver ? 'bg-emerald-500/20 ring-2 ring-emerald-400/50 ring-inset' : todoDragActive ? 'bg-emerald-500/10 ring-1 ring-emerald-400/25 ring-inset' : 'hover:bg-white/5'}"
           on:click|self={() => onAddAllDayEvent(day)}
           on:dragover={(e) => {
