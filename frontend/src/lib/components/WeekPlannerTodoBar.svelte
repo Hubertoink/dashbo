@@ -197,14 +197,16 @@
 </script>
 
 <!-- Floating ToDo Add Button and Expandable Input -->
-<div class="fixed z-[55] left-4 transition-all duration-200" style="bottom: calc(1rem + env(safe-area-inset-bottom));">
-  {#if isExpanded}
-    <!-- Expanded input panel -->
-    <div
-      class="flex items-center gap-2 bg-neutral-900/95 backdrop-blur-xl border border-white/15 rounded-2xl p-2 shadow-xl"
-      in:fly={{ x: -20, duration: 200 }}
-      out:fly={{ x: -20, duration: 150 }}
-    >
+<div class="fixed z-[55] left-4" style="bottom: calc(1rem + env(safe-area-inset-bottom));">
+  <!-- Fixed anchor box to prevent layout jump during transitions -->
+  <div class="relative h-12 w-12">
+    {#if isExpanded}
+      <!-- Expanded input panel -->
+      <div
+        class="absolute left-0 bottom-0 flex items-center gap-2 bg-neutral-900/95 backdrop-blur-xl border border-white/15 rounded-2xl p-2 shadow-xl"
+        in:fly={{ x: -20, duration: 200 }}
+        out:fly={{ x: -20, duration: 150 }}
+      >
       <!-- Close button -->
       <button
         type="button"
@@ -262,23 +264,24 @@
           </svg>
         </button>
       {/if}
-    </div>
-  {:else}
-    <!-- Collapsed icon button -->
-    <button
-      type="button"
-      class="h-12 w-12 rounded-full bg-neutral-800/90 backdrop-blur-xl border border-white/15 shadow-lg hover:bg-neutral-700/90 active:scale-95 transition grid place-items-center"
-      aria-label="ToDo hinzufügen"
-      title="ToDo hinzufügen"
-      on:click={toggleExpand}
-      in:fade={{ duration: 120, delay: 180 }}
-      out:fade={{ duration: 80 }}
-    >
+      </div>
+    {:else}
+      <!-- Collapsed icon button -->
+      <button
+        type="button"
+        class="absolute left-0 bottom-0 h-12 w-12 rounded-full bg-neutral-800/90 backdrop-blur-xl border border-white/15 shadow-lg hover:bg-neutral-700/90 active:scale-95 transition grid place-items-center"
+        aria-label="ToDo hinzufügen"
+        title="ToDo hinzufügen"
+        on:click={toggleExpand}
+        in:fade={{ duration: 120, delay: 180 }}
+        out:fade={{ duration: 80 }}
+      >
       <svg class="w-5 h-5 text-white/80" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
         <path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
       </svg>
-    </button>
-  {/if}
+      </button>
+    {/if}
+  </div>
 </div>
 
 <!-- Inbox todos horizontal strip (only when there are items) -->
