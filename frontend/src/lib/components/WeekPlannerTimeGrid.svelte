@@ -51,14 +51,14 @@
   };
 
   const tileBg: Record<TagColorKey, string> = {
-    fuchsia: 'bg-fuchsia-500/25',
-    cyan: 'bg-cyan-400/25',
-    emerald: 'bg-emerald-400/25',
-    amber: 'bg-amber-400/25',
-    rose: 'bg-rose-400/25',
-    violet: 'bg-violet-400/25',
-    sky: 'bg-sky-400/25',
-    lime: 'bg-lime-400/25'
+    fuchsia: 'bg-fuchsia-500/40',
+    cyan: 'bg-cyan-400/40',
+    emerald: 'bg-emerald-400/40',
+    amber: 'bg-amber-400/40',
+    rose: 'bg-rose-400/40',
+    violet: 'bg-violet-400/40',
+    sky: 'bg-sky-400/40',
+    lime: 'bg-lime-400/40'
   };
 
   const hexRe = /^#[0-9a-fA-F]{6}$/;
@@ -150,7 +150,7 @@
   function eventTileStyle(color: string | null): string {
     if (!color) return '';
     if (isHexColor(color)) {
-      return `background-color: ${hexToRgba(color, 0.30)}; border-color: ${hexToRgba(color, 0.55)};`;
+      return `background-color: ${hexToRgba(color, 0.45)}; border-color: ${hexToRgba(color, 0.65)};`;
     }
     // palette key -> keep to existing tokens; use border only, bg via tailwind class
     return '';
@@ -751,13 +751,13 @@
 
   <!-- All-day lane: headers + all-day events -->
   <div class="border-b border-white/10 relative z-10">
-    <div class="grid" style="grid-template-columns: 56px repeat(7, minmax(0, 1fr));">
-      <div class="px-2 py-2"></div>
+    <div class="grid" style="grid-template-columns: 44px repeat(7, minmax(0, 1fr));">
+      <div class="px-1 py-1"></div>
       {#each days as day (dateKey(day))}
         {@const k = dateKey(day)}
         {@const isToday = sameDay(day, new Date())}
         {@const holidayName = (holidaysByDay.get(k) ?? [])[0]?.title ?? ''}
-        <div class={`px-2 py-2 border-l border-white/10 ${isToday ? 'bg-white/5' : ''}`}>
+        <div class={`px-2 py-1 border-l border-white/10 ${isToday ? 'bg-white/5' : ''}`}>
           <div class="flex items-baseline justify-between">
             <span class="text-xs font-semibold tracking-wide">{formatGermanDayLabel(day)}</span>
             <span class={`text-sm font-bold ${isToday ? 'text-white' : 'text-white/80'}`}>{day.getDate()}.</span>
@@ -769,8 +769,8 @@
       {/each}
     </div>
 
-    <div class="grid" style="grid-template-columns: 56px repeat(7, minmax(0, 1fr));">
-      <div class="px-2 py-2 text-[11px] text-white/45">Ganzt.</div>
+    <div class="grid" style="grid-template-columns: 44px repeat(7, minmax(0, 1fr));">
+      <div class="px-1 py-1 text-[10px] text-white/45">Ganzt.</div>
       {#each days as day (dateKey(day))}
         {@const k = dateKey(day)}
         {@const allDayEvents = allDayByDay.get(k) ?? []}
@@ -902,13 +902,13 @@
   <!-- Time grid (shared scroll) -->
   <div class="flex-1 min-h-0 relative z-10">
     <div id="weekplanner-timegrid-scroll" bind:this={scrollEl} class="wp-scroll h-full overflow-y-auto">
-      <div class="grid" style="grid-template-columns: 56px repeat(7, minmax(0, 1fr));">
+      <div class="grid" style="grid-template-columns: 44px repeat(7, minmax(0, 1fr));">
       <!-- Time labels -->
       <div class="relative" style={`height: ${gridHeightPx}px;`}>
         {#each hours as h (h)}
           {@const y = (h - config.startHour) * 60 * config.pxPerMinute}
           <div class="absolute left-0 right-0" style={`top: ${y}px;`}>
-            <div class="-mt-2 px-2 text-[11px] text-white/45">{String(h).padStart(2, '0')}:00</div>
+            <div class="-mt-2 px-1 text-[10px] text-white/45">{String(h).padStart(2, '0')}:00</div>
           </div>
         {/each}
       </div>

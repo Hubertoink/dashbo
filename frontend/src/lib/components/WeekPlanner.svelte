@@ -746,6 +746,11 @@
   $: days = buildDays(weekStart);
   $: weekEnd = days[6] ?? addLocalDays(weekStart, 6);
   $: weekNumber = getWeekNumber(selectedDate);
+  $: isCurrentWeek = (() => {
+    const today = new Date();
+    const todayWeekStart = mondayStart(today);
+    return weekStart.getTime() === todayWeekStart.getTime();
+  })();
 
   $: if (recurringSuggestionsEnabled) {
     void loadSuggestionsForWeek(weekStart, weekEnd);
@@ -800,54 +805,61 @@
   out:fly={{ y: 30, duration: 180, opacity: 0 }}
 >
   <!-- Header -->
-  <div class="flex items-center justify-between px-6 py-4 border-b border-white/10" in:fade={{ duration: 200, delay: 80 }}>
+  <div class="flex items-center justify-between px-4 py-2 border-b border-white/10" in:fade={{ duration: 200, delay: 80 }}>
     <button
       type="button"
-      class="h-11 w-11 rounded-xl bg-white/10 hover:bg-white/15 active:scale-95 transition grid place-items-center text-lg"
+      class="h-10 w-10 rounded-xl bg-white/10 hover:bg-white/15 active:scale-95 transition grid place-items-center text-lg"
       on:click={onBack}
       aria-label="Zurück"
     >
       ✕
     </button>
 
-    <div class="flex items-center gap-4">
+    <div class="flex items-center gap-3">
       <button
         type="button"
-        class="h-11 w-11 rounded-xl bg-white/10 hover:bg-white/15 active:scale-95 transition grid place-items-center text-xl"
+        class="h-10 w-10 rounded-xl bg-white/10 hover:bg-white/15 active:scale-95 transition grid place-items-center text-xl"
         on:click={() => shiftWeek(-1)}
         aria-label="Vorherige Woche"
       >
         ←
       </button>
 
-      <div class="text-center min-w-[200px]">
-        <div class="text-xl font-semibold tracking-wide">KW {weekNumber}</div>
-        <div class="text-sm text-white/70">
+      <div class="text-center min-w-[180px]">
+        <div class="text-lg font-semibold tracking-wide">KW {weekNumber}</div>
+        <div class="text-xs text-white/70">
           {formatGermanShortDate(weekStart)} – {formatGermanShortDate(weekEnd)}
         </div>
       </div>
 
       <button
         type="button"
-        class="h-11 w-11 rounded-xl bg-white/10 hover:bg-white/15 active:scale-95 transition grid place-items-center text-xl"
+        class="h-10 w-10 rounded-xl bg-white/10 hover:bg-white/15 active:scale-95 transition grid place-items-center text-xl"
         on:click={() => shiftWeek(1)}
         aria-label="Nächste Woche"
       >
         →
       </button>
+
+      <button
+        type="button"
+        class={`h-10 px-3 rounded-xl text-sm font-medium transition active:scale-95 ${
+          isCurrentWeek
+            ? 'bg-white/10 hover:bg-white/15 text-white/60'
+            : 'bg-white/15 hover:bg-white/20 text-white shadow-[0_0_12px_rgba(255,255,255,0.3)] ring-1 ring-white/30'
+        }`}
+        on:click={() => onSelect(new Date())}
+      >
+        Heute
+      </button>
     </div>
 
-    <button
-      type="button"
-      class="h-11 px-4 rounded-xl bg-white/10 hover:bg-white/15 active:scale-95 transition text-sm font-medium"
-      on:click={() => onSelect(new Date())}
-    >
-      Heute
-    </button>
+    <!-- Spacer for balance -->
+    <div class="w-10"></div>
   </div>
 
   <!-- Week Grid -->
-  <div class="flex-1 min-h-0 p-4 overflow-hidden" in:fade={{ duration: 200, delay: 100 }}>
+  <div class="flex-1 min-h-0 p-2 overflow-hidden" in:fade={{ duration: 200, delay: 100 }}>
     <div class="h-full" in:fly={{ y: 20, duration: 220, delay: 120 }}>
       <WeekPlannerTimeGrid
         {days}
