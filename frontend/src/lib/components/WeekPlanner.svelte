@@ -913,7 +913,7 @@
     <button
       type="button"
       class="fixed z-[60] h-14 w-14 rounded-full bg-gradient-to-br from-blue-400 to-indigo-500 shadow-xl flex items-center justify-center hover:scale-105 active:scale-95 transition-transform ring-2 ring-blue-300/20"
-      style="bottom: calc(1.5rem + env(safe-area-inset-bottom) + 4rem); right: 1.5rem;"
+      style="bottom: calc(1.5rem + env(safe-area-inset-bottom) + 2.5rem); right: 1.5rem;"
       aria-label="Neuen Termin erstellen"
       on:click={() => openQuickAdd(new Date(selectedDate))}
     >
