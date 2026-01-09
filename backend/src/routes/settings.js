@@ -39,6 +39,7 @@ settingsRouter.get('/', requireAuth, attachUserContext, async (_req, res) => {
   const holidaysEnabledRaw = await getUserSetting({ userId, key: 'holidays.enabled' });
   const todoEnabledRaw = await getUserSetting({ userId, key: 'todo.enabled' });
   const todoListNamesRaw = await getUserSetting({ userId, key: 'todo.listNames' });
+  const todoDefaultConnectionIdRaw = await getUserSetting({ userId, key: 'todo.defaultConnectionId' });
   const newsEnabledRaw = await getUserSetting({ userId, key: 'news.enabled' });
   const scribbleEnabledRaw = await getUserSetting({ userId, key: 'scribble.enabled' });
   const scribbleStandbySecondsRaw = await getUserSetting({ userId, key: 'scribble.standbySeconds' });
@@ -149,6 +150,16 @@ settingsRouter.get('/', requireAuth, attachUserContext, async (_req, res) => {
 
   const todoListName = todoListNames[0] || null;
 
+  const todoDefaultConnectionId = (() => {
+    const raw = todoDefaultConnectionIdRaw != null ? String(todoDefaultConnectionIdRaw).trim() : '';
+    if (!raw) return null;
+    const n = Number(raw);
+    if (!Number.isFinite(n)) return null;
+    const i = Math.trunc(n);
+    if (i < 0) return null;
+    return i;
+  })();
+
   /** @type {Array<'zeit'|'guardian'|'newyorker'|'sz'>} */
   let newsFeeds = ['zeit'];
   if (newsFeedsRaw && String(newsFeedsRaw).trim()) {
@@ -198,6 +209,7 @@ settingsRouter.get('/', requireAuth, attachUserContext, async (_req, res) => {
     scribblePaperLook,
     todoListName,
     todoListNames,
+    todoDefaultConnectionId,
     newsFeeds,
     dataRefreshMs,
     clockStyle,
@@ -441,6 +453,19 @@ settingsRouter.post('/todo/list-names', requireAuth, async (req, res) => {
   const userId = Number(req.auth?.sub);
   const unique = Array.from(new Set(parsed.data.listNames.map((s) => s.trim()).filter(Boolean))).slice(0, 20);
   await setUserSetting({ userId, key: 'todo.listNames', value: JSON.stringify(unique) });
+  return res.json({ ok: true });
+});
+
+settingsRouter.post('/todo/default-connection', requireAuth, async (req, res) => {
+  const schema = z.object({ connectionId: z.number().int().nonnegative().nullable() });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: 'invalid_body', details: parsed.error.flatten() });
+  }
+
+  const userId = Number(req.auth?.sub);
+  const v = parsed.data.connectionId;
+  await setUserSetting({ userId, key: 'todo.defaultConnectionId', value: v == null ? '' : String(v) });
   return res.json({ ok: true });
 });
 

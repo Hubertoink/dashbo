@@ -7,6 +7,8 @@ const {
   getValidAccessToken,
 } = require('./outlookService');
 
+const { getUserSetting } = require('./settingsService');
+
 function parseGraphDateTime(dt) {
   if (!dt) return null;
   const dateTime = dt.dateTime ? String(dt.dateTime) : null;
@@ -342,66 +344,119 @@ async function createTodo({ userId, connectionId, listName, title, description, 
   }
 
   const connections = await listOutlookConnections({ userId });
-
-  const effectiveConnectionId =
-    connectionId != null
-      ? Number(connectionId)
-      : connections.length > 0
-        ? Number(connections[0].id)
-        : 0;
-
-  let accessToken = null;
-  if (Number(effectiveConnectionId) > 0) {
-    accessToken = await getValidAccessTokenForConnection({ userId, connectionId: Number(effectiveConnectionId) });
-  } else {
-    accessToken = await getValidAccessToken({ userId });
-  }
-
-  if (!accessToken) {
-    const err = new Error('outlook_not_connected');
-    err.status = 400;
-    throw err;
-  }
+  const allowFallbackConnections = connectionId == null;
 
   const effectiveListName = String(listName || '').trim() || getTodoListName();
-  let listId = await resolveTodoListId({ accessToken, listName: effectiveListName });
-  if (!listId) {
-    listId = await createTodoList({ accessToken, listName: effectiveListName });
+
+  async function tryCreateOnConnection(effectiveConnectionId) {
+    let accessToken = null;
+    if (Number(effectiveConnectionId) > 0) {
+      accessToken = await getValidAccessTokenForConnection({ userId, connectionId: Number(effectiveConnectionId) });
+    } else {
+      accessToken = await getValidAccessToken({ userId });
+    }
+
+    if (!accessToken) {
+      const err = new Error('outlook_not_connected');
+      err.code = 'outlook_not_connected';
+      err.status = 400;
+      throw err;
+    }
+
+    let listId = await resolveTodoListId({ accessToken, listName: effectiveListName });
+    if (!listId) {
+      listId = await createTodoList({ accessToken, listName: effectiveListName });
+    }
+
+    if (!listId) {
+      const err = new Error('todo_list_not_found');
+      err.code = 'todo_list_not_found';
+      err.status = 400;
+      throw err;
+    }
+
+    const body = {
+      title: trimmedTitle,
+      ...(description != null
+        ? {
+            body: {
+              content: String(description || ''),
+              contentType: 'text',
+            },
+          }
+        : {}),
+      ...(startAt != null ? { startDateTime: graphDateTimeFromIso(startAt) } : {}),
+      ...(dueAt != null ? { dueDateTime: graphDateTimeFromIso(dueAt) } : {}),
+    };
+
+    const path = `/me/todo/lists/${encodeURIComponent(String(listId))}/tasks`;
+    const { resp, json } = await graphTodoJson({ accessToken, path, method: 'POST', body });
+
+    if (!resp.ok) {
+      const code = json?.error?.code || '';
+      const msg = json?.error?.message || `todo_create_failed (${resp.status})`;
+      const err = new Error(String(msg));
+      err.code = String(code);
+      err.status = resp.status;
+      throw err;
+    }
+
+    return { ok: true };
   }
 
-  if (!listId) {
-    const err = new Error('todo_list_not_found');
-    err.status = 400;
-    throw err;
+  function isRetryableConnectionError(err) {
+    const status = Number(err?.status || 0);
+    // When auto-selecting, try the next linked account for typical Graph errors.
+    return status === 400 || status === 401 || status === 403 || status === 404;
   }
 
-  const body = {
-    title: trimmedTitle,
-    ...(description != null
-      ? {
-          body: {
-            content: String(description || ''),
-            contentType: 'text',
-          },
-        }
-      : {}),
-    ...(startAt != null ? { startDateTime: graphDateTimeFromIso(startAt) } : {}),
-    ...(dueAt != null ? { dueDateTime: graphDateTimeFromIso(dueAt) } : {}),
-  };
-
-  const path = `/me/todo/lists/${encodeURIComponent(String(listId))}/tasks`;
-  const { resp, json } = await graphTodoJson({ accessToken, path, method: 'POST', body });
-
-  if (!resp.ok) {
-    const code = json?.error?.code || '';
-    const msg = json?.error?.message || `todo_create_failed (${resp.status})`;
-    const err = new Error(String(msg));
-    err.code = String(code);
-    err.status = resp.status;
-    throw err;
+  async function getDefaultConnectionIdFromSettings() {
+    try {
+      const raw = await getUserSetting({ userId, key: 'todo.defaultConnectionId' });
+      const s = raw != null ? String(raw).trim() : '';
+      if (!s) return null;
+      const n = Number(s);
+      if (!Number.isFinite(n)) return null;
+      const i = Math.trunc(n);
+      if (i < 0) return null;
+      return i;
+    } catch {
+      return null;
+    }
   }
 
-  return { ok: true };
+  /** @type {number[]} */
+  let candidateConnectionIds = [];
+  if (connectionId != null) {
+    candidateConnectionIds = [Number(connectionId)];
+  } else {
+    const defaultId = await getDefaultConnectionIdFromSettings();
+    const connectionIds = connections.map((c) => Number(c.id)).filter((n) => Number.isFinite(n) && n > 0);
+    const hasDefault = defaultId != null && connectionIds.includes(Number(defaultId));
+    if (hasDefault) {
+      candidateConnectionIds.push(Number(defaultId));
+      candidateConnectionIds.push(...connectionIds.filter((id) => id !== Number(defaultId)));
+    } else {
+      candidateConnectionIds.push(...connectionIds);
+    }
+
+    // Legacy single-token fallback when no multi connections exist.
+    if (candidateConnectionIds.length === 0) candidateConnectionIds = [0];
+  }
+
+  let lastError = null;
+  for (const cid of candidateConnectionIds) {
+    try {
+      return await tryCreateOnConnection(cid);
+    } catch (e) {
+      lastError = e;
+      if (!allowFallbackConnections) throw e;
+      if (!isRetryableConnectionError(e)) throw e;
+      // try next candidate
+    }
+  }
+
+  throw lastError || new Error('outlook_not_connected');
 }
 
 async function updateTodo({ userId, connectionId, listId, taskId, patch }) {

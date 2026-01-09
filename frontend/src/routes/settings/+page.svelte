@@ -28,6 +28,7 @@
     setHolidaysEnabled,
     setTodoEnabled,
     setTodoListNames,
+    setTodoDefaultConnection,
     setNewsEnabled,
     setScribbleEnabled,
     setScribbleStandbySeconds,
@@ -124,6 +125,10 @@
   let todoListNamesText = '';
   let todoListNamesSaving = false;
   let todoListNamesError: string | null = null;
+
+  let todoDefaultConnectionId: number | null = null;
+  let todoDefaultConnectionSaving = false;
+  let todoDefaultConnectionError: string | null = null;
 
   let newsEnabled = false;
   let newsSaving = false;
@@ -722,6 +727,11 @@
     const listNames = Array.isArray(settings?.todoListNames) ? settings!.todoListNames! : [];
     todoListNamesText = listNames.length ? listNames.join('\n') : settings?.todoListName ?? '';
 
+    todoDefaultConnectionId =
+      typeof (settings as any)?.todoDefaultConnectionId === 'number' && Number.isFinite((settings as any).todoDefaultConnectionId)
+        ? (settings as any).todoDefaultConnectionId
+        : null;
+
     const feeds = Array.isArray(settings?.newsFeeds) ? settings!.newsFeeds! : [];
     newsFeeds = (feeds.length ? feeds : ['zeit']) as NewsFeedId[];
 
@@ -787,6 +797,20 @@
       todoListNamesError = 'Speichern fehlgeschlagen.';
     } finally {
       todoListNamesSaving = false;
+    }
+  }
+
+  async function saveTodoDefaultConnectionHandler() {
+    todoDefaultConnectionError = null;
+    todoDefaultConnectionSaving = true;
+    try {
+      await setTodoDefaultConnection(todoDefaultConnectionId);
+      await refreshSettings();
+      showToast('Gespeichert');
+    } catch {
+      todoDefaultConnectionError = 'Speichern fehlgeschlagen.';
+    } finally {
+      todoDefaultConnectionSaving = false;
     }
   }
 
@@ -1513,6 +1537,7 @@
     <DashboardSection
       {authed}
       {settings}
+      {outlookConnections}
       bind:weatherLocation
       {weatherSaving}
       {weatherError}
@@ -1529,6 +1554,10 @@
       {todoListNamesSaving}
       {todoListNamesError}
       saveTodoListNames={saveTodoListNamesHandler}
+      bind:todoDefaultConnectionId
+      {todoDefaultConnectionSaving}
+      {todoDefaultConnectionError}
+      saveTodoDefaultConnection={saveTodoDefaultConnectionHandler}
       bind:newsEnabled
       {newsSaving}
       {newsError}

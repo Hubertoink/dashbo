@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { NewsFeedId, SettingsDto } from '$lib/api';
+  import type { NewsFeedId, OutlookConnectionDto, SettingsDto } from '$lib/api';
 
   import DashboardPreview from '$lib/components/DashboardPreview.svelte';
   import WidgetSettingsCard from '$lib/components/WidgetSettingsCard.svelte';
@@ -27,6 +27,12 @@
   export let todoListNamesSaving: boolean;
   export let todoListNamesError: string | null;
   export let saveTodoListNames: () => void | Promise<void>;
+
+  export let outlookConnections: OutlookConnectionDto[];
+  export let todoDefaultConnectionId: number | null;
+  export let todoDefaultConnectionSaving: boolean;
+  export let todoDefaultConnectionError: string | null;
+  export let saveTodoDefaultConnection: () => void | Promise<void>;
 
   export let newsEnabled: boolean;
   export let newsSaving: boolean;
@@ -116,6 +122,13 @@
   function toggleNewsFeed(id: NewsFeedId) {
     if (newsFeeds.includes(id)) newsFeeds = newsFeeds.filter((x) => x !== id);
     else newsFeeds = [...newsFeeds, id];
+  }
+
+  function formatOutlookConnectionLabel(c: OutlookConnectionDto): string {
+    const displayName = String(c?.displayName || '').trim();
+    const email = String(c?.email || '').trim();
+    if (displayName && email && !displayName.toLowerCase().includes(email.toLowerCase())) return `${displayName} (${email})`;
+    return displayName || email || `Outlook ${c.id}`;
   }
 </script>
 
@@ -304,6 +317,43 @@
         {#if todoListNamesError}
           <div class="text-red-400 text-xs">{todoListNamesError}</div>
         {/if}
+      </div>
+
+      <div class="pt-2 space-y-2">
+        <div class="text-sm text-white/80">Standardkonto (Quick-ToDos im Wochenplaner)</div>
+
+        <div class="flex items-center gap-2">
+          <select
+            class="flex-1 h-9 px-3 rounded-lg bg-white/10 border-0 text-sm text-white/90"
+            value={todoDefaultConnectionId == null ? '' : String(todoDefaultConnectionId)}
+            disabled={!authed}
+            on:change={(e) => {
+              const v = (e.currentTarget as HTMLSelectElement).value;
+              todoDefaultConnectionId = v ? Number(v) : null;
+            }}
+          >
+            <option value="">Automatisch</option>
+            {#each outlookConnections ?? [] as c (c.id)}
+              <option value={String(c.id)}>{formatOutlookConnectionLabel(c)}</option>
+            {/each}
+          </select>
+
+          <button
+            class="h-9 px-4 rounded-lg bg-white/20 hover:bg-white/25 text-sm font-medium disabled:opacity-50"
+            on:click={saveTodoDefaultConnection}
+            disabled={!authed || todoDefaultConnectionSaving}
+          >
+            Speichern
+          </button>
+        </div>
+
+        {#if todoDefaultConnectionError}
+          <div class="text-red-400 text-xs">{todoDefaultConnectionError}</div>
+        {/if}
+
+        <div class="text-xs text-white/40">
+          Wird genutzt, wenn beim Quick-ToDo kein Konto ausgewählt ist.
+        </div>
       </div>
 
       <div class="text-xs text-white/40">Zeigt offene Aufgaben aus deiner Outlook To-Do Liste in der Sidebar.</div>

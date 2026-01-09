@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { SettingsDto } from '$lib/api';
+  import type { OutlookConnectionDto, SettingsDto } from '$lib/api';
 
   import DashboardPreview from '$lib/components/DashboardPreview.svelte';
   import BackgroundSection from '$lib/components/settings/BackgroundSection.svelte';
@@ -11,6 +11,8 @@
 
   export let authed: boolean;
   export let settings: SettingsDto | null;
+
+  export let outlookConnections: OutlookConnectionDto[];
 
   export let weatherLocation: string;
   export let weatherSaving: boolean;
@@ -31,6 +33,11 @@
   export let todoListNamesSaving: boolean;
   export let todoListNamesError: string | null;
   export let saveTodoListNames: () => void | Promise<void>;
+
+  export let todoDefaultConnectionId: number | null;
+  export let todoDefaultConnectionSaving: boolean;
+  export let todoDefaultConnectionError: string | null;
+  export let saveTodoDefaultConnection: () => void | Promise<void>;
 
   export let newsEnabled: boolean;
   export let newsSaving: boolean;
@@ -149,6 +156,7 @@
         <DashboardWidgetsSection
           {authed}
           {settings}
+          {outlookConnections}
           bind:weatherLocation
           {weatherSaving}
           {weatherError}
@@ -165,6 +173,10 @@
           {todoListNamesSaving}
           {todoListNamesError}
           {saveTodoListNames}
+          bind:todoDefaultConnectionId
+          {todoDefaultConnectionSaving}
+          {todoDefaultConnectionError}
+          {saveTodoDefaultConnection}
           bind:newsEnabled
           {newsSaving}
           {newsError}

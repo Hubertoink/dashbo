@@ -473,6 +473,7 @@ export type SettingsDto = {
   scribblePaperLook?: boolean;
   todoListName?: string | null;
   todoListNames?: string[];
+  todoDefaultConnectionId?: number | null;
   newsFeeds?: NewsFeedId[];
   dataRefreshMs?: number | null;
   clockStyle?: ClockStyle;
@@ -504,6 +505,13 @@ export async function setScribblePaperLook(enabled: boolean): Promise<{ ok: true
 
 export async function setClockStyle(style: ClockStyle): Promise<{ ok: true }> {
   return api<{ ok: true }>('/settings/clock/style', { method: 'POST', body: JSON.stringify({ style }) });
+}
+
+export async function setTodoDefaultConnection(connectionId: number | null): Promise<{ ok: true }> {
+  return api<{ ok: true }>('/settings/todo/default-connection', {
+    method: 'POST',
+    body: JSON.stringify({ connectionId })
+  });
 }
 
 export async function setBackground(filename: string): Promise<{ ok: true }> {

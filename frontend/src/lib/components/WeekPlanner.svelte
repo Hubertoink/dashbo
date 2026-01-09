@@ -8,6 +8,7 @@
     updateTodo,
     type EventDto,
     type HolidayDto,
+    type PersonDto,
     type TodoItemDto
   } from '$lib/api';
   import { formatGermanShortDate, sameDay } from '$lib/date';
@@ -74,7 +75,16 @@
     quickAddOpen = false;
   }
 
-  type EventSuggestionDto = import('./WeekPlannerDay.svelte').EventSuggestionDto;
+  type EventSuggestionDto = {
+    suggestionKey: string;
+    title: string;
+    startAt: string;
+    endAt: string | null;
+    allDay: boolean;
+    tag: EventDto['tag'];
+    person: EventDto['person'];
+    persons?: EventDto['persons'];
+  };
   let suggestions: EventSuggestionDto[] = [];
   let suggestionsLoading = false;
   let suggestionsForWeekKey = '';
@@ -675,9 +685,7 @@
     todoQuickSaving = true;
     try {
       const listName = (todoListNames && todoListNames.length > 0 ? todoListNames[0] : todoListName) || '';
-      const connectionId = todoItems.length > 0 ? todoItems[0]!.connectionId : undefined;
       await createTodo({
-        ...(connectionId != null ? { connectionId } : {}),
         ...(listName ? { listName } : {}),
         title,
         description: null,
@@ -782,7 +790,7 @@
     quickAddPrefillStartTime = timeFromIso(s.startAt);
     quickAddPrefillEndTime = s.endAt ? timeFromIso(s.endAt) : '';
     quickAddPrefillAllDay = Boolean(s.allDay);
-    quickAddPrefillPersonIds = (s.persons && s.persons.length > 0 ? s.persons : s.person ? [s.person] : []).map((p) => p.id);
+    quickAddPrefillPersonIds = (s.persons && s.persons.length > 0 ? s.persons : s.person ? [s.person] : []).map((p: PersonDto) => p.id);
     quickAddPrefillTagId = s.tag?.id ?? null;
     quickAddOpen = true;
   }
