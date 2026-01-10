@@ -199,6 +199,7 @@
   let suggestionsAll: PlannerSuggestionDto[] = [];
   let suggestions: PlannerSuggestionDto[] = [];
   let dismissedSuggestions: string[] = [];
+  let suggestionSourceEvents: EventDto[] = [];
 
   const tagBg: Record<TagColorKey, string> = {
     fuchsia: 'bg-fuchsia-500',
@@ -550,8 +551,10 @@
         // Include enough future events so the pattern can be inferred from already scheduled occurrences.
         const suggestTo = endOfDay(addDays(today, 60));
         const suggestEvents = await fetchEvents(suggestFrom, suggestTo);
+        suggestionSourceEvents = suggestEvents;
         generateSuggestions(suggestEvents);
       } catch {
+        suggestionSourceEvents = [];
         suggestions = [];
       }
     } catch (err) {
@@ -980,7 +983,10 @@
       } finally {
         metaLoading = false;
         // Recompute suggestions after settings (dismissed keys) are loaded.
-        void refreshAgenda();
+        // Avoid re-fetching events (prevents double "Aktualisiere…" on initial load).
+        if (suggestionSourceEvents.length > 0) {
+          generateSuggestions(suggestionSourceEvents);
+        }
       }
     })();
 
