@@ -91,7 +91,7 @@
   $: mobileFabOrder = (
     [
       'event',
-      ...(outlookConnected && todoEnabled ? (['todo'] as const) : []),
+      ...(todoEnabled ? (['todo'] as const) : []),
       ...(scribbleEnabled ? (['scribble'] as const) : [])
     ] satisfies readonly MobileFabKey[]
   ) as MobileFabKey[];
@@ -151,8 +151,18 @@
   let todoCreateListName = '';
   let todoCreateConnectionId: number | null = null;
 
-  $: selectedTodoConnection =
-    todoSelectedConnectionId != null ? outlookConnections.find((c) => c.id === todoSelectedConnectionId) ?? null : null;
+  const DASHBO_TODO_CONNECTION_ID = -1;
+  const DASHBO_TODO_ACCOUNT = { id: DASHBO_TODO_CONNECTION_ID, label: 'Dashbo', email: null, color: 'emerald' } as const;
+
+  type TodoAccount = { id: number; label: string; email: string | null; color?: string };
+
+  $: todoAccounts = [
+    DASHBO_TODO_ACCOUNT,
+    ...(outlookConnections ?? []).map((c) => ({ id: c.id, label: outlookConnectionLabel(c), email: c.email || null, color: c.color }))
+  ] satisfies TodoAccount[];
+
+  $: selectedTodoAccount =
+    todoSelectedConnectionId != null ? todoAccounts.find((c) => c.id === todoSelectedConnectionId) ?? null : null;
 
   function outlookConnectionLabel(c: OutlookConnectionDto | null | undefined): string {
     if (!c) return '';
@@ -163,25 +173,32 @@
 
   function openTodoCreateModal() {
     todoCreateListName = (todoListNames.length > 0 ? todoListNames[0] : todoListName) || '';
-    todoCreateConnectionId = outlookConnections.length > 0 ? outlookConnections[0]!.id : null;
+    todoCreateConnectionId = todoAccounts.length > 0 ? todoAccounts[0]!.id : DASHBO_TODO_CONNECTION_ID;
     todoCreateOpen = true;
   }
 
   async function refreshTodoMeta() {
-    if (!outlookConnected || !todoEnabled) return;
+    if (!todoEnabled) return;
     try {
-      const [conns, todoMeta] = await Promise.all([listOutlookConnections(), fetchTodos()]);
-      outlookConnections = Array.isArray(conns) ? conns : [];
+      const todoMeta = await fetchTodos();
       todoListName = todoMeta?.listName || 'Dashbo';
       todoListNames = Array.isArray(todoMeta?.listNames) ? todoMeta.listNames : [];
-      if (todoSelectedConnectionId == null && outlookConnections.length > 0) {
-        todoSelectedConnectionId = outlookConnections[0]!.id;
-      }
-      if (!todoSelectedListName) {
-        todoSelectedListName = (todoListNames.length > 0 ? todoListNames[0] : todoListName) || '';
-      }
     } catch {
       // ignore
+    }
+
+    try {
+      const conns = await listOutlookConnections();
+      outlookConnections = Array.isArray(conns) ? conns : [];
+    } catch {
+      outlookConnections = [];
+    }
+
+    if (todoSelectedConnectionId == null) {
+      todoSelectedConnectionId = DASHBO_TODO_CONNECTION_ID;
+    }
+    if (!todoSelectedListName) {
+      todoSelectedListName = (todoListNames.length > 0 ? todoListNames[0] : todoListName) || '';
     }
   }
 
@@ -838,8 +855,8 @@
         personIds: newPersonIds.length > 0 ? newPersonIds : null
       });
 
-      // Create Outlook ToDos if enabled
-      const todoLines = outlookConnected && todoEnabled ? parseTodoLines(todoText) : [];
+      // Create ToDos if enabled (Dashbo-local or Outlook)
+      const todoLines = todoEnabled ? parseTodoLines(todoText) : [];
       if (todoLines.length > 0) {
         todoSaving = true;
         todoError = null;
@@ -961,22 +978,8 @@
         persons = (p ?? []).slice().sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || a.name.localeCompare(b.name));
         outlookConnected = Boolean(outlookSt?.connected);
 
-        // Load Outlook ToDo metadata if connected
-        if (outlookConnected && todoEnabled) {
-          try {
-            const [conns, todoMeta] = await Promise.all([listOutlookConnections(), fetchTodos()]);
-            outlookConnections = Array.isArray(conns) ? conns : [];
-            todoListName = todoMeta?.listName || 'Dashbo';
-            todoListNames = Array.isArray(todoMeta?.listNames) ? todoMeta.listNames : [];
-            if (todoSelectedConnectionId == null && outlookConnections.length > 0) {
-              todoSelectedConnectionId = outlookConnections[0]!.id;
-            }
-            if (!todoSelectedListName) {
-              todoSelectedListName = (todoListNames.length > 0 ? todoListNames[0] : todoListName) || '';
-            }
-          } catch {
-            outlookConnections = [];
-          }
+        if (todoEnabled) {
+          await refreshTodoMeta();
         }
       } catch (err) {
         metaError = err instanceof Error ? err.message : 'Fehler beim Laden.';
@@ -1774,8 +1777,8 @@
           {/if}
         </div>
 
-        <!-- ToDos (optional, Outlook) -->
-        {#if outlookConnected && todoEnabled}
+        <!-- ToDos (optional) -->
+        {#if todoEnabled}
           <div class="border-t border-white/10 pt-3 mt-1">
             <div class="flex items-center justify-between">
               <div class="text-xs text-white/50">ToDos (optional)</div>
@@ -1790,45 +1793,45 @@
 
             {#if todoSectionOpen}
               <div class="mt-3">
-                {#if outlookConnections.length === 0}
-                  <div class="text-xs text-white/50">Keine Outlook-Verbindung gefunden.</div>
-                {:else}
-                  <div class="space-y-2">
-                    {#if outlookConnections.length > 1}
-                      <div class="relative">
-                        <button
-                          type="button"
-                          class="w-full h-10 px-3 rounded-lg bg-white/10 border border-white/10 text-sm text-white/90 flex items-center gap-2"
-                          on:click={() => (todoAccountMenuOpen = !todoAccountMenuOpen)}
-                        >
-                          <span class="flex-1 text-left min-w-0">
-                            <span class="block truncate">{selectedTodoConnection ? (selectedTodoConnection.displayName || selectedTodoConnection.email || `Outlook ${selectedTodoConnection.id}`) : 'Konto wählen'}</span>
-                            {#if selectedTodoConnection?.email}
-                              <span class="block truncate text-xs text-white/50">{selectedTodoConnection.email}</span>
-                            {/if}
-                          </span>
-                          <span class="text-white/50">▾</span>
-                        </button>
-                        {#if todoAccountMenuOpen}
-                          <div class="absolute z-50 bottom-full mb-1 w-full rounded-lg bg-black/90 border border-white/10 max-h-40 overflow-auto">
-                            {#each outlookConnections as c (c.id)}
-                              <button
-                                type="button"
-                                class={`w-full px-3 py-2 text-left text-sm hover:bg-white/10 ${c.id === todoSelectedConnectionId ? 'bg-white/10' : ''}`}
-                                on:click={() => { todoSelectedConnectionId = c.id; todoAccountMenuOpen = false; }}
-                              >
-                                <div class="min-w-0">
-                                  <div class="truncate text-white/90">{c.displayName || c.email || `Outlook ${c.id}`}</div>
-                                  {#if c.email}
-                                    <div class="truncate text-xs text-white/50">{c.email}</div>
-                                  {/if}
-                                </div>
-                              </button>
-                            {/each}
-                          </div>
-                        {/if}
-                      </div>
-                    {/if}
+                <div class="space-y-2">
+                  {#if todoAccounts.length > 1}
+                    <div class="relative">
+                      <button
+                        type="button"
+                        class="w-full h-10 px-3 rounded-lg bg-white/10 border border-white/10 text-sm text-white/90 flex items-center gap-2"
+                        on:click={() => (todoAccountMenuOpen = !todoAccountMenuOpen)}
+                      >
+                        <span class="flex-1 text-left min-w-0">
+                          <span class="block truncate">{selectedTodoAccount ? selectedTodoAccount.label : 'Konto wählen'}</span>
+                          {#if selectedTodoAccount?.email}
+                            <span class="block truncate text-xs text-white/50">{selectedTodoAccount.email}</span>
+                          {/if}
+                        </span>
+                        <span class="text-white/50">▾</span>
+                      </button>
+                      {#if todoAccountMenuOpen}
+                        <div class="absolute z-50 bottom-full mb-1 w-full rounded-lg bg-black/90 border border-white/10 max-h-40 overflow-auto">
+                          {#each todoAccounts as c (c.id)}
+                            <button
+                              type="button"
+                              class={`w-full px-3 py-2 text-left text-sm hover:bg-white/10 ${c.id === todoSelectedConnectionId ? 'bg-white/10' : ''}`}
+                              on:click={() => {
+                                todoSelectedConnectionId = c.id;
+                                todoAccountMenuOpen = false;
+                              }}
+                            >
+                              <div class="min-w-0">
+                                <div class="truncate text-white/90">{c.label}</div>
+                                {#if c.email}
+                                  <div class="truncate text-xs text-white/50">{c.email}</div>
+                                {/if}
+                              </div>
+                            </button>
+                          {/each}
+                        </div>
+                      {/if}
+                    </div>
+                  {/if}
 
                     {#if todoListNames.length > 1}
                       <select
@@ -1853,8 +1856,7 @@
                     {#if todoError}
                       <div class="text-xs text-rose-400">{todoError}</div>
                     {/if}
-                  </div>
-                {/if}
+                </div>
               </div>
             {/if}
           </div>
@@ -1995,7 +1997,7 @@
     </button>
   {/if}
 
-  {#if fabDockOpen && outlookConnected && todoEnabled}
+  {#if fabDockOpen && todoEnabled}
     <!-- Add ToDo - appears under the '+' dock, like dashboard -->
     <button
       type="button"
@@ -2083,7 +2085,7 @@
   listNames={todoListNames && todoListNames.length > 0 ? todoListNames : [todoListName]}
   selectedListName={todoCreateListName}
   onChangeListName={(v) => (todoCreateListName = v)}
-  connections={(outlookConnections ?? []).map((c) => ({ id: c.id, label: outlookConnectionLabel(c), color: c.color }))}
+  connections={todoAccounts.map((c) => ({ id: c.id, label: c.label, color: c.color }))}
   selectedConnectionId={todoCreateConnectionId}
   onChangeConnectionId={(v) => (todoCreateConnectionId = v)}
   prefillDueAt={null}

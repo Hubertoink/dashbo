@@ -156,7 +156,8 @@ settingsRouter.get('/', requireAuth, attachUserContext, async (_req, res) => {
     const n = Number(raw);
     if (!Number.isFinite(n)) return null;
     const i = Math.trunc(n);
-    if (i < 0) return null;
+    // allow -1 for Dashbo-local ToDo account
+    if (i < -1) return null;
     return i;
   })();
 
@@ -457,7 +458,8 @@ settingsRouter.post('/todo/list-names', requireAuth, async (req, res) => {
 });
 
 settingsRouter.post('/todo/default-connection', requireAuth, async (req, res) => {
-  const schema = z.object({ connectionId: z.number().int().nonnegative().nullable() });
+  // allow -1 for Dashbo-local ToDo account
+  const schema = z.object({ connectionId: z.number().int().min(-1).nullable() });
   const parsed = schema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ error: 'invalid_body', details: parsed.error.flatten() });

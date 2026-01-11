@@ -64,8 +64,23 @@
   let todoSelectedListName = '';
   let todoAccountMenuOpen = false;
 
+  const DASHBO_TODO_CONNECTION_ID = -1;
+  const DASHBO_TODO_ACCOUNT = { id: DASHBO_TODO_CONNECTION_ID, label: 'Dashbo', email: null, color: 'emerald' } as const;
+
+  type TodoAccount = { id: number; label: string; email: string | null; color?: string };
+
+  $: todoAccounts = [
+    DASHBO_TODO_ACCOUNT,
+    ...(outlookConnections ?? []).map((c) => ({
+      id: c.id,
+      label: outlookConnectionLabel(c),
+      email: c.email || null,
+      color: c.color
+    }))
+  ] satisfies TodoAccount[];
+
   $: selectedTodoConnection =
-    todoSelectedConnectionId != null ? outlookConnections.find((c) => c.id === todoSelectedConnectionId) ?? null : null;
+    todoSelectedConnectionId != null ? todoAccounts.find((c) => c.id === todoSelectedConnectionId) ?? null : null;
 
   let prefilledForEventId: number | null = null;
   let prefilledForKey: string | null = null;
@@ -177,15 +192,18 @@
   }
 
   async function loadTodoMeta() {
-    if (!(outlookConnected && todoEnabled)) return;
+    if (!todoEnabled) return;
     try {
-      const [conns, todoMeta] = await Promise.all([listOutlookConnections(), fetchTodos()]);
+      const [conns, todoMeta] = await Promise.all([
+        outlookConnected ? listOutlookConnections() : Promise.resolve([]),
+        fetchTodos()
+      ]);
       outlookConnections = Array.isArray(conns) ? conns : [];
       todoListName = todoMeta?.listName || 'Dashbo';
       todoListNames = Array.isArray(todoMeta?.listNames) ? todoMeta.listNames : [];
 
-      if (todoSelectedConnectionId == null && outlookConnections.length > 0) {
-        todoSelectedConnectionId = outlookConnections[0]!.id;
+      if (todoSelectedConnectionId == null) {
+        todoSelectedConnectionId = DASHBO_TODO_CONNECTION_ID;
       }
       if (!todoSelectedListName) {
         todoSelectedListName = (todoListNames && todoListNames.length > 0 ? todoListNames[0] : todoListName) || '';
@@ -194,10 +212,14 @@
       outlookConnections = [];
       todoListName = 'Dashbo';
       todoListNames = [];
+
+      if (todoSelectedConnectionId == null) {
+        todoSelectedConnectionId = DASHBO_TODO_CONNECTION_ID;
+      }
     }
   }
 
-  $: if (open && outlookConnected && todoEnabled && !todoLoadedForOpen) {
+  $: if (open && todoEnabled && !todoLoadedForOpen) {
     todoLoadedForOpen = true;
     void loadTodoMeta();
   }
@@ -367,8 +389,15 @@
     }
   }
 
-  function connectionLabel(c: OutlookConnectionDto): string {
-    return c.displayName || c.email || `Outlook ${c.id}`;
+  function outlookConnectionLabel(c: OutlookConnectionDto | null | undefined): string {
+    if (!c) return '';
+    const name = c.displayName || c.email || `Outlook ${c.id}`;
+    if (c.email && c.displayName && c.displayName !== c.email) return `${c.displayName} (${c.email})`;
+    return name;
+  }
+
+  function connectionLabel(c: TodoAccount): string {
+    return c.label;
   }
 
   function togglePerson(id: number) {
@@ -413,7 +442,7 @@
       else await createEvent(payload);
 
       // Optional: create ToDos from textarea lines (also allowed when editing)
-      const todoLines = todoSectionOpen && outlookConnected && todoEnabled ? parseTodos(todoText) : [];
+      const todoLines = todoSectionOpen && todoEnabled ? parseTodos(todoText) : [];
       if (todoLines.length > 0) {
         todoSaving = true;
         todoError = null;
@@ -756,8 +785,8 @@
           </div>
         {/if}
 
-        <!-- ToDos (optional, Outlook) -->
-        {#if outlookConnected && todoEnabled}
+        <!-- ToDos (optional) -->
+        {#if todoEnabled}
           <div class="sm:col-span-2">
             <button
               type="button"
@@ -768,13 +797,9 @@
             </button>
           {#if todoSectionOpen}
 
-            {#if outlookConnections.length === 0}
-              <div class="text-xs text-white/50">Keine Outlook-Verbindung gefunden.</div>
-            {/if}
-
             <div class="sm:grid sm:grid-cols-2 sm:gap-4">
               <div>
-                {#if outlookConnections.length > 1}
+                {#if todoAccounts.length > 1}
                   <div class="mb-3">
                     <div class="text-[11px] uppercase tracking-widest text-white/45 mb-1">Konto</div>
                     <div class="relative">
@@ -807,7 +832,7 @@
 
                       {#if todoAccountMenuOpen}
                         <div class="absolute z-10 mt-1 w-full rounded-lg bg-neutral-800 border border-white/10 shadow-lg overflow-hidden">
-                          {#each outlookConnections as c (c.id)}
+                          {#each todoAccounts as c (c.id)}
                             <button
                               type="button"
                               class={`w-full px-3 py-2 flex items-center gap-2 text-sm text-white/90 hover:bg-white/10 transition-colors ${c.id === todoSelectedConnectionId ? 'bg-white/5' : ''}`}

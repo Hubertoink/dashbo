@@ -164,7 +164,7 @@
 
   // Count active widgets in sidebar to enable compact mode when > 3
   $: activeWidgetCount = [
-    todoEnabled && outlookConnected,
+    todoEnabled,
     newsEnabled,
     scribbleEnabled,
     musicWidgetEnabled
@@ -1149,7 +1149,7 @@
           </div>
         {:else}
           <!-- Normal layout with all widgets -->
-          {#if todoEnabled && outlookConnected}
+          {#if todoEnabled}
             <div class="mt-6 {compactWidgets ? 'pb-4' : 'pb-8'} text-white" transition:slide={{ duration: 300 }}>
               <TodoWidget compact={compactWidgets} onToggleExpand={() => expandedWidget = 'todo'} />
             </div>
@@ -1218,7 +1218,7 @@
             <div class="hidden md:flex w-[38%] min-w-[320px] flex-col p-8 h-full">
               <!-- Top row: Todo + Weather side by side -->
               <div class="flex gap-6">
-                {#if todoEnabled && outlookConnected}
+                {#if todoEnabled}
                   <div class="flex-1 min-w-0 text-white">
                     <TodoWidget variant="plain" showAddButton={false} compact={true} />
                   </div>
@@ -1486,7 +1486,7 @@
             <div class="hidden md:flex w-[38%] min-w-[320px] flex-col p-8 h-full">
               <!-- Top row: Todo + Weather side by side -->
               <div class="flex gap-6">
-                {#if todoEnabled && outlookConnected}
+                {#if todoEnabled}
                   <div class="flex-1 min-w-0 text-white">
                     <TodoWidget variant="plain" showAddButton={false} compact={true} />
                   </div>

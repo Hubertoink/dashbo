@@ -52,8 +52,22 @@
   let todoSelectedListName = '';
   let todoAccountMenuOpen = false;
 
-  $: selectedTodoConnection =
-    todoSelectedConnectionId != null ? outlookConnections.find((c) => c.id === todoSelectedConnectionId) ?? null : null;
+  const DASHBO_TODO_CONNECTION_ID = -1;
+  const DASHBO_TODO_ACCOUNT = { id: DASHBO_TODO_CONNECTION_ID, label: 'Dashbo', email: null, color: 'emerald' } as const;
+  type TodoAccount = { id: number; label: string; email: string | null; color?: string };
+
+  $: todoAccounts = [
+    DASHBO_TODO_ACCOUNT,
+    ...(outlookConnections ?? []).map((c) => ({
+      id: c.id,
+      label: connectionLabel(c),
+      email: c.email || null,
+      color: c.color
+    }))
+  ] satisfies TodoAccount[];
+
+  $: selectedTodoAccount =
+    todoSelectedConnectionId != null ? todoAccounts.find((c) => c.id === todoSelectedConnectionId) ?? null : null;
 
   let tags: TagDto[] = [];
   let persons: PersonDto[] = [];
@@ -122,23 +136,33 @@
       persons = [];
     }
 
-    if (outlookConnected && todoEnabled) {
+    if (todoEnabled) {
       try {
-        const [conns, todoMeta] = await Promise.all([listOutlookConnections(), fetchTodos()]);
-        outlookConnections = Array.isArray(conns) ? conns : [];
+        const todoMeta = await fetchTodos();
         todoListName = todoMeta?.listName || 'Dashbo';
         todoListNames = Array.isArray(todoMeta?.listNames) ? todoMeta.listNames : [];
-
-        if (todoSelectedConnectionId == null && outlookConnections.length > 0) {
-          todoSelectedConnectionId = outlookConnections[0]!.id;
-        }
-        if (!todoSelectedListName) {
-          todoSelectedListName = (todoListNames && todoListNames.length > 0 ? todoListNames[0] : todoListName) || '';
-        }
       } catch {
-        outlookConnections = [];
         todoListName = 'Dashbo';
         todoListNames = [];
+      }
+
+      // Outlook connections are optional.
+      if (outlookConnected) {
+        try {
+          const conns = await listOutlookConnections();
+          outlookConnections = Array.isArray(conns) ? conns : [];
+        } catch {
+          outlookConnections = [];
+        }
+      } else {
+        outlookConnections = [];
+      }
+
+      if (todoSelectedConnectionId == null) {
+        todoSelectedConnectionId = DASHBO_TODO_CONNECTION_ID;
+      }
+      if (!todoSelectedListName) {
+        todoSelectedListName = (todoListNames && todoListNames.length > 0 ? todoListNames[0] : todoListName) || '';
       }
     }
   }
@@ -317,7 +341,7 @@
       });
 
       // Optional: create ToDos from textarea lines
-      const todoLines = outlookConnected && todoEnabled && todoSectionOpen ? parseTodos(todoText) : [];
+      const todoLines = todoEnabled && todoSectionOpen ? parseTodos(todoText) : [];
       if (todoLines.length > 0) {
         todoSaving = true;
         todoError = null;
@@ -580,8 +604,8 @@
           </div>
         {/if}
 
-        <!-- ToDos (optional, Outlook) -->
-        {#if outlookConnected && todoEnabled}
+        <!-- ToDos (optional) -->
+        {#if todoEnabled}
           <div class="sm:col-span-2">
             <div class="flex items-center justify-between">
               <div class="text-xs text-white/50">ToDos (optional)</div>
@@ -596,13 +620,9 @@
 
             {#if todoSectionOpen}
               <div class="mt-3">
-                {#if outlookConnections.length === 0}
-                  <div class="text-xs text-white/50">Keine Outlook-Verbindung gefunden.</div>
-                {/if}
-
                 <div class="sm:grid sm:grid-cols-2 sm:gap-4">
                   <div>
-                    {#if outlookConnections.length > 1}
+                    {#if todoAccounts.length > 1}
                       <div class="mb-3">
                         <div class="text-[11px] uppercase tracking-widest text-white/45 mb-1">Konto</div>
                         <div class="relative">
@@ -611,13 +631,11 @@
                             class="w-full h-10 px-3 rounded-lg bg-white/10 border border-white/10 text-sm text-white/90 flex items-center gap-2 focus:outline-none focus:ring-2 focus:ring-white/10"
                             on:click={() => (todoAccountMenuOpen = !todoAccountMenuOpen)}
                           >
-                            <span
-                              class={`h-2.5 w-2.5 rounded-full flex-shrink-0 ${connectionColorClass(selectedTodoConnection?.color)}`}
-                            ></span>
+                            <span class={`h-2.5 w-2.5 rounded-full flex-shrink-0 ${connectionColorClass(selectedTodoAccount?.color)}`}></span>
                             <span class="flex-1 text-left min-w-0">
-                              <span class="block truncate">{selectedTodoConnection ? connectionLabel(selectedTodoConnection) : 'Konto wählen'}</span>
-                              {#if selectedTodoConnection?.email}
-                                <span class="block truncate text-xs text-white/50">{selectedTodoConnection.email}</span>
+                              <span class="block truncate">{selectedTodoAccount ? selectedTodoAccount.label : 'Konto wählen'}</span>
+                              {#if selectedTodoAccount?.email}
+                                <span class="block truncate text-xs text-white/50">{selectedTodoAccount.email}</span>
                               {/if}
                             </span>
                             <svg
@@ -635,7 +653,7 @@
 
                           {#if todoAccountMenuOpen}
                             <div class="absolute z-10 mt-1 w-full rounded-lg bg-neutral-800 border border-white/10 shadow-lg overflow-hidden">
-                              {#each outlookConnections as c (c.id)}
+                              {#each todoAccounts as c (c.id)}
                                 <button
                                   type="button"
                                   class={`w-full px-3 py-2 flex items-center gap-2 text-sm text-white/90 hover:bg-white/10 transition-colors ${c.id === todoSelectedConnectionId ? 'bg-white/5' : ''}`}
@@ -646,7 +664,7 @@
                                 >
                                   <span class={`h-2.5 w-2.5 rounded-full flex-shrink-0 ${connectionColorClass(c.color)}`}></span>
                                   <span class="flex-1 text-left min-w-0">
-                                    <span class="block truncate">{connectionLabel(c)}</span>
+                                    <span class="block truncate">{c.label}</span>
                                     {#if c.email}
                                       <span class="block truncate text-xs text-white/50">{c.email}</span>
                                     {/if}

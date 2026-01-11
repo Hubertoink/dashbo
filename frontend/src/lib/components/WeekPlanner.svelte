@@ -531,16 +531,14 @@
 
   function handleEventCreated() {
     onEventsChanged();
-    if (outlookConnected && todoEnabled) {
-      void loadTodos();
-    }
+    if (todoEnabled) void loadTodos();
   }
 
   function handleEventDeleted() {
     onEventsChanged();
   }
 
-  // ToDos (Outlook)
+  // ToDos
   let todoLoaded = false;
   let todoItems: TodoItemDto[] = [];
   let todoListName = 'Dashbo';
@@ -549,6 +547,8 @@
   let todoModalListName = '';
   let todoModalConnectionId: number | null = null;
   let todoPrefillDueAt: string | null = null;
+
+  const DASHBO_TODO_CONNECTION_ID = -1;
 
   // Quick add todo (title-only)
   let todoQuickText = '';
@@ -564,7 +564,7 @@
   }
 
   async function loadTodos() {
-    if (!outlookConnected || !todoEnabled) return;
+    if (!todoEnabled) return;
     try {
       const r = await fetchTodos();
       todoListName = r.listName;
@@ -577,7 +577,7 @@
     }
   }
 
-  $: if (outlookConnected && todoEnabled && !todoLoaded) {
+  $: if (todoEnabled && !todoLoaded) {
     void loadTodos();
   }
 
@@ -667,7 +667,7 @@
 
   function openTodoCreate(dueDate?: Date | null) {
     todoModalListName = (todoListNames && todoListNames.length > 0 ? todoListNames[0] : todoListName) || '';
-    todoModalConnectionId = todoItems.length > 0 ? todoItems[0]!.connectionId : null;
+    todoModalConnectionId = todoItems.length > 0 ? todoItems[0]!.connectionId : DASHBO_TODO_CONNECTION_ID;
     todoPrefillDueAt = dueDate ? isoNoonLocal(dueDate) : null;
     todoModalOpen = true;
   }
@@ -679,7 +679,7 @@
   async function submitQuickTodo() {
     const title = todoQuickText.trim();
     if (!title) return;
-    if (!outlookConnected || !todoEnabled) return;
+    if (!todoEnabled) return;
     if (todoQuickSaving) return;
 
     todoQuickSaving = true;
@@ -893,7 +893,7 @@
     </div>
   </div>
 
-  {#if outlookConnected && todoEnabled}
+  {#if todoEnabled}
     <WeekPlannerTodoBar
       items={inboxTodos}
       onToggleTodo={toggleTodo}
@@ -917,7 +917,7 @@
   {/if}
 
   <!-- Floating ToDo button -->
-  {#if outlookConnected && todoEnabled}
+  {#if todoEnabled}
     <button
       type="button"
       class="fixed z-[60] h-14 w-14 rounded-full bg-gradient-to-br from-blue-400 to-indigo-500 shadow-xl flex items-center justify-center hover:scale-105 active:scale-95 transition-transform ring-2 ring-blue-300/20"
@@ -959,9 +959,10 @@
   onChangeListName={(v) => (todoModalListName = v)}
   connections={Array.from(
     new Map(
-      todoItems
-        .map((i) => ({ id: i.connectionId, label: i.connectionLabel || 'Outlook', color: i.color }))
-        .map((c) => [String(c.id), c])
+      [
+        { id: DASHBO_TODO_CONNECTION_ID, label: 'Dashbo', color: 'emerald' },
+        ...todoItems.map((i) => ({ id: i.connectionId, label: i.connectionLabel || 'Outlook', color: i.color }))
+      ].map((c) => [String(c.id), c])
     ).values()
   ).sort((a, b) => a.label.localeCompare(b.label))}
   selectedConnectionId={todoModalConnectionId}

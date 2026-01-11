@@ -74,7 +74,8 @@ todosRouter.post('/update', requireAuth, async (req, res) => {
   const userId = Number(req.auth?.sub);
 
   const schema = z.object({
-    connectionId: z.number().int().nonnegative(),
+    // -1: Dashbo-local ToDo account
+    connectionId: z.number().int().min(-1),
     listId: z.string().min(1),
     taskId: z.string().min(1),
     title: z.string().min(1).optional(),
@@ -130,7 +131,8 @@ todosRouter.post('/create', requireAuth, async (req, res) => {
 
   const schema = z.object({
     // optional: if omitted, we pick the first available connection (or legacy token)
-    connectionId: z.number().int().nonnegative().optional(),
+    // -1: Dashbo-local ToDo account
+    connectionId: z.number().int().min(-1).optional(),
     // optional: if omitted, we use TODO_LIST_NAME / default
     listName: z.string().min(1).optional(),
     title: z.string().min(1),

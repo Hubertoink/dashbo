@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { fetchTodos, updateTodo, type TodoItemDto } from '$lib/api';
+  import { fetchTodos, listOutlookConnections, updateTodo, type TodoItemDto } from '$lib/api';
   import TodoModal from '$lib/components/TodoModal.svelte';
 
   export let variant: 'panel' | 'plain' = 'panel';
@@ -22,6 +22,10 @@
   let modalItem: TodoItemDto | null = null;
   let modalListName = '';
   let modalConnectionId: number | null = null;
+
+  const DASHBO_TODO_CONNECTION_ID = -1;
+  const DASHBO_TODO_CONNECTION = { id: DASHBO_TODO_CONNECTION_ID, label: 'Dashbo', color: 'emerald' } as const;
+  let availableConnections: Array<{ id: number; label: string; color?: string }> = [DASHBO_TODO_CONNECTION];
 
   const TODOS_CACHE_KEY = 'dashbo_todos_cache_v1';
   const TODOS_CACHE_TTL_MS = 5 * 60 * 1000;
@@ -94,7 +98,7 @@
     modalMode = 'create';
     modalItem = null;
     modalListName = (listNames && listNames.length > 0 ? listNames[0] : listName) || '';
-    modalConnectionId = visibleItems.length > 0 ? visibleItems[0]!.connectionId : null;
+    modalConnectionId = modalConnections.length > 0 ? modalConnections[0]!.id : null;
     modalOpen = true;
   }
 
@@ -112,8 +116,7 @@
 
   $: modalConnections = Array.from(
     new Map(
-      items
-        .map((i) => ({ id: i.connectionId, label: i.connectionLabel || 'Outlook', color: i.color }))
+      [...availableConnections, ...items.map((i) => ({ id: i.connectionId, label: i.connectionLabel || 'Outlook', color: i.color }))]
         .map((c) => [String(c.id), c])
     ).values()
   ).sort((a, b) => a.label.localeCompare(b.label));
@@ -235,6 +238,22 @@
 
     // Always refresh in background.
     void load(false);
+
+    // Fetch available Outlook accounts (if configured) so the create modal can offer account selection.
+    (async () => {
+      try {
+        const conns = await listOutlookConnections();
+        const mapped = (Array.isArray(conns) ? conns : []).map((c) => ({
+          id: c.id,
+          label: c.displayName || c.email || `Outlook ${c.id}`,
+          color: c.color
+        }));
+        availableConnections = Array.from(new Map([DASHBO_TODO_CONNECTION, ...mapped].map((c) => [String(c.id), c])).values());
+      } catch {
+        availableConnections = [DASHBO_TODO_CONNECTION];
+      }
+    })();
+
     const t = setInterval(() => void load(false), 60_000);
     return () => clearInterval(t);
   });

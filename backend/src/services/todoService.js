@@ -9,6 +9,21 @@ const {
 
 const { getUserSetting } = require('./settingsService');
 
+const DASHBO_TODO_CONNECTION_ID = -1;
+const DASHBO_TODO_CONNECTION_LABEL = 'Dashbo';
+const DASHBO_TODO_CONNECTION_COLOR = 'emerald';
+
+function isoOrNull(v) {
+  if (!v) return null;
+  const d = v instanceof Date ? v : new Date(String(v));
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toISOString();
+}
+
+function dashboListIdFromName(listName) {
+  return `dashbo:${String(listName || '').trim() || getTodoListName()}`;
+}
+
 function parseGraphDateTime(dt) {
   if (!dt) return null;
   const dateTime = dt.dateTime ? String(dt.dateTime) : null;
@@ -218,7 +233,58 @@ async function listTodos({ userId, listNames }) {
   // Ensure Outlook config exists; To Do piggybacks on the same OAuth.
   const cfg = getOutlookConfig({ allowMissing: true });
   const effectiveListNames = normalizeTodoListNames(listNames);
-  if (!cfg) return { listName: effectiveListNames.join(', '), items: [] };
+  const out = [];
+
+  // Always include Dashbo-local todos (works without Outlook).
+  try {
+    const p = getPool();
+    const r = await p.query(
+      `
+      SELECT id, list_name, title, description, start_at, due_at, completed, completed_at, updated_at
+      FROM dashbo_todos
+      WHERE user_id = $1 AND list_name = ANY($2::text[])
+      ORDER BY completed ASC,
+        COALESCE(due_at, 'infinity'::timestamptz) ASC,
+        title ASC,
+        updated_at DESC
+      LIMIT 200;
+      `,
+      [Number(userId), effectiveListNames]
+    );
+
+    for (const row of r.rows || []) {
+      const listName = String(row.list_name || getTodoListName()).trim() || getTodoListName();
+      out.push({
+        connectionId: DASHBO_TODO_CONNECTION_ID,
+        connectionLabel: DASHBO_TODO_CONNECTION_LABEL,
+        color: DASHBO_TODO_CONNECTION_COLOR,
+        listId: dashboListIdFromName(listName),
+        taskId: String(row.id),
+        title: String(row.title || 'Todo'),
+        status: row.completed ? 'completed' : 'notStarted',
+        completed: Boolean(row.completed),
+        startAt: isoOrNull(row.start_at),
+        dueAt: isoOrNull(row.due_at),
+        bodyPreview: row.description != null ? String(row.description).slice(0, 200) : null,
+        updatedAt: isoOrNull(row.updated_at),
+        completedAt: isoOrNull(row.completed_at),
+      });
+    }
+  } catch (e) {
+    console.warn('[todo] dashbo listTodos failed', e?.message);
+  }
+
+  // If Outlook isn't configured, we still return Dashbo-local todos.
+  if (!cfg) {
+    out.sort((a, b) => {
+      if (a.completed !== b.completed) return a.completed ? 1 : -1;
+      const ad = a.dueAt ? new Date(a.dueAt).getTime() : Number.POSITIVE_INFINITY;
+      const bd = b.dueAt ? new Date(b.dueAt).getTime() : Number.POSITIVE_INFINITY;
+      if (ad !== bd) return ad - bd;
+      return a.title.localeCompare(b.title);
+    });
+    return { listName: effectiveListNames.join(', '), items: out };
+  }
 
   // Use multi connections when available; legacy token otherwise.
   const connections = await listOutlookConnections({ userId });
@@ -233,7 +299,7 @@ async function listTodos({ userId, listNames }) {
     return base;
   }
 
-  const out = [];
+  // Use multi connections when available; legacy token otherwise.
 
   async function fetchFor({ connectionId, label, color, accessToken }) {
     for (const listName of effectiveListNames) {
@@ -310,6 +376,82 @@ async function listTodos({ userId, listNames }) {
   return { listName: effectiveListNames.join(', '), items: out };
 }
 
+async function createDashboTodo({ userId, listName, title, description, startAt, dueAt }) {
+  const p = getPool();
+  const effectiveListName = String(listName || '').trim() || getTodoListName();
+  const trimmedTitle = String(title || '').trim();
+  if (!trimmedTitle) {
+    const err = new Error('invalid_title');
+    err.status = 400;
+    throw err;
+  }
+
+  await p.query(
+    `
+    INSERT INTO dashbo_todos (user_id, list_name, title, description, start_at, due_at)
+    VALUES ($1, $2, $3, $4, $5, $6);
+    `,
+    [
+      Number(userId),
+      effectiveListName,
+      trimmedTitle,
+      description == null ? null : String(description),
+      startAt ? new Date(String(startAt)) : null,
+      dueAt ? new Date(String(dueAt)) : null,
+    ]
+  );
+
+  return { ok: true };
+}
+
+async function updateDashboTodo({ userId, taskId, patch }) {
+  const p = getPool();
+  const idNum = Number(taskId);
+  if (!Number.isFinite(idNum) || idNum <= 0) {
+    const err = new Error('not_found');
+    err.status = 404;
+    throw err;
+  }
+
+  const sets = [];
+  const args = [Number(userId), Math.trunc(idNum)];
+
+  function addSet(sql, value) {
+    args.push(value);
+    sets.push(`${sql} = $${args.length}`);
+  }
+
+  if (patch.title != null) addSet('title', String(patch.title));
+  if (patch.description !== undefined) addSet('description', patch.description == null ? null : String(patch.description));
+  if (patch.startAt !== undefined) addSet('start_at', patch.startAt ? new Date(String(patch.startAt)) : null);
+  if (patch.dueAt !== undefined) addSet('due_at', patch.dueAt ? new Date(String(patch.dueAt)) : null);
+  if (patch.status != null) {
+    const s = String(patch.status);
+    const completed = s.toLowerCase() === 'completed';
+    addSet('completed', completed);
+    addSet('completed_at', completed ? new Date() : null);
+  }
+
+  // Nothing to update
+  if (sets.length === 0) return { ok: true };
+
+  sets.push('updated_at = NOW()');
+
+  const q = `
+    UPDATE dashbo_todos
+    SET ${sets.join(', ')}
+    WHERE user_id = $1 AND id = $2;
+  `;
+  const r = await p.query(q, args);
+  if (r.rowCount === 0) {
+    const err = new Error('not_found');
+    err.status = 404;
+    throw err;
+  }
+
+  return { ok: true };
+}
+
 async function createTodoList({ accessToken, listName }) {
   const displayName = String(listName || '').trim() || getTodoListName();
   const { resp, json } = await graphTodoJson({
@@ -333,8 +475,18 @@ async function createTodoList({ accessToken, listName }) {
 }
 
 async function createTodo({ userId, connectionId, listName, title, description, startAt, dueAt }) {
+  if (Number(connectionId) === DASHBO_TODO_CONNECTION_ID) {
+    return createDashboTodo({ userId, listName, title, description, startAt, dueAt });
+  }
+
   const cfg = getOutlookConfig({ allowMissing: true });
-  if (!cfg) throw new Error('outlook_not_configured');
+  if (!cfg) {
+    // Outlook not configured; allow Dashbo-local todos when no explicit Outlook connection requested.
+    if (connectionId == null) {
+      return createDashboTodo({ userId, listName, title, description, startAt, dueAt });
+    }
+    throw new Error('outlook_not_configured');
+  }
 
   const trimmedTitle = String(title || '').trim();
   if (!trimmedTitle) {
@@ -418,7 +570,7 @@ async function createTodo({ userId, connectionId, listName, title, description, 
       const n = Number(s);
       if (!Number.isFinite(n)) return null;
       const i = Math.trunc(n);
-      if (i < 0) return null;
+      if (i < DASHBO_TODO_CONNECTION_ID) return null;
       return i;
     } catch {
       return null;
@@ -432,12 +584,17 @@ async function createTodo({ userId, connectionId, listName, title, description, 
   } else {
     const defaultId = await getDefaultConnectionIdFromSettings();
     const connectionIds = connections.map((c) => Number(c.id)).filter((n) => Number.isFinite(n) && n > 0);
-    const hasDefault = defaultId != null && connectionIds.includes(Number(defaultId));
-    if (hasDefault) {
-      candidateConnectionIds.push(Number(defaultId));
-      candidateConnectionIds.push(...connectionIds.filter((id) => id !== Number(defaultId)));
-    } else {
+    if (defaultId === DASHBO_TODO_CONNECTION_ID) {
+      candidateConnectionIds.push(DASHBO_TODO_CONNECTION_ID);
       candidateConnectionIds.push(...connectionIds);
+    } else {
+      const hasDefault = defaultId != null && connectionIds.includes(Number(defaultId));
+      if (hasDefault) {
+        candidateConnectionIds.push(Number(defaultId));
+        candidateConnectionIds.push(...connectionIds.filter((id) => id !== Number(defaultId)));
+      } else {
+        candidateConnectionIds.push(...connectionIds);
+      }
     }
 
     // Legacy single-token fallback when no multi connections exist.
@@ -447,6 +604,9 @@ async function createTodo({ userId, connectionId, listName, title, description, 
   let lastError = null;
   for (const cid of candidateConnectionIds) {
     try {
+      if (Number(cid) === DASHBO_TODO_CONNECTION_ID) {
+        return createDashboTodo({ userId, listName, title, description, startAt, dueAt });
+      }
       return await tryCreateOnConnection(cid);
     } catch (e) {
       lastError = e;
@@ -460,6 +620,10 @@ async function createTodo({ userId, connectionId, listName, title, description, 
 }
 
 async function updateTodo({ userId, connectionId, listId, taskId, patch }) {
+  if (Number(connectionId) === DASHBO_TODO_CONNECTION_ID) {
+    return updateDashboTodo({ userId, taskId, patch });
+  }
+
   const cfg = getOutlookConfig({ allowMissing: true });
   if (!cfg) throw new Error('outlook_not_configured');
 
@@ -512,4 +676,5 @@ module.exports = {
   createTodo,
   updateTodo,
   getTodoListName,
+  DASHBO_TODO_CONNECTION_ID,
 };

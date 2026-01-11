@@ -69,6 +69,23 @@ async function initDb() {
     );
   `);
 
+  // Dashbo-local ToDos (independent of Outlook)
+  await p.query(`
+    CREATE TABLE IF NOT EXISTS dashbo_todos (
+      id BIGSERIAL PRIMARY KEY,
+      user_id BIGINT NOT NULL,
+      list_name TEXT NOT NULL DEFAULT 'Dashbo',
+      title TEXT NOT NULL,
+      description TEXT,
+      start_at TIMESTAMPTZ,
+      due_at TIMESTAMPTZ,
+      completed BOOLEAN NOT NULL DEFAULT FALSE,
+      completed_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+
   await p.query(`
     CREATE TABLE IF NOT EXISTS tags (
       id BIGSERIAL PRIMARY KEY,
@@ -226,6 +243,34 @@ async function initDb() {
 
   await p.query(`
     CREATE INDEX IF NOT EXISTS users_calendar_id_idx ON users (calendar_id);
+  `);
+
+  // Dashbo-local ToDos: FK + indexes (users table must exist)
+  await p.query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'dashbo_todos_user_id_fkey'
+      ) THEN
+        ALTER TABLE dashbo_todos
+        ADD CONSTRAINT dashbo_todos_user_id_fkey
+        FOREIGN KEY (user_id)
+        REFERENCES users(id)
+        ON DELETE CASCADE;
+      END IF;
+    END $$;
+  `);
+
+  await p.query(`
+    CREATE INDEX IF NOT EXISTS dashbo_todos_user_id_idx ON dashbo_todos (user_id);
+  `);
+
+  await p.query(`
+    CREATE INDEX IF NOT EXISTS dashbo_todos_user_list_idx ON dashbo_todos (user_id, list_name);
+  `);
+
+  await p.query(`
+    CREATE INDEX IF NOT EXISTS dashbo_todos_user_completed_due_idx ON dashbo_todos (user_id, completed, due_at);
   `);
 
   // Tags: bind to user (idempotent migrations) - users table must exist first
