@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onDestroy, tick } from 'svelte';
   import type { NewsFeedId, OutlookConnectionDto, SettingsDto } from '$lib/api';
 
   import DashboardPreview from '$lib/components/DashboardPreview.svelte';
@@ -134,6 +135,42 @@
   const DASHBO_TODO_CONNECTION_ID = -1;
   const DASHBO_TODO_CONNECTION = { id: DASHBO_TODO_CONNECTION_ID, label: 'Dashbo', color: 'emerald' } as const;
   let todoDefaultAccountDropdownOpen = false;
+  let todoDefaultAccountAnchor: HTMLButtonElement | null = null;
+  let todoDefaultAccountMenuStyle = '';
+
+  const TODO_DEFAULT_MENU_MAX_H = 256;
+
+  function updateTodoDefaultAccountMenuPosition() {
+    if (!todoDefaultAccountAnchor) return;
+    const rect = todoDefaultAccountAnchor.getBoundingClientRect();
+
+    const width = Math.max(200, rect.width);
+    const left = Math.min(Math.max(8, rect.left), window.innerWidth - width - 8);
+
+    const preferredTop = rect.bottom + 6;
+    const top = Math.min(preferredTop, window.innerHeight - TODO_DEFAULT_MENU_MAX_H - 8);
+    const safeTop = Math.max(8, top);
+
+    todoDefaultAccountMenuStyle = `top:${safeTop}px;left:${left}px;width:${width}px;max-height:${TODO_DEFAULT_MENU_MAX_H}px;`;
+  }
+
+  async function setTodoDefaultAccountDropdownOpen(next: boolean) {
+    todoDefaultAccountDropdownOpen = next;
+    if (todoDefaultAccountDropdownOpen) {
+      await tick();
+      updateTodoDefaultAccountMenuPosition();
+      window.addEventListener('resize', updateTodoDefaultAccountMenuPosition);
+      window.addEventListener('scroll', updateTodoDefaultAccountMenuPosition, true);
+    } else {
+      window.removeEventListener('resize', updateTodoDefaultAccountMenuPosition);
+      window.removeEventListener('scroll', updateTodoDefaultAccountMenuPosition, true);
+    }
+  }
+
+  onDestroy(() => {
+    window.removeEventListener('resize', updateTodoDefaultAccountMenuPosition);
+    window.removeEventListener('scroll', updateTodoDefaultAccountMenuPosition, true);
+  });
 
   type TodoAccountOption = { id: number | null; label: string; color?: string };
 
@@ -371,7 +408,8 @@
               type="button"
               class="w-full h-9 px-3 rounded-lg bg-white/10 border border-white/10 text-sm text-white/90 flex items-center gap-2 disabled:opacity-50"
               disabled={!authed}
-              on:click={() => (todoDefaultAccountDropdownOpen = !todoDefaultAccountDropdownOpen)}
+              bind:this={todoDefaultAccountAnchor}
+              on:click={() => setTodoDefaultAccountDropdownOpen(!todoDefaultAccountDropdownOpen)}
             >
               <span class={`h-2.5 w-2.5 rounded-full flex-shrink-0 ${selectedTodoDefaultAccount?.id == null ? 'bg-white/30' : connectionColorClass(selectedTodoDefaultAccount?.color)}`}></span>
               <span class="flex-1 text-left truncate">{selectedTodoDefaultAccount?.label ?? 'Konto wählen'}</span>
@@ -379,14 +417,23 @@
             </button>
 
             {#if todoDefaultAccountDropdownOpen}
-              <div class="absolute z-10 mt-1 w-full rounded-lg bg-zinc-800 border border-white/10 shadow-lg overflow-hidden">
+              <div
+                class="fixed inset-0 z-[999]"
+                on:click={() => setTodoDefaultAccountDropdownOpen(false)}
+                aria-hidden="true"
+              ></div>
+
+              <div
+                class="fixed z-[1000] rounded-lg bg-zinc-800 border border-white/10 shadow-lg overflow-auto"
+                style={todoDefaultAccountMenuStyle}
+              >
                 {#each todoDefaultAccountOptions as opt (String(opt.id))}
                   <button
                     type="button"
                     class={`w-full px-3 py-2 flex items-center gap-2 text-sm text-white/90 hover:bg-white/10 transition-colors ${opt.id === todoDefaultConnectionId ? 'bg-white/5' : ''}`}
                     on:click={() => {
                       todoDefaultConnectionId = opt.id;
-                      todoDefaultAccountDropdownOpen = false;
+                      void setTodoDefaultAccountDropdownOpen(false);
                     }}
                   >
                     <span class={`h-2.5 w-2.5 rounded-full flex-shrink-0 ${opt.id == null ? 'bg-white/30' : connectionColorClass(opt.color)}`}></span>
