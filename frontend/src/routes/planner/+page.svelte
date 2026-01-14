@@ -1512,7 +1512,7 @@
                 {#if isSelected}
                   <button
                     type="button"
-                    class="shrink-0 mx-1.5 mb-1.5 h-7 rounded-lg bg-white/5 hover:bg-white/10 text-white/60 hover:text-white text-sm font-medium flex items-center justify-center gap-1 transition-all"
+                    class="shrink-0 mx-2 mt-2 mb-2 h-9 rounded-xl bg-white/6 hover:bg-white/12 text-white/60 hover:text-white text-sm font-medium flex items-center justify-center gap-1 transition-all"
                     aria-label="Termin hinzufügen"
                     on:click={() => openQuickAddForDay(d)}
                   >
