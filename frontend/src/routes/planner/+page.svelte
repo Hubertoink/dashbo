@@ -29,7 +29,7 @@
   } from '$lib/api';
   import { daysForMonthGrid, formatGermanDayLabel, formatMonthTitle, startOfDay, endOfDay, sameDay } from '$lib/date';
 
-  type ViewMode = 'agenda' | 'month';
+  type ViewMode = 'agenda' | 'week' | 'month';
 
   let view: ViewMode = 'agenda';
 
@@ -38,11 +38,14 @@
 
   let agendaLoading = false;
   let monthLoading = false;
+  let weekLoading = false;
   let agendaError: string | null = null;
   let monthError: string | null = null;
+  let weekError: string | null = null;
 
   let agendaEvents: EventDto[] = [];
   let monthEvents: EventDto[] = [];
+  let weekEvents: EventDto[] = [];
 
   // Background (match dashboard setting)
   let backgroundUrl = '/background.jpg';
@@ -276,10 +279,10 @@
   }
 
   async function onEventMutated() {
-    await Promise.all([refreshAgenda(), refreshMonth()]);
+    await Promise.all([refreshAgenda(), refreshWeek(), refreshMonth()]);
   }
 
-  const weekDays = [
+  const weekdayLabelDays = [
     new Date(2024, 0, 1),
     new Date(2024, 0, 2),
     new Date(2024, 0, 3),
@@ -288,6 +291,9 @@
     new Date(2024, 0, 6),
     new Date(2024, 0, 7)
   ];
+
+  // Backwards-compatible alias (older template fragments / tooling diagnostics)
+  const weekDays = weekdayLabelDays;
 
   function addDays(d: Date, delta: number): Date {
     const x = new Date(d);
@@ -409,6 +415,20 @@
     return x;
   }
 
+  function mondayStart(d: Date): Date {
+    const x = startOfLocalDay(d);
+    const offset = (x.getDay() + 6) % 7;
+    x.setDate(x.getDate() - offset);
+    return x;
+  }
+
+  function setView(next: ViewMode) {
+    view = next;
+    if (next === 'month') void refreshMonth();
+    if (next === 'week') void refreshWeek();
+    if (next === 'agenda') void refreshAgenda();
+  }
+
   function eventDayKeys(e: EventDto): string[] {
     const start = startOfLocalDay(new Date(e.startAt));
     const end = e.endAt ? startOfLocalDay(new Date(e.endAt)) : start;
@@ -495,15 +515,103 @@
   function onViewSwipeEnd() {
     if (!viewSwiping) return;
     viewSwiping = false;
-    if (view === 'month' && viewSwipeDeltaX < -VIEW_SWIPE_THRESHOLD) {
-      // Swipe left in month -> go to agenda
-      view = 'agenda';
-    } else if (view === 'agenda' && viewSwipeDeltaX > VIEW_SWIPE_THRESHOLD) {
-      // Swipe right in agenda -> go to month
-      view = 'month';
-      void refreshMonth();
+    // Cycle: month <-> week <-> agenda
+    if (viewSwipeDeltaX < -VIEW_SWIPE_THRESHOLD) {
+      if (view === 'month') setView('week');
+      else if (view === 'week') setView('agenda');
+    } else if (viewSwipeDeltaX > VIEW_SWIPE_THRESHOLD) {
+      if (view === 'agenda') setView('week');
+      else if (view === 'week') setView('month');
     }
     viewSwipeDeltaX = 0;
+  }
+
+  $: weekStart = mondayStart(selectedDate);
+  $: weekEnd = addDays(weekStart, 6);
+  $: weekStripDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
+  $: weekRangeLabel = `${weekStart.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })} – ${weekEnd.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })}`;
+
+  let weekEventsByDay = new Map<string, EventDto[]>();
+  $: {
+    const allowed = new Set(weekStripDays.map((d) => dateKeyLocal(d)));
+    const m = new Map<string, EventDto[]>();
+    for (const e of weekEvents) {
+      for (const k of eventDayKeys(e)) {
+        if (!allowed.has(k)) continue;
+        const arr = m.get(k) ?? [];
+        arr.push(e);
+        m.set(k, arr);
+      }
+    }
+    for (const arr of m.values()) {
+      arr.sort((a, b) => {
+        if (a.allDay && !b.allDay) return -1;
+        if (!a.allDay && b.allDay) return 1;
+        return new Date(a.startAt).getTime() - new Date(b.startAt).getTime();
+      });
+    }
+    weekEventsByDay = m;
+  }
+
+  async function refreshWeek() {
+    weekLoading = true;
+    weekError = null;
+    try {
+      const from = startOfDay(weekStart);
+      const to = endOfDay(weekEnd);
+      const items = await fetchEvents(from, to);
+      weekEvents = items;
+    } catch (err) {
+      weekError = err instanceof Error ? err.message : 'Fehler beim Laden.';
+      weekEvents = [];
+    } finally {
+      weekLoading = false;
+    }
+  }
+
+  function resetQuickAddDefaults(targetDate: Date) {
+    newTitle = '';
+    newLocation = '';
+    newAllDay = false;
+    newStartTime = roundToNextHalfHourTime(new Date());
+    newEndTime = '';
+    newTagIdStr = '';
+    newPersonIds = [];
+    todoText = '';
+    todoSectionOpen = false;
+    createError = null;
+    selectedDate = targetDate;
+    monthAnchor = new Date(targetDate.getFullYear(), targetDate.getMonth(), 1);
+    newDate = toDateInputValue(targetDate);
+    closePopovers();
+  }
+
+  function openQuickAddForDay(d: Date) {
+    resetQuickAddDefaults(d);
+    quickAddOpen = true;
+  }
+
+  let weekAutoScrollKey = '';
+  const weekDayEls = new Map<string, HTMLElement>();
+  function registerWeekDayEl(node: HTMLElement, key: string) {
+    weekDayEls.set(key, node);
+    return {
+      destroy() {
+        weekDayEls.delete(key);
+      }
+    };
+  }
+
+  $: if (view === 'week') {
+    const k = dateKeyLocal(selectedDate);
+    if (weekAutoScrollKey !== k) {
+      weekAutoScrollKey = k;
+      // Wait for DOM to paint the week columns
+      window.setTimeout(() => {
+        const el = weekDayEls.get(k);
+        el?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+      }, 0);
+    }
   }
 
   function eventPersons(e: EventDto): Array<{ id: number; name: string; color: string }> {
@@ -780,6 +888,8 @@
     closePopovers();
     // Refresh agenda in background so it's ready if user switches
     void refreshAgenda();
+    // Prefetch week too so switching is instant
+    void refreshWeek();
   }
 
   // Build a map of suggestions by day key for quick lookup
@@ -993,7 +1103,7 @@
       }
     })();
 
-    void Promise.all([refreshAgenda(), refreshMonth()]);
+    void Promise.all([refreshAgenda(), refreshWeek(), refreshMonth()]);
   });
 
   // Scribble handlers
@@ -1034,7 +1144,7 @@
             'h-9 px-3 rounded-lg text-sm font-medium transition-colors border border-white/10',
             view === 'agenda' ? 'bg-white/20' : 'hover:bg-white/15'
           )}
-          on:click={() => (view = 'agenda')}
+          on:click={() => setView('agenda')}
         >
           Agenda
         </button>
@@ -1042,9 +1152,19 @@
           type="button"
           class={cx(
             'h-9 px-3 rounded-lg text-sm font-medium transition-colors border border-white/10',
+            view === 'week' ? 'bg-white/20' : 'hover:bg-white/15'
+          )}
+          on:click={() => setView('week')}
+        >
+          Woche
+        </button>
+        <button
+          type="button"
+          class={cx(
+            'h-9 px-3 rounded-lg text-sm font-medium transition-colors border border-white/10',
             view === 'month' ? 'bg-white/20' : 'hover:bg-white/15'
           )}
-          on:click={() => (view = 'month')}
+          on:click={() => setView('month')}
         >
           Monat
         </button>
@@ -1297,6 +1417,172 @@
           </div>
         {/if}
       </div>
+    {:else if view === 'week'}
+      <div class="relative z-10" in:fly={{ x: 0, duration: 200 }} out:fade={{ duration: 100 }}>
+        <div class="flex items-center justify-between gap-3 mb-3">
+          <div class="flex items-center gap-2 text-white/85 text-sm">
+            <button
+              type="button"
+              class="h-9 w-9 flex items-center justify-center rounded-lg border border-white/10 hover:bg-white/10"
+              aria-label="Vorherige Woche"
+              title="Vorherige Woche"
+              on:click={() => {
+                selectedDate = addDays(selectedDate, -7);
+                monthAnchor = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1);
+                newDate = toDateInputValue(selectedDate);
+                closePopovers();
+                void refreshWeek();
+              }}
+            >
+              <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" />
+              </svg>
+            </button>
+
+            <div class="min-w-0">{weekRangeLabel}</div>
+
+            <button
+              type="button"
+              class="h-9 w-9 flex items-center justify-center rounded-lg border border-white/10 hover:bg-white/10"
+              aria-label="Nächste Woche"
+              title="Nächste Woche"
+              on:click={() => {
+                selectedDate = addDays(selectedDate, 7);
+                monthAnchor = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1);
+                newDate = toDateInputValue(selectedDate);
+                closePopovers();
+                void refreshWeek();
+              }}
+            >
+              <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
+              </svg>
+            </button>
+          </div>
+
+          <button
+            type="button"
+            class="h-9 px-3 rounded-lg text-sm font-medium border border-white/10 hover:bg-white/10"
+            on:click={() => {
+              const d = new Date();
+              selectedDate = d;
+              monthAnchor = new Date(d.getFullYear(), d.getMonth(), 1);
+              newDate = toDateInputValue(d);
+              closePopovers();
+              void refreshWeek();
+            }}
+          >
+            Heute
+          </button>
+        </div>
+
+        {#if weekError}
+          <div class="text-red-400 text-sm mb-2">{weekError}</div>
+        {/if}
+
+        {#if weekLoading && weekEvents.length === 0}
+          <div class="text-white/60 text-sm">Lade…</div>
+        {:else}
+          {#if weekLoading}
+            <div class="text-white/50 text-xs mb-2">Aktualisiere…</div>
+          {/if}
+
+          <div class={cx('relative', weekLoading && 'opacity-60')}>
+            <div
+              class="-mx-4"
+              style="--dayw: calc((100% - 2 * 0.75rem) / 3);"
+            >
+              <div class="flex gap-3 overflow-x-auto px-4 pb-2 snap-x snap-mandatory scroll-px-4">
+                {#each weekStripDays as d (dateKeyLocal(d))}
+                  {@const k = dateKeyLocal(d)}
+                  {@const isToday = sameDay(d, new Date())}
+                  {@const isSelected = sameDay(d, selectedDate)}
+                  {@const items = weekEventsByDay.get(k) ?? []}
+                  <div class="snap-start" style="flex: 0 0 var(--dayw);" use:registerWeekDayEl={k}>
+                    <div
+                      class={cx(
+                        'bg-white/5 glass border border-white/10 rounded-2xl overflow-hidden shadow-lg',
+                        isSelected && 'border-white/25 ring-1 ring-white/15'
+                      )}
+                    >
+                      <div class="px-3 py-2 border-b border-white/10 flex items-center justify-between gap-2">
+                        <button
+                          type="button"
+                          class="min-w-0 text-left"
+                          on:click={() => {
+                            selectedDate = d;
+                            newDate = toDateInputValue(d);
+                          }}
+                        >
+                          <div class="flex items-center gap-2">
+                            <div class="text-xs font-semibold tracking-wide text-white/75">{formatGermanDayLabel(d)}</div>
+                            <div class="text-sm font-bold text-white/90">{d.getDate()}.</div>
+                            {#if isToday}
+                              <span class="text-[10px] px-2 py-0.5 rounded-full bg-emerald-400/10 text-emerald-200 ring-1 ring-emerald-400/25">Heute</span>
+                            {/if}
+                          </div>
+                        </button>
+
+                        <button
+                          type="button"
+                          class="h-8 w-8 rounded-xl bg-white/10 hover:bg-white/15 active:scale-95 transition grid place-items-center text-white/80"
+                          aria-label="Termin hinzufügen"
+                          title="Termin hinzufügen"
+                          on:click={() => openQuickAddForDay(d)}
+                        >
+                          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                          </svg>
+                        </button>
+                      </div>
+
+                      <div class="px-3 py-3 space-y-2">
+                        {#if items.length === 0}
+                          <div class="text-white/40 text-sm">—</div>
+                        {:else}
+                          {#each items as e (eventKey(e))}
+                            {@const ps = eventPersons(e)}
+                            {@const dot = eventDot(e)}
+                            <button
+                              type="button"
+                              class="w-full text-left rounded-xl hover:bg-white/5 active:bg-white/10 px-2 py-2 -mx-2 transition"
+                              on:click={() => (openEvent = e)}
+                            >
+                              <div class="flex items-start gap-2">
+                                <div class={`mt-1 h-2.5 w-2.5 rounded-full shrink-0 ${dot.cls}`} style={dot.style}></div>
+                                <div class="min-w-0">
+                                  <div class="text-sm font-medium truncate">{e.title}</div>
+                                  <div class="text-xs text-white/55 truncate">
+                                    {#if e.allDay}
+                                      Ganztägig
+                                    {:else}
+                                      {formatTime(new Date(e.startAt))}{e.endAt ? ` – ${formatTime(new Date(e.endAt))}` : ''}
+                                    {/if}
+                                    {#if e.location}
+                                      · {e.location}
+                                    {/if}
+                                  </div>
+                                  {#if ps.length > 0}
+                                    <div class="text-xs mt-0.5 truncate">
+                                      {ps.map((p) => p.name).join(', ')}
+                                    </div>
+                                  {/if}
+                                </div>
+                              </div>
+                            </button>
+                          {/each}
+                        {/if}
+                      </div>
+                    </div>
+                  </div>
+                {/each}
+              </div>
+            </div>
+
+            <div class="mt-2 text-center text-xs text-white/40">← Monat · Woche · Agenda →</div>
+          </div>
+        {/if}
+      </div>
     {:else}
       <div class="bg-white/5 rounded-xl p-3 glass border border-white/10 relative z-10" in:fly={{ x: 30, duration: 200 }} out:fade={{ duration: 100 }}>
         <div class="flex items-center justify-between gap-2 mb-3">
@@ -1320,7 +1606,7 @@
         </div>
 
         <div class="grid grid-cols-7 gap-1 text-[11px] text-white/55 mb-2">
-          {#each weekDays as d (d.toISOString())}
+          {#each weekdayLabelDays as d (d.toISOString())}
             <div class="text-center">{formatGermanDayLabel(d)}</div>
           {/each}
         </div>
@@ -1475,7 +1761,7 @@
             </div>
           {/if}
 
-          <div class="mt-3 text-center text-xs text-white/40">← Nach links wischen für Agenda</div>
+          <div class="mt-3 text-center text-xs text-white/40">← Nach links wischen für Woche</div>
         </div>
       </div>
     {/if}
@@ -1977,66 +2263,99 @@
 
   {#if fabDockOpen}
     <!-- Add Event - flies up from trigger -->
-    <button
-      type="button"
-      class="fixed right-4 z-50 h-14 w-14 rounded-full bg-gradient-to-br from-blue-400 to-indigo-500 shadow-xl flex items-center justify-center hover:scale-105 active:scale-95 transition-transform md:hidden ring-2 ring-blue-300/20"
+    <div
+      class="fixed right-4 z-50 md:hidden flex items-center justify-end gap-3"
       style="bottom: {mobileFabBottom('event')};"
-      aria-label="Neuen Termin erstellen"
-      on:click={() => {
-        clearFabDockTimer();
-        fabDockOpen = false;
-        todoSectionOpen = false;
-        quickAddOpen = true;
-      }}
       in:fly={{ y: mobileFabFlyY('event'), duration: 250 }}
       out:fly={{ y: mobileFabFlyY('event'), duration: 180 }}
     >
-      <svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-        <path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-      </svg>
-    </button>
+      <div class="pointer-events-none select-none px-3 py-2 rounded-full bg-black/55 backdrop-blur-md border border-white/10 shadow-lg text-white/85 text-xs font-semibold tracking-wide">
+        <span class="inline-flex items-center gap-2">
+          <span class="w-2 h-2 rounded-full bg-blue-400 shadow-[0_0_10px_rgba(96,165,250,0.6)]"></span>
+          Termin
+        </span>
+      </div>
+
+      <button
+        type="button"
+        class="h-14 w-14 rounded-full bg-gradient-to-br from-blue-400 to-indigo-500 shadow-xl flex items-center justify-center hover:scale-105 active:scale-95 transition-transform ring-2 ring-blue-300/20"
+        aria-label="Neuen Termin erstellen"
+        on:click={() => {
+          clearFabDockTimer();
+          fabDockOpen = false;
+          todoSectionOpen = false;
+          quickAddOpen = true;
+        }}
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+        </svg>
+      </button>
+    </div>
   {/if}
 
   {#if fabDockOpen && todoEnabled}
     <!-- Add ToDo - appears under the '+' dock, like dashboard -->
-    <button
-      type="button"
-      class="fixed right-4 z-50 h-14 w-14 rounded-full bg-gradient-to-br from-emerald-400 to-teal-500 shadow-xl flex items-center justify-center hover:scale-105 active:scale-95 transition-transform md:hidden ring-2 ring-emerald-300/20"
+    <div
+      class="fixed right-4 z-50 md:hidden flex items-center justify-end gap-3"
       style="bottom: {mobileFabBottom('todo')};"
-      aria-label="ToDo erstellen"
-      on:click={() => {
-        clearFabDockTimer();
-        fabDockOpen = false;
-        openTodoCreateModal();
-      }}
       in:fly={{ y: mobileFabFlyY('todo'), duration: 270, delay: 20 }}
       out:fly={{ y: mobileFabFlyY('todo'), duration: 180 }}
     >
-      <svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-        <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
-      </svg>
-    </button>
+      <div class="pointer-events-none select-none px-3 py-2 rounded-full bg-black/55 backdrop-blur-md border border-white/10 shadow-lg text-white/85 text-xs font-semibold tracking-wide">
+        <span class="inline-flex items-center gap-2">
+          <span class="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.6)]"></span>
+          ToDo
+        </span>
+      </div>
+
+      <button
+        type="button"
+        class="h-14 w-14 rounded-full bg-gradient-to-br from-emerald-400 to-teal-500 shadow-xl flex items-center justify-center hover:scale-105 active:scale-95 transition-transform ring-2 ring-emerald-300/20"
+        aria-label="ToDo erstellen"
+        on:click={() => {
+          clearFabDockTimer();
+          fabDockOpen = false;
+          openTodoCreateModal();
+        }}
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
+        </svg>
+      </button>
+    </div>
   {/if}
 
   <!-- Scribble - separate block so it gets its own transition -->
   {#if fabDockOpen && scribbleEnabled}
-    <button
-      type="button"
-      class="fixed right-4 z-50 h-14 w-14 rounded-full bg-gradient-to-br from-amber-400 to-orange-500 shadow-xl flex items-center justify-center hover:scale-105 active:scale-95 transition-transform md:hidden ring-2 ring-amber-300/20"
+    <div
+      class="fixed right-4 z-50 md:hidden flex items-center justify-end gap-3"
       style="bottom: {mobileFabBottom('scribble')};"
-      aria-label="Scribble Notiz erstellen"
-      on:click={() => {
-        clearFabDockTimer();
-        fabDockOpen = false;
-        scribbleModalOpen = true;
-      }}
       in:fly={{ y: mobileFabFlyY('scribble'), duration: 280, delay: 40 }}
       out:fly={{ y: mobileFabFlyY('scribble'), duration: 180 }}
     >
-      <svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-        <path stroke-linecap="round" stroke-linejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-      </svg>
-    </button>
+      <div class="pointer-events-none select-none px-3 py-2 rounded-full bg-black/55 backdrop-blur-md border border-white/10 shadow-lg text-white/85 text-xs font-semibold tracking-wide">
+        <span class="inline-flex items-center gap-2">
+          <span class="w-2 h-2 rounded-full bg-amber-400 shadow-[0_0_10px_rgba(251,191,36,0.6)]"></span>
+          Notiz
+        </span>
+      </div>
+
+      <button
+        type="button"
+        class="h-14 w-14 rounded-full bg-gradient-to-br from-amber-400 to-orange-500 shadow-xl flex items-center justify-center hover:scale-105 active:scale-95 transition-transform ring-2 ring-amber-300/20"
+        aria-label="Scribble Notiz erstellen"
+        on:click={() => {
+          clearFabDockTimer();
+          fabDockOpen = false;
+          scribbleModalOpen = true;
+        }}
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+        </svg>
+      </button>
+    </div>
   {/if}
 
   <!-- Desktop: keep classic floating add button -->
