@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { EventDto, HolidayDto, TagColorKey } from '$lib/api';
-  import { formatGermanDayLabel, formatGermanShortDate, sameDay, formatMonthTitle } from '$lib/date';
+  import { formatGermanShortDate, sameDay } from '$lib/date';
   import { onDestroy } from 'svelte';
   import { fade, fly } from 'svelte/transition';
 
@@ -8,12 +8,17 @@
   export let events: EventDto[] = [];
   export let holidays: HolidayDto[] = [];
   export let onSelect: (d: Date) => void;
-  export let viewMode: 'month' | 'week' = 'week';
-  export let onSetViewMode: (m: 'month' | 'week') => void;
+  export let viewMode: 'agenda' | 'week' | 'month' = 'week';
+  export let onSetViewMode: (m: 'agenda' | 'week' | 'month') => void;
   export let onEdit: (e: EventDto) => void;
+  export let onCreate: (() => void) | null = null;
+  export let onGoToSettings: (() => void) | null = null;
 
   let editPromptFor: string | null = null;
   let editPromptTimer: ReturnType<typeof setTimeout> | null = null;
+
+  // Slide direction for week animation
+  let slideDirection = 1;
 
   onDestroy(() => {
     if (editPromptTimer) clearTimeout(editPromptTimer);
@@ -108,20 +113,31 @@
 
   function fmtTimeRange(startIso: string, endIso: string | null) {
     const start = fmtTime(startIso);
-    if (endIso) return `${start} - ${fmtTime(endIso)} Uhr`;
-    return `${start} Uhr`;
+    if (endIso) return `${start} – ${fmtTime(endIso)}`;
+    return start;
   }
 
   function shiftWeek(delta: number) {
+    slideDirection = delta > 0 ? 1 : -1;
     const next = new Date(selectedDate);
     next.setDate(selectedDate.getDate() + delta * 7);
     onSelect(next);
   }
 
+  function jumpToToday() {
+    const today = new Date();
+    const currentWeekStart = mondayStart(selectedDate);
+    const todayWeekStart = mondayStart(today);
+    if (currentWeekStart.getTime() !== todayWeekStart.getTime()) {
+      slideDirection = todayWeekStart > currentWeekStart ? 1 : -1;
+    }
+    onSelect(today);
+  }
+
   $: weekStart = mondayStart(selectedDate);
   $: days = buildDays(weekStart);
   $: weekEnd = days[6] ?? new Date(weekStart.getFullYear(), weekStart.getMonth(), weekStart.getDate() + 6);
-  $: monthTitle = formatMonthTitle(selectedDate);
+  $: weekKey = `${weekStart.getFullYear()}-${weekStart.getMonth()}-${weekStart.getDate()}`;
 
   $: eventsByDay = (() => {
     const m = new Map<string, EventDto[]>();
@@ -163,95 +179,173 @@
     }
     return m;
   })();
+
+  // Format short day name (MO, DI, MI...)
+  function shortDayName(d: Date) {
+    return d.toLocaleDateString('de-DE', { weekday: 'short' }).toUpperCase();
+  }
 </script>
 
-<div class="h-full p-4 md:p-6 flex flex-col min-h-0">
-  <div class="flex items-center justify-between gap-4">
-    <div>
-      <div class="flex items-center gap-3">
-        <div class="text-2xl md:text-3xl font-semibold tracking-wide">{monthTitle}</div>
-        <div class="flex items-center gap-2">
-          <button
-            type="button"
-            class={`h-9 w-9 rounded-xl transition-all duration-150 grid place-items-center ${viewMode === 'month' ? 'bg-white/15 text-white' : 'bg-white/5 text-white/60 hover:bg-white/10 hover:text-white/80'}`}
-            aria-label="Monat"
-            on:click={() => onSetViewMode('month')}
-          >
-            <span class="text-xl leading-none">_</span>
-          </button>
-
-          <button
-            type="button"
-            class={`h-9 w-9 rounded-xl transition-all duration-150 grid place-items-center ${viewMode === 'week' ? 'bg-white/15 text-white' : 'bg-white/5 text-white/60 hover:bg-white/10 hover:text-white/80'}`}
-            aria-label="Woche"
-            on:click={() => onSetViewMode('week')}
-          >
-            <span class="text-xl leading-none">|</span>
-          </button>
-        </div>
-      </div>
-
-      <div class="text-white/70 mt-1">
-        {formatGermanShortDate(weekStart)} – {formatGermanShortDate(weekEnd)}
-      </div>
+<div class="h-full flex flex-col min-h-0">
+  <!-- Header -->
+  <div class="shrink-0 px-6 pt-6 pb-4 flex items-center justify-between">
+    <div class="flex items-center gap-3">
+      <div class="text-2xl md:text-3xl font-semibold tracking-wide">Dashbo</div>
     </div>
 
     <div class="flex items-center gap-2">
-      <button class="h-10 px-3 rounded-xl bg-white/10 hover:bg-white/15 active:scale-95 transition" type="button" on:click={() => shiftWeek(-1)}>
-        ←
+      <button
+        type="button"
+        class={`h-9 px-4 rounded-full text-sm font-medium transition-all duration-150 ${viewMode === 'agenda' ? 'bg-white/20 text-white' : 'bg-white/5 text-white/60 hover:bg-white/10 hover:text-white/80'}`}
+        on:click={() => onSetViewMode('agenda')}
+      >
+        Agenda
       </button>
-      <button class="h-10 px-3 rounded-xl bg-white/10 hover:bg-white/15 active:scale-95 transition" type="button" on:click={() => shiftWeek(1)}>
-        →
+      <button
+        type="button"
+        class={`h-9 px-4 rounded-full text-sm font-medium transition-all duration-150 ${viewMode === 'week' ? 'bg-white/20 text-white' : 'bg-white/5 text-white/60 hover:bg-white/10 hover:text-white/80'}`}
+        on:click={() => onSetViewMode('week')}
+      >
+        Woche
       </button>
+      <button
+        type="button"
+        class={`h-9 px-4 rounded-full text-sm font-medium transition-all duration-150 ${viewMode === 'month' ? 'bg-white/20 text-white' : 'bg-white/5 text-white/60 hover:bg-white/10 hover:text-white/80'}`}
+        on:click={() => onSetViewMode('month')}
+      >
+        Monat
+      </button>
+      {#if onGoToSettings}
+        <button
+          type="button"
+          class="h-9 w-9 rounded-full bg-white/5 text-white/60 hover:bg-white/10 hover:text-white/80 transition-all duration-150 grid place-items-center ml-2"
+          aria-label="Einstellungen"
+          on:click={onGoToSettings}
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="3"></circle>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+          </svg>
+        </button>
+      {/if}
     </div>
   </div>
 
-  <div class="mt-4 flex-1 min-h-0 grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
-    {#each days as d}
-      {@const isSelected = sameDay(d, selectedDate)}
-      {@const isToday = sameDay(d, new Date())}
-      {@const dayEvents = eventsByDay.get(dateKey(d)) ?? []}
-      {@const dayHolidays = holidaysByDay.get(dateKey(d)) ?? []}
-      <div
-        class={`rounded-2xl border border-white/10 p-3 min-h-0 flex flex-col bg-black/20 transition ${isSelected ? 'bg-white/10' : ''} ${isToday ? 'ring-2 ring-white/20' : ''}`}
+  <!-- Week Navigation -->
+  <div class="shrink-0 px-6 pb-4 flex items-center justify-between">
+    <div class="flex items-center gap-3">
+      <button
+        type="button"
+        class="h-8 w-8 rounded-lg bg-white/5 hover:bg-white/10 active:bg-white/15 text-white/50 hover:text-white/80 transition-all grid place-items-center"
+        aria-label="Vorherige Woche"
+        on:click={() => shiftWeek(-1)}
       >
-        <button
-          type="button"
-          class="flex items-baseline justify-between text-left rounded-xl px-2 py-2 hover:bg-white/5 active:bg-white/10 active:scale-[0.99] transition"
-          on:click={() => onSelect(new Date(d))}
-        >
-          <div class="text-sm font-semibold tracking-wide">{formatGermanDayLabel(d)}</div>
-          <div class="text-sm text-white/70">{d.getDate()}.</div>
-        </button>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M15 18l-6-6 6-6" />
+        </svg>
+      </button>
+      <div class="text-lg font-medium text-white/90">
+        {formatGermanShortDate(weekStart)} – {formatGermanShortDate(weekEnd)}
+      </div>
+      <button
+        type="button"
+        class="h-8 w-8 rounded-lg bg-white/5 hover:bg-white/10 active:bg-white/15 text-white/50 hover:text-white/80 transition-all grid place-items-center"
+        aria-label="Nächste Woche"
+        on:click={() => shiftWeek(1)}
+      >
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M9 18l6-6-6-6" />
+        </svg>
+      </button>
+    </div>
+    <button
+      type="button"
+      class="h-8 px-3 rounded-lg bg-white/5 hover:bg-white/10 text-white/70 hover:text-white text-sm font-medium transition-all"
+      on:click={jumpToToday}
+    >
+      Heute
+    </button>
+  </div>
 
-        <div class="mt-2 px-2 pb-1 flex-1 min-h-0 overflow-y-auto space-y-2">
-          {#if dayEvents.length === 0 && dayHolidays.length === 0}
-            <div class="text-white/50 text-sm">—</div>
-          {:else}
-            {#each dayHolidays as h (h.date + ':' + h.title)}
-              <div class="w-full text-left rounded-xl px-2 py-2 bg-white/0">
-                <div class="flex gap-2">
-                  <div class="mt-1 h-3 w-3 rounded-full border border-white/60 shrink-0"></div>
-                  <div class="min-w-0 flex-1">
-                    <div class="text-sm font-semibold leading-tight truncate">{h.title}</div>
-                    <div class="text-xs text-white/70 leading-tight">Feiertag | Ganztägig</div>
+  <!-- Week Grid - Full Height -->
+  <div class="flex-1 min-h-0 px-4 pb-4 overflow-hidden relative">
+    {#key weekKey}
+    <div 
+      class="h-full grid grid-cols-7 gap-2"
+      in:fly={{ x: slideDirection * 50, duration: 200 }}
+      out:fly|local={{ x: slideDirection * -50, duration: 180 }}
+    >
+      {#each days as d}
+        {@const isSelected = sameDay(d, selectedDate)}
+        {@const isToday = sameDay(d, new Date())}
+        {@const dayEvents = eventsByDay.get(dateKey(d)) ?? []}
+        {@const dayHolidays = holidaysByDay.get(dateKey(d)) ?? []}
+        <div
+          class={`h-full rounded-2xl border border-white/10 flex flex-col bg-black/30 backdrop-blur-sm transition overflow-hidden ${isToday ? 'ring-2 ring-emerald-400/50' : ''}`}
+        >
+          <!-- Day Header -->
+          <button
+            type="button"
+            class={`shrink-0 px-3 py-3 flex flex-col items-center transition-all hover:bg-white/5 ${isSelected ? 'bg-white/10' : ''}`}
+            on:click={() => onSelect(new Date(d))}
+          >
+            <div class="text-xs font-semibold tracking-wider text-white/60">{shortDayName(d)}</div>
+            <div class={`text-2xl font-bold mt-1 ${isToday ? 'text-emerald-400' : ''}`}>{d.getDate()}.</div>
+            {#if isToday}
+              <div class="mt-1 px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 text-[10px] font-semibold tracking-wide">
+                Heute
+              </div>
+            {/if}
+          </button>
+
+          <!-- Add Event Button -->
+          {#if onCreate && isSelected}
+            <button
+              type="button"
+              class="shrink-0 mx-2 mb-2 h-8 rounded-lg bg-white/5 hover:bg-white/10 text-white/60 hover:text-white text-sm font-medium flex items-center justify-center gap-1 transition-all"
+              on:click={onCreate}
+              aria-label="Termin hinzufügen"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="12" y1="5" x2="12" y2="19"></line>
+                <line x1="5" y1="12" x2="19" y2="12"></line>
+              </svg>
+            </button>
+          {/if}
+
+          <!-- Events List -->
+          <div class="flex-1 min-h-0 overflow-y-auto px-2 pb-3 space-y-1.5">
+            {#if dayEvents.length === 0 && dayHolidays.length === 0}
+              <div class="text-white/30 text-sm text-center py-2">—</div>
+            {:else}
+              {#each dayHolidays as h (h.date + ':' + h.title)}
+                <div class="rounded-lg px-2 py-2 bg-white/5">
+                  <div class="flex gap-2 items-start">
+                    <div class="mt-1 h-2.5 w-2.5 rounded-full border border-white/60 shrink-0"></div>
+                    <div class="min-w-0 flex-1">
+                      <div class="text-xs font-semibold leading-tight line-clamp-2">{h.title}</div>
+                    </div>
                   </div>
                 </div>
-              </div>
-            {/each}
-            {#each dayEvents as e (e.occurrenceId ?? `${e.id}:${e.startAt}`)}
+              {/each}
+              {#each dayEvents as e (e.occurrenceId ?? `${e.id}:${e.startAt}`)}
                 {@const k = e.occurrenceId ?? `${e.id}:${e.startAt}`}
                 {@const isPrompt = editPromptFor === k}
                 {@const ps = e.persons && e.persons.length > 0 ? e.persons : e.person ? [e.person] : []}
                 {@const p0 = ps[0]}
                 <button
                   type="button"
-                  class="w-full text-left rounded-xl px-2 py-2 hover:bg-white/5 active:bg-white/10 transition relative overflow-hidden"
+                  class="w-full text-left rounded-lg px-2 py-2 hover:bg-white/10 active:bg-white/15 transition relative overflow-hidden bg-white/5"
                   on:click|stopPropagation={() => requestEdit(e)}
                 >
-                  <div class="flex gap-2">
+                  {#if isPrompt}
+                    <div class="absolute inset-0 z-10 flex items-center justify-center bg-black/60 backdrop-blur-sm rounded-lg" in:fade={{ duration: 120 }} out:fade={{ duration: 100 }}>
+                      <span class="text-xs font-semibold">Bearbeiten?</span>
+                    </div>
+                  {/if}
+                  <div class="flex gap-2 items-start">
                     <div
-                      class={`mt-1 h-3 w-3 rounded-full ${
+                      class={`mt-1 h-2.5 w-2.5 rounded-full shrink-0 ${
                         e.tag
                           ? isHexColor(e.tag.color)
                             ? 'bg-transparent'
@@ -262,34 +356,35 @@
                       }`}
                       style={e.tag && isHexColor(e.tag.color) ? `background-color: ${e.tag.color}` : ''}
                     ></div>
-                    <div class="min-w-0 relative flex-1">
-                      {#if isPrompt}
-                        <div class="absolute left-0 top-0 z-10" in:fly={{ y: -4, duration: 140 }} out:fade={{ duration: 120 }}>
-                          <div class="px-3 py-1.5 rounded-xl bg-black/70 backdrop-blur-md text-sm font-semibold">
-                            Bearbeiten?
-                          </div>
+                    <div class="min-w-0 flex-1">
+                      <div class="text-xs font-semibold leading-tight line-clamp-2">{e.title}</div>
+                      <div class="text-[10px] text-white/60 leading-tight mt-0.5">
+                        {e.allDay ? 'Ganztägig' : fmtTimeRange(e.startAt, e.endAt)}
+                        {#if e.location}<span class="truncate"> · {e.location}</span>{/if}
+                      </div>
+                      {#if ps.length > 0}
+                        <div class="text-[10px] text-white/50 leading-tight mt-0.5 truncate">
+                          {#each ps as p, i (p.id)}{#if i > 0}, {/if}<span class={`${textFg[p.color as TagColorKey] ?? 'text-white/70'} font-medium`}>{p.name}</span>{/each}
                         </div>
                       {/if}
-
-                      <div class={isPrompt ? 'blur-sm' : ''}>
-                        <div class="text-sm font-semibold leading-tight truncate">{e.title}</div>
-                        <div class="text-xs text-white/70 leading-tight">
-                        {e.allDay ? 'Ganztägig' : fmtTimeRange(e.startAt, e.endAt)}
-                        {#if e.location} | {e.location}{/if}
-                        {#if ps.length > 0}
-                          <span>
-                            | {#each ps as p, i (p.id)}{#if i > 0},{/if}<span class={`${textFg[p.color] ?? 'text-white/80'} font-semibold ${i > 0 ? 'pl-0.5' : ''}`}>{p.name}</span>{/each}
-                          </span>
-                        {/if}
-                        </div>
-                      </div>
                     </div>
                   </div>
                 </button>
-            {/each}
-          {/if}
+              {/each}
+            {/if}
+          </div>
         </div>
+      {/each}
+    </div>
+    {/key}
+  </div>
+
+  <!-- Bottom Navigation Hint -->
+  <div class="shrink-0 px-6 py-3 border-t border-white/10 bg-black/20 backdrop-blur-md">
+    <div class="flex items-center justify-center">
+      <div class="text-sm text-white/40">
+        ← Monat · Woche · Agenda →
       </div>
-    {/each}
+    </div>
   </div>
 </div>

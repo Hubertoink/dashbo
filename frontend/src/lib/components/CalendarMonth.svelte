@@ -232,9 +232,6 @@
     return out;
   })();
 
-  let touchStartX: number | null = null;
-  let touchStartY: number | null = null;
-
   // Track slide direction for animation: 1 = forward (right to left), -1 = backward (left to right)
   let slideDirection = 1;
   // Unique key for triggering grid animation
@@ -254,32 +251,9 @@
     const nextSelected = clampDateToMonth(selected, nextAnchor);
     onSelect(nextSelected);
   }
-
-  function onTouchStart(e: TouchEvent) {
-    const t = e.touches[0];
-    touchStartX = t?.clientX ?? null;
-    touchStartY = t?.clientY ?? null;
-  }
-
-  function onTouchEnd(e: TouchEvent) {
-    if (touchStartX == null || touchStartY == null) return;
-    const t = e.changedTouches[0];
-    if (!t) return;
-
-    const dx = t.clientX - touchStartX;
-    const dy = t.clientY - touchStartY;
-    touchStartX = null;
-    touchStartY = null;
-
-    // horizontal swipe (ignore vertical scroll)
-    if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.2) return;
-
-    if (dx < 0) shiftMonth(1);
-    else shiftMonth(-1);
-  }
 </script>
 
-<div class="h-full min-h-0 flex flex-col" on:touchstart={onTouchStart} on:touchend={onTouchEnd}>
+<div class="h-full min-h-0 flex flex-col">
   <div class="relative overflow-hidden">
     <div class="px-8 pt-8 pb-4 opacity-0 pointer-events-none select-none" aria-hidden="true">
       <div class="flex items-center justify-between gap-4">

@@ -495,37 +495,6 @@
   $: selectedDayEvents = monthEventsByDay.get(selectedDayKey) ?? [];
   $: selectedDaySuggestions = monthSuggestionsByDay.get(selectedDayKey) ?? [];
 
-  // View swipe gesture state
-  let viewSwipeStartX = 0;
-  let viewSwipeDeltaX = 0;
-  let viewSwiping = false;
-  const VIEW_SWIPE_THRESHOLD = 80;
-
-  function onViewSwipeStart(e: TouchEvent) {
-    viewSwiping = true;
-    viewSwipeStartX = e.touches[0].clientX;
-    viewSwipeDeltaX = 0;
-  }
-
-  function onViewSwipeMove(e: TouchEvent) {
-    if (!viewSwiping) return;
-    viewSwipeDeltaX = e.touches[0].clientX - viewSwipeStartX;
-  }
-
-  function onViewSwipeEnd() {
-    if (!viewSwiping) return;
-    viewSwiping = false;
-    // Cycle: month <-> week <-> agenda
-    if (viewSwipeDeltaX < -VIEW_SWIPE_THRESHOLD) {
-      if (view === 'month') setView('week');
-      else if (view === 'week') setView('agenda');
-    } else if (viewSwipeDeltaX > VIEW_SWIPE_THRESHOLD) {
-      if (view === 'agenda') setView('week');
-      else if (view === 'week') setView('month');
-    }
-    viewSwipeDeltaX = 0;
-  }
-
   $: weekStart = mondayStart(selectedDate);
   $: weekEnd = addDays(weekStart, 6);
   $: weekStripDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
@@ -1121,7 +1090,7 @@
   }
 </script>
 
-<div class="min-h-screen text-white overflow-hidden relative bg-black">
+<div class="h-screen text-white overflow-hidden relative bg-black flex flex-col">
   <div class="absolute inset-0 overflow-hidden">
     <div
       class="absolute inset-0"
@@ -1130,12 +1099,10 @@
   </div>
 
   <div
-    class="relative z-10 max-w-xl mx-auto px-4 py-4"
-    on:touchstart={onViewSwipeStart}
-    on:touchmove={onViewSwipeMove}
-    on:touchend={onViewSwipeEnd}
+    class="relative z-10 flex-1 flex flex-col min-h-0 max-w-xl mx-auto w-full"
   >
-    <div class="flex items-center justify-between gap-3 mb-3">
+    <!-- Header -->
+    <div class="shrink-0 px-4 pt-4 pb-3 flex items-center justify-between gap-3">
       <div class="text-xl font-semibold tracking-wide">Dashbo</div>
       <div class="flex items-center gap-2">
         <button
@@ -1182,12 +1149,12 @@
     </div>
 
     {#if metaError}
-      <div class="text-red-400 text-sm mb-3">{metaError}</div>
+      <div class="shrink-0 text-red-400 text-sm mb-3 px-4">{metaError}</div>
     {/if}
 
     {#if view === 'agenda'}
-      <div class="relative z-10" in:fly={{ x: -30, duration: 200 }} out:fade={{ duration: 100 }}>
-        <div class="flex items-center justify-between gap-3 mb-3">
+      <div class="flex-1 flex flex-col min-h-0 px-4" in:fly={{ x: -30, duration: 200 }} out:fade={{ duration: 100 }}>
+        <div class="shrink-0 flex items-center justify-between gap-3 mb-3">
           <div class="flex items-center gap-2 text-white/85 text-sm">
             <button
               type="button"
@@ -1207,7 +1174,7 @@
               </svg>
             </button>
 
-            <div class="min-w-0">
+            <div class="min-w-0 font-medium">
               {selectedDate.toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' })}
               –
               {addDays(selectedDate, 6).toLocaleDateString('de-DE', {
@@ -1418,8 +1385,9 @@
         {/if}
       </div>
     {:else if view === 'week'}
-      <div class="relative z-10" in:fly={{ x: 0, duration: 200 }} out:fade={{ duration: 100 }}>
-        <div class="flex items-center justify-between gap-3 mb-3">
+      <div class="flex-1 flex flex-col min-h-0 px-4" in:fly={{ x: 0, duration: 200 }} out:fade={{ duration: 100 }}>
+        <!-- Week Navigation -->
+        <div class="shrink-0 flex items-center justify-between gap-3 mb-3">
           <div class="flex items-center gap-2 text-white/85 text-sm">
             <button
               type="button"
@@ -1439,7 +1407,7 @@
               </svg>
             </button>
 
-            <div class="min-w-0">{weekRangeLabel}</div>
+            <div class="min-w-0 font-medium">{weekRangeLabel}</div>
 
             <button
               type="button"
@@ -1477,114 +1445,110 @@
         </div>
 
         {#if weekError}
-          <div class="text-red-400 text-sm mb-2">{weekError}</div>
+          <div class="shrink-0 text-red-400 text-sm mb-2">{weekError}</div>
         {/if}
 
         {#if weekLoading && weekEvents.length === 0}
-          <div class="text-white/60 text-sm">Lade…</div>
+          <div class="shrink-0 text-white/60 text-sm">Lade…</div>
         {:else}
           {#if weekLoading}
-            <div class="text-white/50 text-xs mb-2">Aktualisiere…</div>
+            <div class="shrink-0 text-white/50 text-xs mb-2">Aktualisiere…</div>
           {/if}
 
-          <div class={cx('relative', weekLoading && 'opacity-60')}>
-            <div
-              class="-mx-4"
-              style="--dayw: calc((100% - 2 * 0.75rem) / 3);"
-            >
-              <div class="flex gap-3 overflow-x-auto px-4 pb-2 snap-x snap-mandatory scroll-px-4">
-                {#each weekStripDays as d (dateKeyLocal(d))}
-                  {@const k = dateKeyLocal(d)}
-                  {@const isToday = sameDay(d, new Date())}
-                  {@const isSelected = sameDay(d, selectedDate)}
-                  {@const items = weekEventsByDay.get(k) ?? []}
-                  <div class="snap-start" style="flex: 0 0 var(--dayw);" use:registerWeekDayEl={k}>
-                    <div
-                      class={cx(
-                        'bg-white/5 glass border border-white/10 rounded-2xl overflow-hidden shadow-lg',
-                        isSelected && 'border-white/25 ring-1 ring-white/15'
-                      )}
-                    >
-                      <div class="px-3 py-2 border-b border-white/10 flex items-center justify-between gap-2">
-                        <button
-                          type="button"
-                          class="min-w-0 text-left"
-                          on:click={() => {
-                            selectedDate = d;
-                            newDate = toDateInputValue(d);
-                          }}
-                        >
-                          <div class="flex items-center gap-2">
-                            <div class="text-xs font-semibold tracking-wide text-white/75">{formatGermanDayLabel(d)}</div>
-                            <div class="text-sm font-bold text-white/90">{d.getDate()}.</div>
-                            {#if isToday}
-                              <span class="text-[10px] px-2 py-0.5 rounded-full bg-emerald-400/10 text-emerald-200 ring-1 ring-emerald-400/25">Heute</span>
+          <!-- Full-height week grid -->
+          <div class={cx('flex-1 min-h-0 grid grid-cols-7 gap-1.5', weekLoading && 'opacity-60')}>
+            {#each weekStripDays as d (dateKeyLocal(d))}
+              {@const k = dateKeyLocal(d)}
+              {@const isToday = sameDay(d, new Date())}
+              {@const isSelected = sameDay(d, selectedDate)}
+              {@const items = weekEventsByDay.get(k) ?? []}
+              <div
+                class={cx(
+                  'h-full flex flex-col rounded-xl border border-white/10 bg-black/30 backdrop-blur-sm overflow-hidden transition',
+                  isToday && 'ring-2 ring-emerald-400/50',
+                  isSelected && 'bg-white/5'
+                )}
+              >
+                <!-- Day Header -->
+                <button
+                  type="button"
+                  class={cx(
+                    'shrink-0 py-2 flex flex-col items-center transition-all hover:bg-white/5',
+                    isSelected && 'bg-white/10'
+                  )}
+                  on:click={() => {
+                    selectedDate = d;
+                    newDate = toDateInputValue(d);
+                  }}
+                >
+                  <div class="text-[10px] font-semibold tracking-wider text-white/60">{formatGermanDayLabel(d).toUpperCase()}</div>
+                  <div class={cx('text-lg font-bold mt-0.5', isToday ? 'text-emerald-400' : '')}>
+                    {d.getDate()}.
+                  </div>
+                  {#if isToday}
+                    <div class="mt-0.5 px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 text-[8px] font-semibold tracking-wide">
+                      Heute
+                    </div>
+                  {/if}
+                </button>
+
+                <!-- Add button (on selected day) -->
+                {#if isSelected}
+                  <button
+                    type="button"
+                    class="shrink-0 mx-1.5 mb-1.5 h-7 rounded-lg bg-white/5 hover:bg-white/10 text-white/60 hover:text-white text-sm font-medium flex items-center justify-center gap-1 transition-all"
+                    aria-label="Termin hinzufügen"
+                    on:click={() => openQuickAddForDay(d)}
+                  >
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4" />
+                    </svg>
+                  </button>
+                {/if}
+
+                <!-- Events List -->
+                <div class="flex-1 min-h-0 overflow-y-auto px-1.5 pb-2 space-y-1">
+                  {#if items.length === 0}
+                    <div class="text-white/30 text-xs text-center py-1">—</div>
+                  {:else}
+                    {#each items as e (eventKey(e))}
+                      {@const ps = eventPersons(e)}
+                      {@const dot = eventDot(e)}
+                      <button
+                        type="button"
+                        class="w-full text-left rounded-lg hover:bg-white/10 active:bg-white/15 px-1.5 py-1.5 transition bg-white/5"
+                        on:click={() => (openEvent = e)}
+                      >
+                        <div class="flex items-start gap-1.5">
+                          <div class={`mt-0.5 h-2 w-2 rounded-full shrink-0 ${dot.cls}`} style={dot.style}></div>
+                          <div class="min-w-0 flex-1">
+                            <div class="text-[11px] font-semibold leading-tight line-clamp-2">{e.title}</div>
+                            <div class="text-[9px] text-white/55 leading-tight mt-0.5">
+                              {#if e.allDay}
+                                Ganztägig
+                              {:else}
+                                {formatTime(new Date(e.startAt))}{e.endAt ? ` – ${formatTime(new Date(e.endAt))}` : ''}
+                              {/if}
+                            </div>
+                            {#if ps.length > 0}
+                              <div class="text-[9px] text-white/45 mt-0.5 truncate">
+                                {ps.map((p) => p.name).join(', ')}
+                              </div>
                             {/if}
                           </div>
-                        </button>
-
-                        <button
-                          type="button"
-                          class="h-8 w-8 rounded-xl bg-white/10 hover:bg-white/15 active:scale-95 transition grid place-items-center text-white/80"
-                          aria-label="Termin hinzufügen"
-                          title="Termin hinzufügen"
-                          on:click={() => openQuickAddForDay(d)}
-                        >
-                          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
-                          </svg>
-                        </button>
-                      </div>
-
-                      <div class="px-3 py-3 space-y-2">
-                        {#if items.length === 0}
-                          <div class="text-white/40 text-sm">—</div>
-                        {:else}
-                          {#each items as e (eventKey(e))}
-                            {@const ps = eventPersons(e)}
-                            {@const dot = eventDot(e)}
-                            <button
-                              type="button"
-                              class="w-full text-left rounded-xl hover:bg-white/5 active:bg-white/10 px-2 py-2 -mx-2 transition"
-                              on:click={() => (openEvent = e)}
-                            >
-                              <div class="flex items-start gap-2">
-                                <div class={`mt-1 h-2.5 w-2.5 rounded-full shrink-0 ${dot.cls}`} style={dot.style}></div>
-                                <div class="min-w-0">
-                                  <div class="text-sm font-medium truncate">{e.title}</div>
-                                  <div class="text-xs text-white/55 truncate">
-                                    {#if e.allDay}
-                                      Ganztägig
-                                    {:else}
-                                      {formatTime(new Date(e.startAt))}{e.endAt ? ` – ${formatTime(new Date(e.endAt))}` : ''}
-                                    {/if}
-                                    {#if e.location}
-                                      · {e.location}
-                                    {/if}
-                                  </div>
-                                  {#if ps.length > 0}
-                                    <div class="text-xs mt-0.5 truncate">
-                                      {ps.map((p) => p.name).join(', ')}
-                                    </div>
-                                  {/if}
-                                </div>
-                              </div>
-                            </button>
-                          {/each}
-                        {/if}
-                      </div>
-                    </div>
-                  </div>
-                {/each}
+                        </div>
+                      </button>
+                    {/each}
+                  {/if}
+                </div>
               </div>
-            </div>
-
-            <div class="mt-2 text-center text-xs text-white/40">← Monat · Woche · Agenda →</div>
+            {/each}
           </div>
         {/if}
       </div>
     {:else}
-      <div class="bg-white/5 rounded-xl p-3 glass border border-white/10 relative z-10" in:fly={{ x: 30, duration: 200 }} out:fade={{ duration: 100 }}>
+      <div class="flex-1 flex flex-col min-h-0 px-4" in:fly={{ x: 30, duration: 200 }} out:fade={{ duration: 100 }}>
+        <div class="shrink-0 bg-white/5 rounded-xl p-3 glass border border-white/10">
         <div class="flex items-center justify-between gap-2 mb-3">
           <button
             type="button"
@@ -1760,11 +1724,65 @@
               {/each}
             </div>
           {/if}
-
-          <div class="mt-3 text-center text-xs text-white/40">← Nach links wischen für Woche</div>
+        </div>
         </div>
       </div>
     {/if}
+
+    <!-- Bottom Navigation Bar -->
+    <div class="shrink-0 px-4 pb-4 pt-2">
+      <div class="flex items-center justify-center gap-2 py-3 px-4 rounded-2xl bg-black/40 backdrop-blur-md border border-white/10">
+        <button
+          type="button"
+          class={cx(
+            'flex-1 flex flex-col items-center gap-1 py-2 px-3 rounded-xl transition-all',
+            view === 'agenda' ? 'bg-white/15 text-white' : 'text-white/60 hover:text-white hover:bg-white/5'
+          )}
+          on:click={() => setView('agenda')}
+        >
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+          </svg>
+          <span class="text-xs font-medium">Agenda</span>
+        </button>
+        <button
+          type="button"
+          class={cx(
+            'flex-1 flex flex-col items-center gap-1 py-2 px-3 rounded-xl transition-all',
+            view === 'week' ? 'bg-white/15 text-white' : 'text-white/60 hover:text-white hover:bg-white/5'
+          )}
+          on:click={() => setView('week')}
+        >
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+          </svg>
+          <span class="text-xs font-medium">Woche</span>
+        </button>
+        <button
+          type="button"
+          class={cx(
+            'flex-1 flex flex-col items-center gap-1 py-2 px-3 rounded-xl transition-all',
+            view === 'month' ? 'bg-white/15 text-white' : 'text-white/60 hover:text-white hover:bg-white/5'
+          )}
+          on:click={() => setView('month')}
+        >
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+          </svg>
+          <span class="text-xs font-medium">Monat</span>
+        </button>
+        <a
+          href="/settings?from=/planner"
+          class="flex flex-col items-center gap-1 py-2 px-3 rounded-xl text-white/60 hover:text-white hover:bg-white/5 transition-all"
+        >
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+          </svg>
+          <span class="text-xs font-medium">Settings</span>
+        </a>
+      </div>
+    </div>
   </div>
 </div>
 
