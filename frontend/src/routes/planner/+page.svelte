@@ -90,7 +90,9 @@
 
   type MobileFabKey = 'event' | 'todo' | 'scribble';
   const MOBILE_FAB_STEP = '4rem';
-  $: mobileFabBaseBottom = 'calc(1.5rem + env(safe-area-inset-bottom))';
+  // Keep the FAB above the bottom navigation on mobile.
+  const MOBILE_BOTTOM_NAV_GUARD = '6rem';
+  $: mobileFabBaseBottom = `calc(${MOBILE_BOTTOM_NAV_GUARD} + 0.75rem + env(safe-area-inset-bottom))`;
   $: mobileFabOrder = (
     [
       'event',
@@ -103,7 +105,7 @@
     const idx = mobileFabOrder.indexOf(key);
     if (idx < 0) return null;
     // idx=0 is the first action above the trigger button
-    return `calc(1.5rem + env(safe-area-inset-bottom) + ${(idx + 1).toString()} * ${MOBILE_FAB_STEP})`;
+    return `calc(${MOBILE_BOTTOM_NAV_GUARD} + 0.75rem + env(safe-area-inset-bottom) + ${(idx + 1).toString()} * ${MOBILE_FAB_STEP})`;
   }
 
   function mobileFabFlyY(key: MobileFabKey) {
@@ -499,6 +501,17 @@
   $: weekEnd = addDays(weekStart, 6);
   $: weekStripDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
   $: weekRangeLabel = `${weekStart.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })} – ${weekEnd.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })}`;
+
+  type WeekSpan = 3 | 7;
+  let weekSpan: WeekSpan = 7;
+  $: weekNavShiftDays = weekSpan === 7 ? 7 : 3;
+  $: weekVisibleDays =
+    weekSpan === 7 ? weekStripDays : [addDays(selectedDate, -1), selectedDate, addDays(selectedDate, 1)];
+  $: weekVisibleRangeLabel = (() => {
+    const start = weekVisibleDays[0];
+    const end = weekVisibleDays[weekVisibleDays.length - 1];
+    return `${start.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })} – ${end.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })}`;
+  })();
 
   let weekEventsByDay = new Map<string, EventDto[]>();
   $: {
@@ -1105,36 +1118,6 @@
     <div class="shrink-0 px-4 pt-4 pb-3 flex items-center justify-between gap-3">
       <div class="text-xl font-semibold tracking-wide">Dashbo</div>
       <div class="flex items-center gap-2">
-        <button
-          type="button"
-          class={cx(
-            'h-9 px-3 rounded-lg text-sm font-medium transition-colors border border-white/10',
-            view === 'agenda' ? 'bg-white/20' : 'hover:bg-white/15'
-          )}
-          on:click={() => setView('agenda')}
-        >
-          Agenda
-        </button>
-        <button
-          type="button"
-          class={cx(
-            'h-9 px-3 rounded-lg text-sm font-medium transition-colors border border-white/10',
-            view === 'week' ? 'bg-white/20' : 'hover:bg-white/15'
-          )}
-          on:click={() => setView('week')}
-        >
-          Woche
-        </button>
-        <button
-          type="button"
-          class={cx(
-            'h-9 px-3 rounded-lg text-sm font-medium transition-colors border border-white/10',
-            view === 'month' ? 'bg-white/20' : 'hover:bg-white/15'
-          )}
-          on:click={() => setView('month')}
-        >
-          Monat
-        </button>
         <a
           href="/settings?from=/planner"
           class="h-9 w-9 flex items-center justify-center rounded-lg text-sm font-medium transition-colors border border-white/10 hover:bg-white/15"
@@ -1219,19 +1202,20 @@
           </button>
         </div>
 
-        {#if agendaError}
-          <div class="text-red-400 text-sm mb-2">{agendaError}</div>
-        {/if}
-
-        {#if agendaLoading && agendaEvents.length === 0}
-          <div class="text-white/60 text-sm">Lade…</div>
-        {:else}
-          {#if agendaLoading}
-            <div class="text-white/50 text-xs mb-2">Aktualisiere…</div>
+        <div class="flex-1 min-h-0 overflow-y-auto pb-[calc(6.5rem+env(safe-area-inset-bottom))]">
+          {#if agendaError}
+            <div class="text-red-400 text-sm mb-2">{agendaError}</div>
           {/if}
 
-          <div class={cx('space-y-3', agendaLoading && 'opacity-60')}>
-            {#each agendaGroups as g (dateKeyLocal(g.day))}
+          {#if agendaLoading && agendaEvents.length === 0}
+            <div class="text-white/60 text-sm">Lade…</div>
+          {:else}
+            {#if agendaLoading}
+              <div class="text-white/50 text-xs mb-2">Aktualisiere…</div>
+            {/if}
+
+            <div class={cx('space-y-3', agendaLoading && 'opacity-60')}>
+              {#each agendaGroups as g (dateKeyLocal(g.day))}
               {@const isSelected = sameDay(g.day, selectedDate)}
               {@const isToday = sameDay(g.day, new Date())}
               <div
@@ -1381,8 +1365,9 @@
               {/if}
               </div>
             {/each}
-          </div>
-        {/if}
+            </div>
+          {/if}
+        </div>
       </div>
     {:else if view === 'week'}
       <div class="flex-1 flex flex-col min-h-0 px-4" in:fly={{ x: 0, duration: 200 }} out:fade={{ duration: 100 }}>
@@ -1392,10 +1377,10 @@
             <button
               type="button"
               class="h-9 w-9 flex items-center justify-center rounded-lg border border-white/10 hover:bg-white/10"
-              aria-label="Vorherige Woche"
-              title="Vorherige Woche"
+              aria-label={weekSpan === 7 ? 'Vorherige Woche' : 'Vorherige 3 Tage'}
+              title={weekSpan === 7 ? 'Vorherige Woche' : 'Vorherige 3 Tage'}
               on:click={() => {
-                selectedDate = addDays(selectedDate, -7);
+                selectedDate = addDays(selectedDate, -weekNavShiftDays);
                 monthAnchor = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1);
                 newDate = toDateInputValue(selectedDate);
                 closePopovers();
@@ -1407,15 +1392,15 @@
               </svg>
             </button>
 
-            <div class="min-w-0 font-medium">{weekRangeLabel}</div>
+            <div class="min-w-0 font-medium">{weekSpan === 7 ? weekRangeLabel : weekVisibleRangeLabel}</div>
 
             <button
               type="button"
               class="h-9 w-9 flex items-center justify-center rounded-lg border border-white/10 hover:bg-white/10"
-              aria-label="Nächste Woche"
-              title="Nächste Woche"
+              aria-label={weekSpan === 7 ? 'Nächste Woche' : 'Nächste 3 Tage'}
+              title={weekSpan === 7 ? 'Nächste Woche' : 'Nächste 3 Tage'}
               on:click={() => {
-                selectedDate = addDays(selectedDate, 7);
+                selectedDate = addDays(selectedDate, weekNavShiftDays);
                 monthAnchor = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1);
                 newDate = toDateInputValue(selectedDate);
                 closePopovers();
@@ -1428,20 +1413,45 @@
             </button>
           </div>
 
-          <button
-            type="button"
-            class="h-9 px-3 rounded-lg text-sm font-medium border border-white/10 hover:bg-white/10"
-            on:click={() => {
-              const d = new Date();
-              selectedDate = d;
-              monthAnchor = new Date(d.getFullYear(), d.getMonth(), 1);
-              newDate = toDateInputValue(d);
-              closePopovers();
-              void refreshWeek();
-            }}
-          >
-            Heute
-          </button>
+          <div class="flex items-center gap-2">
+            <div class="h-9 p-1 rounded-xl bg-white/5 border border-white/10 flex items-center">
+              <button
+                type="button"
+                class={cx(
+                  'h-7 px-2.5 rounded-lg text-xs font-semibold transition-colors',
+                  weekSpan === 3 ? 'bg-white/15 text-white' : 'text-white/60 hover:text-white hover:bg-white/5'
+                )}
+                on:click={() => (weekSpan = 3)}
+              >
+                3T
+              </button>
+              <button
+                type="button"
+                class={cx(
+                  'h-7 px-2.5 rounded-lg text-xs font-semibold transition-colors',
+                  weekSpan === 7 ? 'bg-white/15 text-white' : 'text-white/60 hover:text-white hover:bg-white/5'
+                )}
+                on:click={() => (weekSpan = 7)}
+              >
+                7T
+              </button>
+            </div>
+
+            <button
+              type="button"
+              class="h-9 px-3 rounded-lg text-sm font-medium border border-white/10 hover:bg-white/10"
+              on:click={() => {
+                const d = new Date();
+                selectedDate = d;
+                monthAnchor = new Date(d.getFullYear(), d.getMonth(), 1);
+                newDate = toDateInputValue(d);
+                closePopovers();
+                void refreshWeek();
+              }}
+            >
+              Heute
+            </button>
+          </div>
         </div>
 
         {#if weekError}
@@ -1456,8 +1466,14 @@
           {/if}
 
           <!-- Full-height week grid -->
-          <div class={cx('flex-1 min-h-0 grid grid-cols-7 gap-1.5', weekLoading && 'opacity-60')}>
-            {#each weekStripDays as d (dateKeyLocal(d))}
+          <div
+            class={cx(
+              'flex-1 min-h-0 grid gap-1.5',
+              weekSpan === 7 ? 'grid-cols-7' : 'grid-cols-3',
+              weekLoading && 'opacity-60'
+            )}
+          >
+            {#each weekVisibleDays as d (dateKeyLocal(d))}
               {@const k = dateKeyLocal(d)}
               {@const isToday = sameDay(d, new Date())}
               {@const isSelected = sameDay(d, selectedDate)}
@@ -1730,13 +1746,15 @@
     {/if}
 
     <!-- Bottom Navigation Bar -->
-    <div class="shrink-0 px-4 pb-4 pt-2">
-      <div class="flex items-center justify-center gap-2 py-3 px-4 rounded-2xl bg-black/40 backdrop-blur-md border border-white/10">
+    <div class="shrink-0 px-4 pt-2 pb-[calc(1rem+env(safe-area-inset-bottom))]">
+      <div class="flex items-center justify-center gap-2 py-2.5 px-3 rounded-3xl bg-black/45 backdrop-blur-xl border border-white/15 shadow-[0_14px_50px_rgba(0,0,0,0.55)]">
         <button
           type="button"
           class={cx(
-            'flex-1 flex flex-col items-center gap-1 py-2 px-3 rounded-xl transition-all',
-            view === 'agenda' ? 'bg-white/15 text-white' : 'text-white/60 hover:text-white hover:bg-white/5'
+            'flex-1 flex flex-col items-center gap-1 py-2 px-2.5 rounded-2xl transition-all',
+            view === 'agenda'
+              ? 'bg-white/15 text-white ring-1 ring-white/10'
+              : 'text-white/60 hover:text-white hover:bg-white/5'
           )}
           on:click={() => setView('agenda')}
         >
@@ -1748,8 +1766,8 @@
         <button
           type="button"
           class={cx(
-            'flex-1 flex flex-col items-center gap-1 py-2 px-3 rounded-xl transition-all',
-            view === 'week' ? 'bg-white/15 text-white' : 'text-white/60 hover:text-white hover:bg-white/5'
+            'flex-1 flex flex-col items-center gap-1 py-2 px-2.5 rounded-2xl transition-all',
+            view === 'week' ? 'bg-white/15 text-white ring-1 ring-white/10' : 'text-white/60 hover:text-white hover:bg-white/5'
           )}
           on:click={() => setView('week')}
         >
@@ -1761,8 +1779,8 @@
         <button
           type="button"
           class={cx(
-            'flex-1 flex flex-col items-center gap-1 py-2 px-3 rounded-xl transition-all',
-            view === 'month' ? 'bg-white/15 text-white' : 'text-white/60 hover:text-white hover:bg-white/5'
+            'flex-1 flex flex-col items-center gap-1 py-2 px-2.5 rounded-2xl transition-all',
+            view === 'month' ? 'bg-white/15 text-white ring-1 ring-white/10' : 'text-white/60 hover:text-white hover:bg-white/5'
           )}
           on:click={() => setView('month')}
         >
@@ -1773,7 +1791,7 @@
         </button>
         <a
           href="/settings?from=/planner"
-          class="flex flex-col items-center gap-1 py-2 px-3 rounded-xl text-white/60 hover:text-white hover:bg-white/5 transition-all"
+          class="flex flex-col items-center gap-1 py-2 px-2.5 rounded-2xl text-white/60 hover:text-white hover:bg-white/5 transition-all"
         >
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
