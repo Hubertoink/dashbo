@@ -24,7 +24,10 @@ const createSchema = z.object({
   recurrence: recurrenceFreq.optional().nullable(),
 });
 
-const updateSchema = createSchema.partial();
+const updateSchema = createSchema.partial().extend({
+  scope: z.enum(['series', 'occurrence']).optional(),
+  occurrenceStartAt: isoDateTime.optional(),
+});
 
 function validateBody(schema) {
   return (req, res, next) => {

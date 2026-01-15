@@ -817,6 +817,71 @@ async function initDb() {
 
   await p.query('CREATE INDEX IF NOT EXISTS events_calendar_id_idx ON events (calendar_id);');
 
+  // Recurring event exceptions (edit/delete single occurrence)
+  await p.query(`
+    CREATE TABLE IF NOT EXISTS event_recurrence_exceptions (
+      id BIGSERIAL PRIMARY KEY,
+      calendar_id BIGINT NOT NULL,
+      event_id BIGINT NOT NULL,
+      occurrence_start_at TIMESTAMPTZ NOT NULL,
+      replacement_event_id BIGINT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE (event_id, occurrence_start_at)
+    );
+  `);
+
+  await p.query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'event_recurrence_exceptions_calendar_id_fkey'
+      ) THEN
+        ALTER TABLE event_recurrence_exceptions
+        ADD CONSTRAINT event_recurrence_exceptions_calendar_id_fkey
+        FOREIGN KEY (calendar_id)
+        REFERENCES calendars(id)
+        ON DELETE CASCADE;
+      END IF;
+    END $$;
+  `);
+
+  await p.query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'event_recurrence_exceptions_event_id_fkey'
+      ) THEN
+        ALTER TABLE event_recurrence_exceptions
+        ADD CONSTRAINT event_recurrence_exceptions_event_id_fkey
+        FOREIGN KEY (event_id)
+        REFERENCES events(id)
+        ON DELETE CASCADE;
+      END IF;
+    END $$;
+  `);
+
+  await p.query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'event_recurrence_exceptions_replacement_event_id_fkey'
+      ) THEN
+        ALTER TABLE event_recurrence_exceptions
+        ADD CONSTRAINT event_recurrence_exceptions_replacement_event_id_fkey
+        FOREIGN KEY (replacement_event_id)
+        REFERENCES events(id)
+        ON DELETE SET NULL;
+      END IF;
+    END $$;
+  `);
+
+  await p.query('CREATE INDEX IF NOT EXISTS event_recurrence_exceptions_calendar_id_idx ON event_recurrence_exceptions (calendar_id);');
+  await p.query('CREATE INDEX IF NOT EXISTS event_recurrence_exceptions_event_id_idx ON event_recurrence_exceptions (event_id);');
+  await p.query(
+    'CREATE INDEX IF NOT EXISTS event_recurrence_exceptions_occurrence_start_at_idx ON event_recurrence_exceptions (occurrence_start_at);'
+  );
+
   await p.query(`
     DO $$
     BEGIN

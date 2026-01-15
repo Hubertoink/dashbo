@@ -22,6 +22,8 @@
   export let onClose: () => void;
   export let onCreated: () => void;
   export let eventToEdit: EventDto | null = null;
+  export let editScope: 'series' | 'occurrence' = 'series';
+  export let occurrenceStartAt: string | null = null;
   export let outlookConnected = false;
   export let todoEnabled = true;
   export let prefill:
@@ -316,7 +318,7 @@
       : eventToEdit.person
         ? [eventToEdit.person.id]
         : []) as number[];
-    recurrence = eventToEdit.recurrence?.freq ?? null;
+    recurrence = editScope === 'occurrence' ? null : (eventToEdit.recurrence?.freq ?? null);
 
     // Do not carry ToDo input between modal opens when editing.
     todoText = '';
@@ -438,7 +440,14 @@
         recurrence
       };
 
-      if (eventToEdit) await updateEvent(eventToEdit.id, payload);
+      if (eventToEdit) {
+        const scope = editScope || 'series';
+        const occ = occurrenceStartAt || eventToEdit.startAt;
+        await updateEvent(eventToEdit.id, {
+          ...payload,
+          ...(scope === 'occurrence' ? { scope, occurrenceStartAt: occ } : { scope: 'series' })
+        });
+      }
       else await createEvent(payload);
 
       // Optional: create ToDos from textarea lines (also allowed when editing)
@@ -520,11 +529,26 @@
     onKeyDown(e);
   }
 
-  async function confirmDelete() {
+  async function deleteSeries() {
     if (!eventToEdit || saving) return;
     saving = true;
     try {
-      await deleteEvent(eventToEdit.id);
+      await deleteEvent(eventToEdit.id, { scope: 'series' });
+      showDeleteConfirm = false;
+      prefilledForEventId = null;
+      onCreated();
+      onClose();
+    } finally {
+      saving = false;
+    }
+  }
+
+  async function deleteOccurrence() {
+    if (!eventToEdit || saving) return;
+    const occ = occurrenceStartAt || eventToEdit.startAt;
+    saving = true;
+    try {
+      await deleteEvent(eventToEdit.id, { scope: 'occurrence', occurrenceStartAt: occ });
       showDeleteConfirm = false;
       prefilledForEventId = null;
       onCreated();
@@ -557,6 +581,7 @@
     transition:fade={{ duration: 200 }}
     on:click|self={onClose}
     role="dialog"
+    tabindex="-1"
     aria-modal="true"
     aria-labelledby="add-event-title"
   >
@@ -570,7 +595,17 @@
       <div class="flex items-center justify-between px-4 py-3 border-b border-white/10 shrink-0">
         <div>
           <h2 id="add-event-title" class="text-lg font-semibold">{eventToEdit ? 'Termin bearbeiten' : 'Neuer Termin'}</h2>
-          <p class="text-sm text-white/60">{dateLabel}</p>
+          <p class="text-sm text-white/60">
+            {dateLabel}
+            {#if eventToEdit && eventToEdit.recurrence?.freq}
+              <span class="ml-2 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs border border-white/10 bg-white/5 text-white/70">
+                {editScope === 'occurrence' ? 'Nur dieses Serienelement' : 'Serie'}
+              </span>
+            {/if}
+          </p>
+          {#if eventToEdit && eventToEdit.recurrence?.freq && editScope !== 'occurrence'}
+            <p class="mt-1 text-xs text-white/45">Änderungen betreffen alle Termine der Serie.</p>
+          {/if}
         </div>
         <div class="flex items-center gap-2">
           {#if eventToEdit}
@@ -606,7 +641,6 @@
             bind:value={title}
             placeholder="Was ist geplant?"
             class="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-lg placeholder:text-white/40 focus:outline-none focus:ring-2 focus:ring-white/30 transition"
-            autofocus
           />
         </div>
 
@@ -673,44 +707,51 @@
         </div>
 
         <!-- Recurrence -->
-        <div class="sm:col-span-2">
-          <div class="text-xs text-white/50 mb-2">Wiederholung</div>
-          <div class="flex flex-wrap gap-2">
-            <button
-              type="button"
-              class={`px-3 py-1.5 rounded-full text-sm font-medium border transition active:scale-95 ${
-                recurrence === null
-                  ? 'bg-white/20 border-white/40 text-white'
-                  : 'bg-white/5 border-white/10 text-white/60 hover:bg-white/10'
-              }`}
-              on:click={() => recurrence = null}
-            >
-              Keine
-            </button>
-            <button
-              type="button"
-              class={`px-3 py-1.5 rounded-full text-sm font-medium border transition active:scale-95 ${
-                recurrence === 'weekly'
-                  ? 'bg-white/20 border-white/40 text-white'
-                  : 'bg-white/5 border-white/10 text-white/60 hover:bg-white/10'
-              }`}
-              on:click={() => recurrence = 'weekly'}
-            >
-              Wöchentlich
-            </button>
-            <button
-              type="button"
-              class={`px-3 py-1.5 rounded-full text-sm font-medium border transition active:scale-95 ${
-                recurrence === 'monthly'
-                  ? 'bg-white/20 border-white/40 text-white'
-                  : 'bg-white/5 border-white/10 text-white/60 hover:bg-white/10'
-              }`}
-              on:click={() => recurrence = 'monthly'}
-            >
-              Monatlich
-            </button>
+        {#if !(eventToEdit && editScope === 'occurrence')}
+          <div class="sm:col-span-2">
+            <div class="text-xs text-white/50 mb-2">Wiederholung</div>
+            <div class="flex flex-wrap gap-2">
+              <button
+                type="button"
+                class={`px-3 py-1.5 rounded-full text-sm font-medium border transition active:scale-95 ${
+                  recurrence === null
+                    ? 'bg-white/20 border-white/40 text-white'
+                    : 'bg-white/5 border-white/10 text-white/60 hover:bg-white/10'
+                }`}
+                on:click={() => recurrence = null}
+              >
+                Keine
+              </button>
+              <button
+                type="button"
+                class={`px-3 py-1.5 rounded-full text-sm font-medium border transition active:scale-95 ${
+                  recurrence === 'weekly'
+                    ? 'bg-white/20 border-white/40 text-white'
+                    : 'bg-white/5 border-white/10 text-white/60 hover:bg-white/10'
+                }`}
+                on:click={() => recurrence = 'weekly'}
+              >
+                Wöchentlich
+              </button>
+              <button
+                type="button"
+                class={`px-3 py-1.5 rounded-full text-sm font-medium border transition active:scale-95 ${
+                  recurrence === 'monthly'
+                    ? 'bg-white/20 border-white/40 text-white'
+                    : 'bg-white/5 border-white/10 text-white/60 hover:bg-white/10'
+                }`}
+                on:click={() => recurrence = 'monthly'}
+              >
+                Monatlich
+              </button>
+            </div>
           </div>
-        </div>
+        {:else}
+          <div class="sm:col-span-2">
+            <div class="text-xs text-white/50 mb-1">Wiederholung</div>
+            <div class="text-sm text-white/70">Dieses Serienelement wird als einzelner Termin gespeichert.</div>
+          </div>
+        {/if}
 
         <!-- Description -->
         <div class="sm:col-span-2">
@@ -955,26 +996,56 @@
           <div class="absolute inset-0 bg-black/70 backdrop-blur-sm" on:click={() => (showDeleteConfirm = false)}></div>
           <div class="relative w-full max-w-sm rounded-2xl bg-neutral-900 border border-white/10 p-5">
             <div class="text-xl font-semibold">Termin löschen?</div>
-            <div class="text-white/70 mt-2 text-sm">Möchtest du diesen Termin wirklich löschen?</div>
+            {#if eventToEdit && eventToEdit.recurrence?.freq}
+              <div class="text-white/70 mt-2 text-sm">Dieser Termin gehört zu einer Serie. Was möchtest du löschen?</div>
+              <div class="mt-5 grid gap-2">
+                <button
+                  type="button"
+                  class="w-full py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-sm font-semibold transition disabled:opacity-50"
+                  on:click={deleteOccurrence}
+                  disabled={saving}
+                >
+                  Nur dieses Serienelement löschen
+                </button>
+                <button
+                  type="button"
+                  class="w-full py-2.5 rounded-xl bg-rose-600/70 hover:bg-rose-600 text-sm font-semibold transition disabled:opacity-50"
+                  on:click={deleteSeries}
+                  disabled={saving}
+                >
+                  Ganze Serie löschen
+                </button>
+                <button
+                  type="button"
+                  class="w-full py-2.5 rounded-xl bg-white/10 hover:bg-white/15 text-sm font-medium transition"
+                  on:click={() => (showDeleteConfirm = false)}
+                  disabled={saving}
+                >
+                  Abbrechen
+                </button>
+              </div>
+            {:else}
+              <div class="text-white/70 mt-2 text-sm">Möchtest du diesen Termin wirklich löschen?</div>
 
-            <div class="mt-5 flex gap-3">
-              <button
-                type="button"
-                class="flex-1 py-2.5 rounded-xl bg-white/10 hover:bg-white/15 text-sm font-medium transition"
-                on:click={() => (showDeleteConfirm = false)}
-                disabled={saving}
-              >
-                Abbrechen
-              </button>
-              <button
-                type="button"
-                class="flex-1 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-sm font-semibold transition"
-                on:click={confirmDelete}
-                disabled={saving}
-              >
-                Löschen
-              </button>
-            </div>
+              <div class="mt-5 flex gap-3">
+                <button
+                  type="button"
+                  class="flex-1 py-2.5 rounded-xl bg-white/10 hover:bg-white/15 text-sm font-medium transition"
+                  on:click={() => (showDeleteConfirm = false)}
+                  disabled={saving}
+                >
+                  Abbrechen
+                </button>
+                <button
+                  type="button"
+                  class="flex-1 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-sm font-semibold transition"
+                  on:click={deleteSeries}
+                  disabled={saving}
+                >
+                  Löschen
+                </button>
+              </div>
+            {/if}
           </div>
         </div>
       {/if}

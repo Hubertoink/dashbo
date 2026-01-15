@@ -14,6 +14,7 @@
   import WeekPlanner from '$lib/components/WeekPlanner.svelte';
   import EventsPanel from '$lib/components/EventsPanel.svelte';
   import AddEventModal from '$lib/components/AddEventModal.svelte';
+  import RecurringEditChoiceModal, { type RecurringEditScope } from '$lib/components/RecurringEditChoiceModal.svelte';
   import {
     fetchEvents,
     fetchHolidays,
@@ -23,6 +24,7 @@
     type EventDto,
     type NewsItemDto,
     type ScribbleDto,
+    type PersonDto,
     type TagColorKey,
     fetchSettings,
     fetchOutlookStatus,
@@ -278,12 +280,19 @@
 
   let showAddEventModal = false;
   let eventToEdit: EventDto | null = null;
+  let editScope: RecurringEditScope = 'series';
+  let editOccurrenceStartAt: string | null = null;
+
+  let recurringEditChoiceOpen = false;
+  let recurringEditChoiceEvent: EventDto | null = null;
   let plannerOpen = false;
   let addEventPrefill: {
     title?: string;
     allDay?: boolean;
     startTime?: string;
     endTime?: string;
+    tagId?: number | null;
+    personIds?: number[];
   } | null = null;
   let addEventPrefillKey: string | null = null;
 
@@ -296,6 +305,8 @@
     addEventPrefill = null;
     addEventPrefillKey = null;
     eventToEdit = null;
+    editScope = 'series';
+    editOccurrenceStartAt = null;
     showAddEventModal = true;
   }
 
@@ -304,7 +315,7 @@
     // keep UI in sync with clicked day
     onSelect(d);
 
-    const ps = s.persons && s.persons.length > 0 ? s.persons : s.person ? [s.person] : [];
+    const ps = (s.persons && s.persons.length > 0 ? s.persons : s.person ? [s.person] : []) as PersonDto[];
     addEventPrefill = {
       title: s.title,
       allDay: Boolean(s.allDay),
@@ -315,6 +326,8 @@
     };
     addEventPrefillKey = s.suggestionKey;
     eventToEdit = null;
+    editScope = 'series';
+    editOccurrenceStartAt = null;
     showAddEventModal = true;
   }
 
@@ -328,10 +341,41 @@
 
   function openEditEventModal(e: EventDto) {
     if (e.source === 'outlook') return;
+
+    // For recurring events, ask whether to edit series or occurrence.
+    if (e.recurrence?.freq) {
+      recurringEditChoiceEvent = e;
+      recurringEditChoiceOpen = true;
+      return;
+    }
+
     // keep UI in sync with the clicked occurrence day
     onSelect(new Date(e.startAt));
     addEventPrefill = null;
     addEventPrefillKey = null;
+    editScope = 'series';
+    editOccurrenceStartAt = null;
+    eventToEdit = e;
+    showAddEventModal = true;
+  }
+
+  function closeRecurringEditChoice() {
+    recurringEditChoiceOpen = false;
+    recurringEditChoiceEvent = null;
+  }
+
+  function chooseRecurringEdit(scope: RecurringEditScope) {
+    const e = recurringEditChoiceEvent;
+    closeRecurringEditChoice();
+    if (!e) return;
+    if (e.source === 'outlook') return;
+
+    // keep UI in sync with the clicked occurrence day
+    onSelect(new Date(e.startAt));
+    addEventPrefill = null;
+    addEventPrefillKey = null;
+    editScope = scope;
+    editOccurrenceStartAt = scope === 'occurrence' ? e.startAt : null;
     eventToEdit = e;
     showAddEventModal = true;
   }
@@ -341,6 +385,8 @@
     eventToEdit = null;
     addEventPrefill = null;
     addEventPrefillKey = null;
+    editScope = 'series';
+    editOccurrenceStartAt = null;
   }
 
   function setViewMode(next: 'month' | 'week') {
@@ -1724,12 +1770,21 @@
     open={showAddEventModal}
     {selectedDate}
     {eventToEdit}
+    {editScope}
+    occurrenceStartAt={editOccurrenceStartAt}
     {outlookConnected}
     {todoEnabled}
     prefill={addEventPrefill}
     prefillKey={addEventPrefillKey}
     onClose={closeAddEventModal}
     onCreated={loadEvents}
+  />
+
+  <RecurringEditChoiceModal
+    open={recurringEditChoiceOpen}
+    title={recurringEditChoiceEvent?.title ?? ''}
+    onChoose={chooseRecurringEdit}
+    onClose={closeRecurringEditChoice}
   />
 
   <!-- Week Planner Overlay -->

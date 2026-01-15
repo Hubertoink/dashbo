@@ -1,9 +1,23 @@
+<script context="module" lang="ts">
+  export type DashboardSuggestionDto = {
+    suggestionKey: string;
+    title: string;
+    date: Date;
+    allDay: boolean;
+    startTime?: string; // HH:MM (local)
+    endTime?: string; // HH:MM (local)
+    tag?: import('$lib/api').EventDto['tag'];
+    person?: import('$lib/api').EventDto['person'];
+    persons?: import('$lib/api').EventDto['persons'];
+  };
+</script>
+
 <script lang="ts">
   import { daysForMonthGrid, formatGermanDayLabel, formatMonthTitle, sameDay } from '$lib/date';
   import type { EventDto, HolidayDto, TagColorKey } from '$lib/api';
   import { fade, fly } from 'svelte/transition';
 
-  export type DashboardSuggestionDto = {
+  type DashboardSuggestionDto = {
     suggestionKey: string;
     title: string;
     date: Date;
@@ -29,6 +43,11 @@
   export let upcomingMode: boolean = false;
   export let onToggleUpcoming: () => void;
   export let onOpenPlanner: (() => void) | null = null;
+
+  // Keep public props referenced even if the current template variant doesn't use them.
+  $: void onAcceptSuggestion;
+  $: void viewMode;
+  $: void onSetViewMode;
 
   const dotBg: Record<TagColorKey, string> = {
     fuchsia: 'bg-fuchsia-500',

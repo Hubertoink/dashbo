@@ -3,6 +3,8 @@ const {
   listEventsBetween,
   insertEvent,
   patchEvent,
+  patchEventOccurrence,
+  removeEventOccurrence,
   removeEvent,
 } = require('../services/eventsService');
 
@@ -73,7 +75,23 @@ async function updateEvent(req, res) {
   }
 
   try {
-    const updated = await patchEvent({ calendarId, userId, id: parsedId.data, patch: req.validatedBody });
+    const body = req.validatedBody || {};
+    const scope = body.scope === 'occurrence' ? 'occurrence' : 'series';
+    const occurrenceStartAt = body.occurrenceStartAt ? new Date(String(body.occurrenceStartAt)) : null;
+
+    // Strip meta fields from the patch payload.
+    const { scope: _scope, occurrenceStartAt: _occurrenceStartAt, ...patch } = body;
+
+    const updated =
+      scope === 'occurrence'
+        ? await patchEventOccurrence({
+            calendarId,
+            userId,
+            id: parsedId.data,
+            occurrenceStartAt,
+            patch,
+          })
+        : await patchEvent({ calendarId, userId, id: parsedId.data, patch });
     if (!updated) return res.status(404).json({ error: 'not_found' });
     res.json(updated);
   } catch (e) {
@@ -93,7 +111,13 @@ async function deleteEvent(req, res) {
     return res.status(400).json({ error: 'missing_calendar' });
   }
 
-  const ok = await removeEvent({ calendarId, id: parsedId.data });
+  const scope = req.query?.scope === 'occurrence' ? 'occurrence' : 'series';
+  const occurrenceStartAt = req.query?.occurrenceStartAt ? new Date(String(req.query.occurrenceStartAt)) : null;
+
+  const ok =
+    scope === 'occurrence'
+      ? await removeEventOccurrence({ calendarId, id: parsedId.data, occurrenceStartAt })
+      : await removeEvent({ calendarId, id: parsedId.data });
   if (!ok) return res.status(404).json({ error: 'not_found' });
   res.status(204).end();
 }
