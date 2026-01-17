@@ -274,16 +274,16 @@
 
 <div class="h-full min-h-0 flex flex-col">
   <div class="relative overflow-hidden">
-    <div class="px-8 pt-8 pb-4 opacity-0 pointer-events-none select-none" aria-hidden="true">
+    <div class="px-4 lg:px-8 pt-6 lg:pt-8 pb-3 lg:pb-4 opacity-0 pointer-events-none select-none" aria-hidden="true">
       <div class="flex items-center justify-between gap-4">
-        <div class="text-4xl font-semibold tracking-wide">{monthTitle}</div>
+        <div class="text-3xl lg:text-4xl font-semibold tracking-wide">{monthTitle}</div>
         <div class="h-9 w-9"></div>
       </div>
     </div>
 
     {#key monthTitle}
       <div
-        class="absolute inset-0 px-8 pt-8 pb-4"
+        class="absolute inset-0 px-4 lg:px-8 pt-6 lg:pt-8 pb-3 lg:pb-4"
         in:fly={{ x: slideDirection * 40, duration: 180 }}
         out:fly|local={{ x: slideDirection * -40, duration: 180 }}
       >
@@ -309,7 +309,7 @@
 
           <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
           <div
-            class="text-4xl font-semibold tracking-wide cursor-pointer select-none"
+            class="text-3xl lg:text-4xl font-semibold tracking-wide cursor-pointer select-none"
             aria-label="Zum aktuellen Monat"
             title="Zum aktuellen Monat"
             on:click={() => onJumpToToday?.()}
@@ -378,24 +378,24 @@
   {/key}
   </div>
 
-  <div class="px-8">
-    <div class="grid grid-cols-7 gap-4 text-white/70">
+  <div class="px-4 lg:px-8">
+    <div class="grid grid-cols-7 gap-2 lg:gap-4 text-white/70">
       {#each weekDays as d}
-        <div class="px-3 text-sm md:text-base font-semibold">{formatGermanDayLabel(d)}</div>
+        <div class="px-1.5 lg:px-3 text-xs lg:text-base font-semibold">{formatGermanDayLabel(d)}</div>
       {/each}
     </div>
   </div>
 
-  <div class="px-8 pt-4 flex-1 min-h-0 overflow-hidden relative">
+  <div class="px-4 lg:px-8 pt-3 lg:pt-4 flex-1 min-h-0 overflow-hidden relative">
     {#key monthKey}
     <div
-      class="absolute inset-0 h-full min-h-0 grid grid-rows-6 gap-4"
+      class="absolute inset-0 h-full min-h-0 grid grid-rows-6 gap-2 lg:gap-4"
       in:fly={{ x: slideDirection * 50, duration: 200 }}
       out:fly|local={{ x: slideDirection * -50, duration: 180 }}
     >
       {#each weeks as week, wi}
         <div class="relative min-h-0">
-          <div class="relative z-10 grid grid-cols-7 gap-4 h-full">
+          <div class="relative z-10 grid grid-cols-7 gap-2 lg:gap-4 h-full">
             {#each week as d}
               {@const isSelected = sameDay(d, selected)}
               {@const inMonth = d.getMonth() === monthAnchor.getMonth()}
@@ -408,7 +408,7 @@
 
               <button
                 type="button"
-                class={`relative h-full min-h-[58px] md:min-h-[72px] rounded-2xl text-left px-3 py-2 transition
+                class={`relative h-full min-h-[58px] lg:min-h-[72px] rounded-xl lg:rounded-2xl text-left px-2 lg:px-3 py-1.5 lg:py-2 transition
                   ${inMonth ? 'text-white' : 'text-white/35'}
                   ${isSelected ? 'bg-white/15' : 'bg-white/0 hover:bg-white/10 active:bg-white/15'}
                   ${isToday ? 'ring-2 ring-inset ring-white/30' : ''}
@@ -416,14 +416,14 @@
                 `}
                 on:click={() => onSelect(new Date(d))}
               >
-                <div class="absolute left-3 top-2 text-2xl md:text-3xl font-semibold leading-none">{d.getDate()}</div>
+                <div class="absolute left-2 lg:left-3 top-1.5 lg:top-2 text-xl lg:text-3xl font-semibold leading-none">{d.getDate()}</div>
 
-                <div class="pt-8 md:pt-10 pr-7 md:pr-8">
+                <div class="pt-7 lg:pt-10 pr-5 lg:pr-8">
                   {#if singleDayEvents.length > 0}
                     {@const ev0 = singleDayEvents[0]}
                     {@const p0 = (ev0.persons && ev0.persons.length > 0 ? ev0.persons[0] : ev0.person) ?? null}
                     <div
-                      class={`text-xs md:text-sm font-semibold leading-tight line-clamp-2 whitespace-normal break-words ${
+                      class={`text-[10px] lg:text-sm font-semibold leading-tight line-clamp-2 whitespace-normal break-words ${
                         ev0.tag
                           ? isTagColorKey(ev0.tag.color)
                             ? textFg[ev0.tag.color]
@@ -436,18 +436,18 @@
                       {ev0.title}
                     </div>
                   {:else if dayHolidays.length > 0}
-                    <div class="text-xs md:text-sm font-semibold leading-tight line-clamp-2 whitespace-normal break-words text-white/70">{dayHolidays[0]?.title}</div>
+                    <div class="text-[10px] lg:text-sm font-semibold leading-tight line-clamp-2 whitespace-normal break-words text-white/70">{dayHolidays[0]?.title}</div>
                   {/if}
                 </div>
                 {#if singleDayEvents.length > 0 || dayHolidays.length > 0 || daySuggestions.length > 0}
-                  <div class="absolute right-4 bottom-3 flex flex-col items-end gap-1">
+                  <div class="absolute right-2 lg:right-4 bottom-2 lg:bottom-3 flex flex-col items-end gap-0.5 lg:gap-1">
                     {#if dayHolidays.length > 0}
-                      <div class="h-2.5 w-2.5 rounded-full border border-white/60 bg-white/0"></div>
+                      <div class="h-2 w-2 lg:h-2.5 lg:w-2.5 rounded-full border border-white/60 bg-white/0"></div>
                     {/if}
                     {#each singleDayEvents.slice(0, maxEventDots) as ev (ev.occurrenceId ?? `${ev.id}:${ev.startAt}`)}
                       {@const p0 = (ev.persons && ev.persons.length > 0 ? ev.persons[0] : ev.person) ?? null}
                       <div
-                        class={`h-2.5 w-2.5 rounded-full ${
+                        class={`h-2 w-2 lg:h-2.5 lg:w-2.5 rounded-full ${
                           ev.tag
                             ? isHexColor(ev.tag.color)
                               ? 'bg-transparent'
@@ -461,7 +461,7 @@
                     {/each}
                     {#each daySuggestions.slice(0, 1) as sg (sg.suggestionKey)}
                       <div
-                        class="h-2.5 w-2.5 rounded-full border border-dashed border-violet-400/60 bg-violet-500/30"
+                        class="h-2 w-2 lg:h-2.5 lg:w-2.5 rounded-full border border-dashed border-violet-400/60 bg-violet-500/30"
                         title="Vorschlag: {sg.title}"
                       ></div>
                     {/each}
@@ -473,11 +473,11 @@
 
           <!-- Multi-day bars (up to 2 lanes) - positioned above day number -->
           {#if (weekSegments[wi]?.[0]?.length ?? 0) > 0}
-            <div class="pointer-events-none absolute inset-x-0 top-[4px] md:top-[6px] px-8 z-0">
-              <div class="grid grid-cols-7 gap-4">
+            <div class="pointer-events-none absolute inset-x-0 top-[3px] lg:top-[6px] px-4 lg:px-8 z-0">
+              <div class="grid grid-cols-7 gap-2 lg:gap-4">
                 {#each weekSegments[wi]?.[0] ?? [] as seg (seg.key)}
                   <div
-                    class={`h-1.5 rounded-full ${seg.colorClass} opacity-70`}
+                    class={`h-1 lg:h-1.5 rounded-full ${seg.colorClass} opacity-70`}
                     style={`grid-column: ${seg.startCol} / ${seg.endCol + 1}; ${seg.colorStyle ?? ''}`}
                   ></div>
                 {/each}
@@ -486,11 +486,11 @@
           {/if}
 
           {#if (weekSegments[wi]?.[1]?.length ?? 0) > 0}
-            <div class="pointer-events-none absolute inset-x-0 top-[10px] md:top-[13px] px-8 z-0">
-              <div class="grid grid-cols-7 gap-4">
+            <div class="pointer-events-none absolute inset-x-0 top-[8px] lg:top-[13px] px-4 lg:px-8 z-0">
+              <div class="grid grid-cols-7 gap-2 lg:gap-4">
                 {#each weekSegments[wi]?.[1] ?? [] as seg (seg.key)}
                   <div
-                    class={`h-1.5 rounded-full ${seg.colorClass} opacity-60`}
+                    class={`h-1 lg:h-1.5 rounded-full ${seg.colorClass} opacity-60`}
                     style={`grid-column: ${seg.startCol} / ${seg.endCol + 1}; ${seg.colorStyle ?? ''}`}
                   ></div>
                 {/each}

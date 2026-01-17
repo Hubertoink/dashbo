@@ -1175,40 +1175,40 @@
   <div class="relative z-10 flex h-screen overflow-hidden items-stretch">
     <!-- Left: weather + ToDo + clock -->
     {#if !upcomingMode}
-      <div class="w-[34%] min-w-[320px] hidden md:flex flex-col p-10 h-screen">
+      <div class="w-[30%] lg:w-[34%] min-w-[260px] lg:min-w-[320px] hidden md:flex flex-col p-6 lg:p-10 h-screen">
         <div class="text-white"><WeatherWidget tone="light" /></div>
 
         {#if expandedWidget === 'todo'}
           <!-- Expanded To-Do takes all space between weather and clock -->
-          <div class="mt-6 pb-8 text-white flex-1 flex flex-col min-h-0" transition:slide={{ duration: 300 }}>
+          <div class="mt-4 lg:mt-6 pb-6 lg:pb-8 text-white flex-1 flex flex-col min-h-0" transition:slide={{ duration: 300 }}>
             <TodoWidget expanded={true} onToggleExpand={() => expandedWidget = null} />
           </div>
         {:else if expandedWidget === 'news'}
           <!-- Expanded News takes all space between weather and clock -->
-          <div class="mt-6 pb-8 text-white flex-1 flex flex-col min-h-0" transition:slide={{ duration: 300 }}>
+          <div class="mt-4 lg:mt-6 pb-6 lg:pb-8 text-white flex-1 flex flex-col min-h-0" transition:slide={{ duration: 300 }}>
             <ZeitNewsWidget expanded={true} onToggleExpand={() => expandedWidget = null} />
           </div>
         {:else if expandedWidget === 'scribble'}
           <!-- Expanded Scribble takes all space between weather and clock -->
-          <div class="mt-6 pb-8 text-white flex-1 flex flex-col min-h-0" transition:slide={{ duration: 300 }}>
+          <div class="mt-4 lg:mt-6 pb-6 lg:pb-8 text-white flex-1 flex flex-col min-h-0" transition:slide={{ duration: 300 }}>
             <ScribbleWidget expanded={true} rotationSeconds={scribbleStandbySeconds} onToggleExpand={() => expandedWidget = null} />
           </div>
         {:else}
           <!-- Normal layout with all widgets -->
           {#if todoEnabled}
-            <div class="mt-6 {compactWidgets ? 'pb-4' : 'pb-8'} text-white" transition:slide={{ duration: 300 }}>
+            <div class="mt-4 lg:mt-6 {compactWidgets ? 'pb-3 lg:pb-4' : 'pb-6 lg:pb-8'} text-white" transition:slide={{ duration: 300 }}>
               <TodoWidget compact={compactWidgets} onToggleExpand={() => expandedWidget = 'todo'} />
             </div>
           {/if}
 
           {#if newsEnabled}
-            <div class="mt-2 {compactWidgets ? 'pb-4' : 'pb-8'} text-white" transition:slide={{ duration: 300 }}>
+            <div class="mt-2 {compactWidgets ? 'pb-3 lg:pb-4' : 'pb-6 lg:pb-8'} text-white" transition:slide={{ duration: 300 }}>
               <ZeitNewsWidget compact={compactWidgets} onToggleExpand={() => expandedWidget = 'news'} />
             </div>
           {/if}
 
           {#if scribbleEnabled}
-            <div class="mt-2 {compactWidgets ? 'pb-3' : 'pb-6'} text-white" transition:slide={{ duration: 300 }}>
+            <div class="mt-2 {compactWidgets ? 'pb-2 lg:pb-3' : 'pb-4 lg:pb-6'} text-white" transition:slide={{ duration: 300 }}>
               <ScribbleWidget compact={compactWidgets} rotationSeconds={scribbleStandbySeconds} onToggleExpand={() => expandedWidget = 'scribble'} />
             </div>
           {/if}
