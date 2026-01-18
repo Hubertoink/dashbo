@@ -1,4 +1,4 @@
-# DashbO
+ # DashbO
 
 DashbO ist ein Touchscreen‑optimiertes Familien‑Dashboard mit Kalender, Aufgabenliste und Wetter. Es ist als Self‑Hosted Web‑App gedacht und läuft standardmäßig als Docker‑Compose Stack aus **Postgres + Node/Express Backend + nginx Frontend**.
 

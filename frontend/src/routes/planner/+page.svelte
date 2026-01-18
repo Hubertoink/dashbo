@@ -515,7 +515,8 @@
 
   let weekEventsByDay = new Map<string, EventDto[]>();
   $: {
-    const allowed = new Set(weekStripDays.map((d) => dateKeyLocal(d)));
+    // Use weekVisibleDays to support both 7-day and 3-day views correctly
+    const allowed = new Set(weekVisibleDays.map((d) => dateKeyLocal(d)));
     const m = new Map<string, EventDto[]>();
     for (const e of weekEvents) {
       for (const k of eventDayKeys(e)) {
@@ -539,8 +540,19 @@
     weekLoading = true;
     weekError = null;
     try {
-      const from = startOfDay(weekStart);
-      const to = endOfDay(weekEnd);
+      // Calculate range directly from selectedDate to avoid race condition with reactive variables
+      let from: Date;
+      let to: Date;
+      if (weekSpan === 3) {
+        // 3-day view: selectedDate - 1 to selectedDate + 1
+        from = startOfDay(addDays(selectedDate, -1));
+        to = endOfDay(addDays(selectedDate, 1));
+      } else {
+        // 7-day view: Monday to Sunday of the week containing selectedDate
+        const ws = mondayStart(selectedDate);
+        from = startOfDay(ws);
+        to = endOfDay(addDays(ws, 6));
+      }
       const items = await fetchEvents(from, to);
       weekEvents = items;
     } catch (err) {
@@ -1421,7 +1433,12 @@
                   'h-7 px-2.5 rounded-lg text-xs font-semibold transition-colors',
                   weekSpan === 3 ? 'bg-white/15 text-white' : 'text-white/60 hover:text-white hover:bg-white/5'
                 )}
-                on:click={() => (weekSpan = 3)}
+                on:click={() => {
+                  if (weekSpan !== 3) {
+                    weekSpan = 3;
+                    void refreshWeek();
+                  }
+                }}
               >
                 3T
               </button>
@@ -1431,7 +1448,12 @@
                   'h-7 px-2.5 rounded-lg text-xs font-semibold transition-colors',
                   weekSpan === 7 ? 'bg-white/15 text-white' : 'text-white/60 hover:text-white hover:bg-white/5'
                 )}
-                on:click={() => (weekSpan = 7)}
+                on:click={() => {
+                  if (weekSpan !== 7) {
+                    weekSpan = 7;
+                    void refreshWeek();
+                  }
+                }}
               >
                 7T
               </button>
