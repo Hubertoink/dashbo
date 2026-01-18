@@ -279,13 +279,27 @@ export async function updateEvent(
     personId?: number | null;
     personIds?: number[] | null;
     recurrence?: 'weekly' | 'monthly' | null;
+    scope?: 'series' | 'occurrence';
+    occurrenceStartAt?: string;
   }
 ): Promise<EventDto> {
   return api<EventDto>(`/events/${id}`, { method: 'PUT', body: JSON.stringify(patch) });
 }
 
-export async function deleteEvent(id: number): Promise<void> {
-  await api<void>(`/events/${id}`, { method: 'DELETE' });
+export async function deleteEvent(
+  id: number,
+  opts?: {
+    scope?: 'series' | 'occurrence';
+    occurrenceStartAt?: string;
+  }
+): Promise<void> {
+  const scope = opts?.scope;
+  const occurrenceStartAt = opts?.occurrenceStartAt;
+  const qs = new URLSearchParams();
+  if (scope) qs.set('scope', scope);
+  if (occurrenceStartAt) qs.set('occurrenceStartAt', occurrenceStartAt);
+  const suffix = qs.toString() ? `?${qs.toString()}` : '';
+  await api<void>(`/events/${id}${suffix}`, { method: 'DELETE' });
 }
 
 export async function listTags(): Promise<TagDto[]> {

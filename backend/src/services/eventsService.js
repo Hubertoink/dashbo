@@ -122,7 +122,7 @@ function addMonthsUtcKeepingTime(base, monthsToAdd) {
   return new Date(Date.UTC(nextYear, nextMonth, nextDay, hours, minutes, seconds, ms));
 }
 
-function expandRecurringEvent(baseEvent, from, to) {
+function expandRecurringEvent(baseEvent, from, to, skipOccurrenceStartIsoSet) {
   const rec = baseEvent.recurrence;
   if (!rec || (rec.freq !== 'weekly' && rec.freq !== 'monthly')) {
     return [baseEvent];
@@ -161,6 +161,10 @@ function expandRecurringEvent(baseEvent, from, to) {
       if (until && t > until.getTime()) break;
       if (t >= from.getTime()) {
         const startIso = new Date(t).toISOString();
+        if (skipOccurrenceStartIsoSet && skipOccurrenceStartIsoSet.has(startIso)) {
+          cursor = new Date(t + stepMs);
+          continue;
+        }
         out.push({
           ...baseEvent,
           startAt: startIso,
@@ -190,6 +194,10 @@ function expandRecurringEvent(baseEvent, from, to) {
 
     if (t >= from.getTime()) {
       const startIso = new Date(t).toISOString();
+      if (skipOccurrenceStartIsoSet && skipOccurrenceStartIsoSet.has(startIso)) {
+        cursor = addMonthsUtcKeepingTime(cursor, interval);
+        continue;
+      }
       out.push({
         ...baseEvent,
         startAt: startIso,
@@ -261,10 +269,37 @@ async function listEventsBetween({ calendarId, from, to }) {
   );
 
   const baseEvents = groupEvents(result.rows);
+
+  const recurringIds = baseEvents.filter((e) => e && e.recurrence).map((e) => Number(e.id)).filter((n) => Number.isFinite(n));
+  /** @type {Map<number, Set<string>>} */
+  const skipByEventId = new Map();
+
+  if (recurringIds.length > 0) {
+    const ex = await pool.query(
+      `
+      SELECT event_id, occurrence_start_at
+      FROM event_recurrence_exceptions
+      WHERE calendar_id = $1
+        AND event_id = ANY($2::bigint[])
+        AND occurrence_start_at >= $3
+        AND occurrence_start_at <= $4;
+      `,
+      [calendarId, recurringIds, effectiveFrom.toISOString(), effectiveTo.toISOString()]
+    );
+    for (const r of ex.rows) {
+      const eventId = Number(r.event_id);
+      const occIso = r.occurrence_start_at ? new Date(r.occurrence_start_at).toISOString() : null;
+      if (!Number.isFinite(eventId) || !occIso) continue;
+      const set = skipByEventId.get(eventId) ?? new Set();
+      set.add(occIso);
+      skipByEventId.set(eventId, set);
+    }
+  }
+
   const expanded = [];
   for (const e of baseEvents) {
     if (e.recurrence) {
-      expanded.push(...expandRecurringEvent(e, effectiveFrom, effectiveTo));
+      expanded.push(...expandRecurringEvent(e, effectiveFrom, effectiveTo, skipByEventId.get(Number(e.id)) ?? null));
     } else {
       // normalize occurrenceId for non-recurring too
       expanded.push({ ...e, occurrenceId: `${e.id}:${e.startAt}` });
@@ -273,6 +308,103 @@ async function listEventsBetween({ calendarId, from, to }) {
 
   expanded.sort((a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime());
   return expanded;
+}
+
+async function patchEventOccurrence({ calendarId, userId, id, occurrenceStartAt, patch }) {
+  const pool = getPool();
+
+  if (!occurrenceStartAt || Number.isNaN(new Date(occurrenceStartAt).getTime())) {
+    const err = new Error('invalid_occurrence');
+    err.status = 400;
+    throw err;
+  }
+
+  const base = await getEventById({ calendarId, id });
+  if (!base) return null;
+  if (!base.recurrence) {
+    const err = new Error('not_recurring');
+    err.status = 400;
+    throw err;
+  }
+
+  // Build a non-recurring replacement event for that single occurrence.
+  const title = patch.title !== undefined ? patch.title : base.title;
+  const description = patch.description !== undefined ? patch.description : base.description;
+  const location = patch.location !== undefined ? patch.location : base.location;
+  const allDay = patch.allDay !== undefined ? Boolean(patch.allDay) : Boolean(base.allDay);
+
+  const occStartIso = new Date(occurrenceStartAt).toISOString();
+  const startAt = patch.startAt !== undefined ? new Date(patch.startAt).toISOString() : occStartIso;
+  const endAt = patch.endAt !== undefined ? (patch.endAt ? new Date(patch.endAt).toISOString() : null) : null;
+
+  const personsProvided = patch.personIds !== undefined || patch.personId !== undefined;
+  const normalizedPersonIds = personsProvided
+    ? normalizePersonIds({ personIds: patch.personIds, personId: patch.personId })
+    : normalizePersonIds({ personIds: base.persons?.map((p) => p.id) ?? [], personId: null });
+
+  const tagId = patch.tagId !== undefined ? patch.tagId ?? null : base.tag?.id ?? null;
+
+  if (tagId != null) {
+    const ok = await pool.query('SELECT 1 FROM tags WHERE id = $1 AND calendar_id = $2;', [tagId, calendarId]);
+    if (ok.rowCount === 0) {
+      const err = new Error('invalid_tag');
+      err.status = 400;
+      throw err;
+    }
+  }
+
+  await assertPersonsBelongToCalendar({ pool, calendarId, personIds: normalizedPersonIds });
+
+  await pool.query('BEGIN;');
+  try {
+    const primaryPersonId = normalizedPersonIds[0] ?? null;
+    const result = await pool.query(
+      `
+      INSERT INTO events (calendar_id, user_id, title, description, location, start_at, end_at, all_day, tag_id, person_id, recurrence_freq, recurrence_interval, recurrence_until)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+      RETURNING id;
+      `,
+      [
+        calendarId,
+        userId ?? null,
+        title,
+        description ?? null,
+        location ?? null,
+        startAt,
+        endAt,
+        Boolean(allDay),
+        tagId,
+        primaryPersonId,
+        null,
+        1,
+        null,
+      ]
+    );
+
+    const replacementId = Number(result.rows[0].id);
+
+    if (normalizedPersonIds.length > 0) {
+      for (const pid of normalizedPersonIds) {
+        await pool.query('INSERT INTO event_persons (event_id, person_id) VALUES ($1, $2) ON CONFLICT DO NOTHING;', [replacementId, pid]);
+      }
+    }
+
+    await pool.query(
+      `
+      INSERT INTO event_recurrence_exceptions (calendar_id, event_id, occurrence_start_at, replacement_event_id, updated_at)
+      VALUES ($1, $2, $3, $4, NOW())
+      ON CONFLICT (event_id, occurrence_start_at)
+      DO UPDATE SET replacement_event_id = EXCLUDED.replacement_event_id, updated_at = NOW();
+      `,
+      [calendarId, id, occStartIso, replacementId]
+    );
+
+    await pool.query('COMMIT;');
+    return getEventById({ calendarId, id: replacementId });
+  } catch (e) {
+    await pool.query('ROLLBACK;');
+    throw e;
+  }
 }
 
 async function insertEvent({
@@ -437,4 +569,60 @@ async function removeEvent({ calendarId, id }) {
   return result.rowCount > 0;
 }
 
-module.exports = { listEventsBetween, insertEvent, patchEvent, removeEvent };
+async function removeEventOccurrence({ calendarId, id, occurrenceStartAt }) {
+  const pool = getPool();
+
+  if (!occurrenceStartAt || Number.isNaN(new Date(occurrenceStartAt).getTime())) {
+    const err = new Error('invalid_occurrence');
+    err.status = 400;
+    throw err;
+  }
+
+  const base = await getEventById({ calendarId, id });
+  if (!base) return false;
+  if (!base.recurrence) {
+    const err = new Error('not_recurring');
+    err.status = 400;
+    throw err;
+  }
+
+  const occStartIso = new Date(occurrenceStartAt).toISOString();
+
+  await pool.query('BEGIN;');
+  try {
+    const existing = await pool.query(
+      `
+      SELECT replacement_event_id
+      FROM event_recurrence_exceptions
+      WHERE calendar_id = $1 AND event_id = $2 AND occurrence_start_at = $3
+      LIMIT 1;
+      `,
+      [calendarId, id, occStartIso]
+    );
+
+    const replacementId =
+      existing.rowCount > 0 && existing.rows[0].replacement_event_id != null ? Number(existing.rows[0].replacement_event_id) : null;
+
+    if (replacementId && Number.isFinite(replacementId)) {
+      await pool.query('DELETE FROM events WHERE id = $1 AND calendar_id = $2;', [replacementId, calendarId]);
+    }
+
+    await pool.query(
+      `
+      INSERT INTO event_recurrence_exceptions (calendar_id, event_id, occurrence_start_at, replacement_event_id, updated_at)
+      VALUES ($1, $2, $3, NULL, NOW())
+      ON CONFLICT (event_id, occurrence_start_at)
+      DO UPDATE SET replacement_event_id = NULL, updated_at = NOW();
+      `,
+      [calendarId, id, occStartIso]
+    );
+
+    await pool.query('COMMIT;');
+    return true;
+  } catch (e) {
+    await pool.query('ROLLBACK;');
+    throw e;
+  }
+}
+
+module.exports = { listEventsBetween, insertEvent, patchEvent, patchEventOccurrence, removeEventOccurrence, removeEvent };

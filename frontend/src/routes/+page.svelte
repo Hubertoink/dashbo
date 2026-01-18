@@ -14,6 +14,7 @@
   import WeekPlanner from '$lib/components/WeekPlanner.svelte';
   import EventsPanel from '$lib/components/EventsPanel.svelte';
   import AddEventModal from '$lib/components/AddEventModal.svelte';
+  import RecurringEditChoiceModal, { type RecurringEditScope } from '$lib/components/RecurringEditChoiceModal.svelte';
   import {
     fetchEvents,
     fetchHolidays,
@@ -23,6 +24,7 @@
     type EventDto,
     type NewsItemDto,
     type ScribbleDto,
+    type PersonDto,
     type TagColorKey,
     fetchSettings,
     fetchOutlookStatus,
@@ -278,12 +280,19 @@
 
   let showAddEventModal = false;
   let eventToEdit: EventDto | null = null;
+  let editScope: RecurringEditScope = 'series';
+  let editOccurrenceStartAt: string | null = null;
+
+  let recurringEditChoiceOpen = false;
+  let recurringEditChoiceEvent: EventDto | null = null;
   let plannerOpen = false;
   let addEventPrefill: {
     title?: string;
     allDay?: boolean;
     startTime?: string;
     endTime?: string;
+    tagId?: number | null;
+    personIds?: number[];
   } | null = null;
   let addEventPrefillKey: string | null = null;
 
@@ -296,6 +305,8 @@
     addEventPrefill = null;
     addEventPrefillKey = null;
     eventToEdit = null;
+    editScope = 'series';
+    editOccurrenceStartAt = null;
     showAddEventModal = true;
   }
 
@@ -304,7 +315,7 @@
     // keep UI in sync with clicked day
     onSelect(d);
 
-    const ps = s.persons && s.persons.length > 0 ? s.persons : s.person ? [s.person] : [];
+    const ps = (s.persons && s.persons.length > 0 ? s.persons : s.person ? [s.person] : []) as PersonDto[];
     addEventPrefill = {
       title: s.title,
       allDay: Boolean(s.allDay),
@@ -315,6 +326,8 @@
     };
     addEventPrefillKey = s.suggestionKey;
     eventToEdit = null;
+    editScope = 'series';
+    editOccurrenceStartAt = null;
     showAddEventModal = true;
   }
 
@@ -328,10 +341,41 @@
 
   function openEditEventModal(e: EventDto) {
     if (e.source === 'outlook') return;
+
+    // For recurring events, ask whether to edit series or occurrence.
+    if (e.recurrence?.freq) {
+      recurringEditChoiceEvent = e;
+      recurringEditChoiceOpen = true;
+      return;
+    }
+
     // keep UI in sync with the clicked occurrence day
     onSelect(new Date(e.startAt));
     addEventPrefill = null;
     addEventPrefillKey = null;
+    editScope = 'series';
+    editOccurrenceStartAt = null;
+    eventToEdit = e;
+    showAddEventModal = true;
+  }
+
+  function closeRecurringEditChoice() {
+    recurringEditChoiceOpen = false;
+    recurringEditChoiceEvent = null;
+  }
+
+  function chooseRecurringEdit(scope: RecurringEditScope) {
+    const e = recurringEditChoiceEvent;
+    closeRecurringEditChoice();
+    if (!e) return;
+    if (e.source === 'outlook') return;
+
+    // keep UI in sync with the clicked occurrence day
+    onSelect(new Date(e.startAt));
+    addEventPrefill = null;
+    addEventPrefillKey = null;
+    editScope = scope;
+    editOccurrenceStartAt = scope === 'occurrence' ? e.startAt : null;
     eventToEdit = e;
     showAddEventModal = true;
   }
@@ -341,6 +385,8 @@
     eventToEdit = null;
     addEventPrefill = null;
     addEventPrefillKey = null;
+    editScope = 'series';
+    editOccurrenceStartAt = null;
   }
 
   function setViewMode(next: 'month' | 'week') {
@@ -1129,40 +1175,40 @@
   <div class="relative z-10 flex h-screen overflow-hidden items-stretch">
     <!-- Left: weather + ToDo + clock -->
     {#if !upcomingMode}
-      <div class="w-[34%] min-w-[320px] hidden md:flex flex-col p-10 h-screen">
+      <div class="w-[30%] lg:w-[34%] min-w-[260px] lg:min-w-[320px] hidden md:flex flex-col p-6 lg:p-10 h-screen">
         <div class="text-white"><WeatherWidget tone="light" /></div>
 
         {#if expandedWidget === 'todo'}
           <!-- Expanded To-Do takes all space between weather and clock -->
-          <div class="mt-6 pb-8 text-white flex-1 flex flex-col min-h-0" transition:slide={{ duration: 300 }}>
+          <div class="mt-4 lg:mt-6 pb-6 lg:pb-8 text-white flex-1 flex flex-col min-h-0" transition:slide={{ duration: 300 }}>
             <TodoWidget expanded={true} onToggleExpand={() => expandedWidget = null} />
           </div>
         {:else if expandedWidget === 'news'}
           <!-- Expanded News takes all space between weather and clock -->
-          <div class="mt-6 pb-8 text-white flex-1 flex flex-col min-h-0" transition:slide={{ duration: 300 }}>
+          <div class="mt-4 lg:mt-6 pb-6 lg:pb-8 text-white flex-1 flex flex-col min-h-0" transition:slide={{ duration: 300 }}>
             <ZeitNewsWidget expanded={true} onToggleExpand={() => expandedWidget = null} />
           </div>
         {:else if expandedWidget === 'scribble'}
           <!-- Expanded Scribble takes all space between weather and clock -->
-          <div class="mt-6 pb-8 text-white flex-1 flex flex-col min-h-0" transition:slide={{ duration: 300 }}>
+          <div class="mt-4 lg:mt-6 pb-6 lg:pb-8 text-white flex-1 flex flex-col min-h-0" transition:slide={{ duration: 300 }}>
             <ScribbleWidget expanded={true} rotationSeconds={scribbleStandbySeconds} onToggleExpand={() => expandedWidget = null} />
           </div>
         {:else}
           <!-- Normal layout with all widgets -->
           {#if todoEnabled}
-            <div class="mt-6 {compactWidgets ? 'pb-4' : 'pb-8'} text-white" transition:slide={{ duration: 300 }}>
+            <div class="mt-4 lg:mt-6 {compactWidgets ? 'pb-3 lg:pb-4' : 'pb-6 lg:pb-8'} text-white" transition:slide={{ duration: 300 }}>
               <TodoWidget compact={compactWidgets} onToggleExpand={() => expandedWidget = 'todo'} />
             </div>
           {/if}
 
           {#if newsEnabled}
-            <div class="mt-2 {compactWidgets ? 'pb-4' : 'pb-8'} text-white" transition:slide={{ duration: 300 }}>
+            <div class="mt-2 {compactWidgets ? 'pb-3 lg:pb-4' : 'pb-6 lg:pb-8'} text-white" transition:slide={{ duration: 300 }}>
               <ZeitNewsWidget compact={compactWidgets} onToggleExpand={() => expandedWidget = 'news'} />
             </div>
           {/if}
 
           {#if scribbleEnabled}
-            <div class="mt-2 {compactWidgets ? 'pb-3' : 'pb-6'} text-white" transition:slide={{ duration: 300 }}>
+            <div class="mt-2 {compactWidgets ? 'pb-2 lg:pb-3' : 'pb-4 lg:pb-6'} text-white" transition:slide={{ duration: 300 }}>
               <ScribbleWidget compact={compactWidgets} rotationSeconds={scribbleStandbySeconds} onToggleExpand={() => expandedWidget = 'scribble'} />
             </div>
           {/if}
@@ -1724,12 +1770,21 @@
     open={showAddEventModal}
     {selectedDate}
     {eventToEdit}
+    {editScope}
+    occurrenceStartAt={editOccurrenceStartAt}
     {outlookConnected}
     {todoEnabled}
     prefill={addEventPrefill}
     prefillKey={addEventPrefillKey}
     onClose={closeAddEventModal}
     onCreated={loadEvents}
+  />
+
+  <RecurringEditChoiceModal
+    open={recurringEditChoiceOpen}
+    title={recurringEditChoiceEvent?.title ?? ''}
+    onChoose={chooseRecurringEdit}
+    onClose={closeRecurringEditChoice}
   />
 
   <!-- Week Planner Overlay -->

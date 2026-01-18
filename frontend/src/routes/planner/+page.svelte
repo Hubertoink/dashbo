@@ -4,6 +4,7 @@
   import { fly, fade } from 'svelte/transition';
 
   import AddEventModal from '$lib/components/AddEventModal.svelte';
+  import RecurringEditChoiceModal, { type RecurringEditScope } from '$lib/components/RecurringEditChoiceModal.svelte';
   import ScribbleModal from '$lib/components/ScribbleModal.svelte';
   import TodoModal from '$lib/components/TodoModal.svelte';
 
@@ -269,7 +270,41 @@
   let editOpen = false;
   let editEvent: EventDto | null = null;
 
+  let editScope: RecurringEditScope = 'series';
+  let editOccurrenceStartAt: string | null = null;
+
+  let recurringEditChoiceOpen = false;
+  let recurringEditChoiceEvent: EventDto | null = null;
+
   function openEditFromEvent(e: EventDto) {
+    if (e.source === 'outlook') return;
+
+    if (e.recurrence?.freq) {
+      recurringEditChoiceEvent = e;
+      recurringEditChoiceOpen = true;
+      return;
+    }
+
+    editScope = 'series';
+    editOccurrenceStartAt = null;
+    editEvent = e;
+    editOpen = true;
+    openEvent = null;
+  }
+
+  function closeRecurringEditChoice() {
+    recurringEditChoiceOpen = false;
+    recurringEditChoiceEvent = null;
+  }
+
+  function chooseRecurringEdit(scope: RecurringEditScope) {
+    const e = recurringEditChoiceEvent;
+    closeRecurringEditChoice();
+    if (!e) return;
+    if (e.source === 'outlook') return;
+
+    editScope = scope;
+    editOccurrenceStartAt = scope === 'occurrence' ? e.startAt : null;
     editEvent = e;
     editOpen = true;
     openEvent = null;
@@ -278,6 +313,8 @@
   function closeEdit() {
     editOpen = false;
     editEvent = null;
+    editScope = 'series';
+    editOccurrenceStartAt = null;
   }
 
   async function onEventMutated() {
@@ -1884,10 +1921,19 @@
   open={editOpen}
   selectedDate={editEvent ? new Date(editEvent.startAt) : selectedDate}
   eventToEdit={editEvent}
+  {editScope}
+  occurrenceStartAt={editOccurrenceStartAt}
   onClose={closeEdit}
   onCreated={onEventMutated}
   {outlookConnected}
   {todoEnabled}
+/>
+
+<RecurringEditChoiceModal
+  open={recurringEditChoiceOpen}
+  title={recurringEditChoiceEvent?.title ?? ''}
+  onChoose={chooseRecurringEdit}
+  onClose={closeRecurringEditChoice}
 />
 
 <!-- Quick Add Event Modal -->
