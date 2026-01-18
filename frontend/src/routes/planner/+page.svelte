@@ -1877,23 +1877,23 @@
           <div class="flex items-center gap-1 shrink-0">
             <button
               type="button"
-              class="h-9 w-9 rounded-lg bg-white/10 hover:bg-white/15 active:bg-white/20 transition grid place-items-center text-white/70 hover:text-white"
+              class="h-9 w-9 rounded-lg bg-transparent hover:bg-white/5 active:bg-white/10 transition grid place-items-center text-white"
               aria-label="Bearbeiten"
               title="Bearbeiten"
               on:click={() => openEditFromEvent(openEvent!)}
             >
-              <svg class="w-4.5 h-4.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
               </svg>
             </button>
             <button
               type="button"
-              class="h-9 w-9 rounded-lg bg-white/10 hover:bg-white/15 active:bg-white/20 transition grid place-items-center text-white/70 hover:text-white"
+              class="h-9 w-9 rounded-lg bg-transparent hover:bg-white/5 active:bg-white/10 transition grid place-items-center text-white"
               aria-label="Schließen"
               title="Schließen"
               on:click={() => (openEvent = null)}
             >
-              <svg class="w-4.5 h-4.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>
