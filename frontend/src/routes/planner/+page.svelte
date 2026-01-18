@@ -1622,8 +1622,8 @@
         {/if}
       </div>
     {:else}
-      <div class="flex-1 flex flex-col min-h-0 px-4" in:fly={{ x: 30, duration: 200 }} out:fade={{ duration: 100 }}>
-        <div class="shrink-0 bg-white/5 rounded-xl p-3 glass border border-white/10">
+      <div class="flex-1 min-h-0 overflow-y-auto px-4 pb-4" in:fly={{ x: 30, duration: 200 }} out:fade={{ duration: 100 }}>
+        <div class="bg-white/5 rounded-xl p-3 glass border border-white/10">
         <div class="flex items-center justify-between gap-2 mb-3">
           <button
             type="button"
@@ -1705,7 +1705,7 @@
         {/if}
 
         <!-- Selected day detail panel -->
-        <div class="mt-4 bg-white/5 rounded-xl p-3 border border-white/10">
+        <div class="mt-4 mb-20 bg-white/5 rounded-xl p-3 border border-white/10">
           <div class="flex items-center justify-between mb-2">
             <div class="text-sm font-medium">
               {selectedDate.toLocaleDateString('de-DE', { weekday: 'long', day: '2-digit', month: 'long' })}
@@ -1864,25 +1864,38 @@
 </div>
 
 {#if openEvent}
+  {@const openEventPersons = openEvent.persons && openEvent.persons.length > 0 ? openEvent.persons : openEvent.person ? [openEvent.person] : []}
   <div class="fixed inset-0 z-50">
     <button type="button" class="absolute inset-0 bg-black/70" aria-label="Schließen" on:click={() => (openEvent = null)}></button>
     <div class="absolute inset-x-0 bottom-0 p-4">
       <div class="max-w-xl mx-auto glass border border-white/10 rounded-2xl p-4">
         <div class="flex items-start justify-between gap-3">
-          <div class="min-w-0">
+          <div class="min-w-0 flex-1">
             <div class="text-lg font-semibold leading-tight truncate">{openEvent.title}</div>
             <div class="text-sm text-white/70 mt-1">{formatEventDateLine(openEvent)}</div>
           </div>
-          <div class="flex items-center gap-2">
+          <div class="flex items-center gap-1 shrink-0">
             <button
               type="button"
-              class="h-9 px-3 rounded-lg bg-white/10 hover:bg-white/15 text-sm"
+              class="h-9 w-9 rounded-lg bg-white/10 hover:bg-white/15 active:bg-white/20 transition grid place-items-center text-white/70 hover:text-white"
+              aria-label="Bearbeiten"
+              title="Bearbeiten"
               on:click={() => openEditFromEvent(openEvent!)}
             >
-              Bearbeiten
+              <svg class="w-4.5 h-4.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+              </svg>
             </button>
-            <button type="button" class="h-9 px-3 rounded-lg bg-white/10 hover:bg-white/15 text-sm" on:click={() => (openEvent = null)}>
-              Schließen
+            <button
+              type="button"
+              class="h-9 w-9 rounded-lg bg-white/10 hover:bg-white/15 active:bg-white/20 transition grid place-items-center text-white/70 hover:text-white"
+              aria-label="Schließen"
+              title="Schließen"
+              on:click={() => (openEvent = null)}
+            >
+              <svg class="w-4.5 h-4.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
             </button>
           </div>
         </div>
@@ -1893,19 +1906,38 @@
           </div>
         {/if}
 
-        {#if openEvent.tag || openEvent.person || (openEvent.persons && openEvent.persons.length > 0)}
-          <div class="mt-3 text-sm text-white/80">
+        {#if openEvent.tag || openEventPersons.length > 0}
+          <div class="mt-3 flex flex-wrap items-center gap-2">
             {#if openEvent.tag}
-              <div><span class="text-white/50">Tag:</span> {openEvent.tag.name}</div>
+              {@const tagColor = openEvent.tag.color}
+              <span
+                class={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border ${
+                  isHexColor(tagColor) ? 'border-white/20' : 'border-transparent'
+                } ${isHexColor(tagColor) ? '' : tagBg[tagColor as TagColorKey] + '/20 ' + textFg[tagColor as TagColorKey]}`}
+                style={isHexColor(tagColor) ? `background-color: ${tagColor}22; color: ${tagColor}` : ''}
+              >
+                <span
+                  class={`w-2 h-2 rounded-full ${isHexColor(tagColor) ? '' : tagBg[tagColor as TagColorKey]}`}
+                  style={isHexColor(tagColor) ? `background-color: ${tagColor}` : ''}
+                ></span>
+                {openEvent.tag.name}
+              </span>
             {/if}
-            {#if openEvent.persons && openEvent.persons.length > 0}
-              <div>
-                <span class="text-white/50">Personen:</span>
-                {openEvent.persons.map((p) => p.name).join(', ')}
-              </div>
-            {:else if openEvent.person}
-              <div><span class="text-white/50">Person:</span> {openEvent.person.name}</div>
-            {/if}
+            {#each openEventPersons as p (p.id)}
+              {@const pColor = p.color}
+              <span
+                class={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border ${
+                  isHexColor(pColor) ? 'border-white/20' : 'border-transparent'
+                } ${isHexColor(pColor) ? '' : tagBg[pColor as TagColorKey] + '/20 ' + textFg[pColor as TagColorKey]}`}
+                style={isHexColor(pColor) ? `background-color: ${pColor}22; color: ${pColor}` : ''}
+              >
+                <span
+                  class={`w-2 h-2 rounded-full ${isHexColor(pColor) ? '' : tagBg[pColor as TagColorKey]}`}
+                  style={isHexColor(pColor) ? `background-color: ${pColor}` : ''}
+                ></span>
+                {p.name}
+              </span>
+            {/each}
           </div>
         {/if}
 
