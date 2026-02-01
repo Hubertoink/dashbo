@@ -65,6 +65,11 @@
       {#if authError}
         <div class="mt-2 text-red-400 text-sm">{authError}</div>
       {/if}
+
+      <div class="mt-3 flex flex-wrap items-center justify-between gap-2">
+        <a class="text-white/70 hover:text-white text-sm" href="/login">Zum Login</a>
+        <a class="text-white/70 hover:text-white text-sm" href="/forgot-password">Passwort vergessen?</a>
+      </div>
     </div>
   {:else}
     <div class="bg-white/5 rounded-xl p-4 text-white/70 text-sm">

@@ -90,6 +90,33 @@ Windows PowerShell:
 
 Ein SQL-Dump ist gut für Migrationen/Umzüge, aber deckt **Uploads** nicht ab.
 
+### Variante B1 (neu): Automatischer SQL-Dump per `db_backup` Service
+
+In `docker-compose.yml` ist ein optionaler Service `db_backup` enthalten, der regelmäßig ein gzipped SQL-Dump (`*.sql.gz`) in ein Volume schreibt.
+
+- Backups liegen im Volume `db_backups` unter `/backups`
+- Standard: täglich um 03:00 Uhr (Europe/Berlin), Aufbewahrung 14 Tage
+
+Konfiguration per ENV (siehe `.env.example`):
+
+- `DB_BACKUP_CRON` (Cron-Expression, z.B. `0 3 * * *`)
+- `DB_BACKUP_KEEP_DAYS` (Default `14`)
+- `DB_BACKUP_PREFIX` (Default `dashbo`)
+
+Backups ansehen:
+
+- `docker compose exec db_backup sh -lc 'ls -lah /backups | tail -n +1'`
+
+Ein Backup auf deinen Rechner kopieren (Beispiel, neuestes File):
+
+- Linux/macOS:
+  - `id=$(docker compose ps -q db_backup); f=$(docker compose exec -T db_backup sh -lc 'ls -1t /backups/*.sql.gz | head -n 1'); docker cp "$id:${f}" ./backups/`
+
+- Windows PowerShell:
+  - `$id = docker compose ps -q db_backup
+     $f = docker compose exec -T db_backup sh -lc 'ls -1t /backups/*.sql.gz | head -n 1'
+     docker cp "$id:$f" .\backups\`
+
 ### SQL-Backup
 
 - Linux/macOS:
@@ -114,5 +141,29 @@ Restore (Windows PowerShell):
 - `Get-Content backups\dashbo.sql | docker compose exec -T db sh -lc 'psql -U "$POSTGRES_USER" "$POSTGRES_DB"'`
 
 Danach den kompletten Stack starten:
+
+- `docker compose up -d`
+
+### Restore aus `db_backup` Dumps (`*.sql.gz`)
+
+1) Stack starten (mindestens DB)
+
+- `docker compose up -d db`
+
+2) Dump einspielen
+
+Option A (empfohlen, keine lokalen Tools nötig): Dump innerhalb der Container entpacken
+
+- `docker compose exec -T db_backup sh -lc 'gunzip -c /backups/dashbo_YYYYmmdd_HHMMSS.sql.gz' | docker compose exec -T db sh -lc 'psql -U "$POSTGRES_USER" "$POSTGRES_DB"'`
+
+Option B (wenn Dump lokal liegt): lokal entpacken und pipen
+
+- Linux/macOS:
+  - `gunzip -c backups/dashbo_YYYYmmdd_HHMMSS.sql.gz | docker compose exec -T db sh -lc 'psql -U "$POSTGRES_USER" "$POSTGRES_DB"'`
+
+- Windows PowerShell:
+  - `Get-Content .\\backups\\dashbo_YYYYmmdd_HHMMSS.sql | docker compose exec -T db sh -lc 'psql -U "$POSTGRES_USER" "$POSTGRES_DB"'`
+
+3) Rest vom Stack starten
 
 - `docker compose up -d`

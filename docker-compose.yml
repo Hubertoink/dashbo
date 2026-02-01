@@ -10,6 +10,28 @@ services:
     volumes:
       - db_data:/var/lib/postgresql/data
 
+  db_backup:
+    build:
+      context: ./ops/db-backup
+    profiles:
+      - backup
+    depends_on:
+      - db
+    restart: unless-stopped
+    environment:
+      PGHOST: db
+      PGPORT: 5432
+      PGUSER: ${POSTGRES_USER:-dashbo}
+      PGPASSWORD: ${POSTGRES_PASSWORD:-dashbo}
+      PGDATABASE: ${POSTGRES_DB:-dashbo}
+      BACKUP_DIR: /backups
+      BACKUP_PREFIX: ${DB_BACKUP_PREFIX:-dashbo}
+      BACKUP_KEEP_DAYS: ${DB_BACKUP_KEEP_DAYS:-14}
+      BACKUP_CRON: ${DB_BACKUP_CRON:-0 3 * * *}
+      TZ: ${TZ:-Europe/Berlin}
+    volumes:
+      - db_backups:/backups
+
   backend:
     build:
       context: ./backend
@@ -63,4 +85,5 @@ services:
 
 volumes:
   db_data:
+  db_backups:
   backend_data:

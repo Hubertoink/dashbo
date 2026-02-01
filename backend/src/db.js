@@ -3,6 +3,11 @@ const bcrypt = require('bcryptjs');
 
 let pool;
 
+let ensureInitPromise = null;
+let lastSchemaCheckAt = 0;
+let lastSchemaOk = false;
+const SCHEMA_CHECK_TTL_MS = 5000;
+
 function buildDatabaseUrlFromParts() {
   const host = process.env.DB_HOST;
   const port = process.env.DB_PORT;
@@ -31,6 +36,42 @@ function getPool() {
     pool = new Pool({ connectionString });
   }
   return pool;
+}
+
+async function schemaLooksInitialized(p) {
+  const r = await p.query("SELECT to_regclass('public.users') AS users;");
+  return Boolean(r.rows?.[0]?.users);
+}
+
+async function ensureDbInitialized({ force = false } = {}) {
+  const p = getPool();
+
+  if (ensureInitPromise) return ensureInitPromise;
+
+  const now = Date.now();
+  if (!force && lastSchemaOk && now - lastSchemaCheckAt < SCHEMA_CHECK_TTL_MS) return;
+
+  let ok = false;
+  try {
+    ok = await schemaLooksInitialized(p);
+  } catch {
+    ok = false;
+  }
+
+  lastSchemaCheckAt = now;
+  lastSchemaOk = ok;
+  if (ok) return;
+
+  console.warn('[dashbo-backend] DB schema missing; re-initializing');
+  ensureInitPromise = (async () => {
+    await initDb();
+    lastSchemaCheckAt = Date.now();
+    lastSchemaOk = true;
+  })().finally(() => {
+    ensureInitPromise = null;
+  });
+
+  return ensureInitPromise;
 }
 
 async function initDb() {
@@ -1008,4 +1049,4 @@ async function initDb() {
   }
 }
 
-module.exports = { getPool, initDb };
+module.exports = { getPool, initDb, ensureDbInitialized };

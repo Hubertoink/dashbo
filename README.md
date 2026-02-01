@@ -114,6 +114,9 @@ Compose legt Volumes an:
 
 Siehe `docs/backup-restore.md`.
 
+Hinweis: `docker-compose.yml` enthält optional einen automatischen DB-Backup-Service (`db_backup`).
+Aktivieren: `docker compose --profile backup up -d`
+
 ## Development (ohne Docker)
 
 **Voraussetzungen:** Node.js 20+, lokale Postgres‑Instanz.

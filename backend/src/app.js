@@ -15,6 +15,7 @@ const { todosRouter } = require('./routes/todos');
 const { newsRouter } = require('./routes/news');
 const { spotifyRouter } = require('./routes/spotify');
 const { scribblesRouter } = require('./routes/scribbles');
+const { ensureDbInitialized } = require('./db');
 
 function createApp() {
   const app = express();
@@ -29,6 +30,17 @@ function createApp() {
 
   app.get('/health', (_req, res) => {
     res.json({ ok: true });
+  });
+
+  // Self-heal after DB resets (e.g. lost volume / provider maintenance)
+  app.use(async (req, _res, next) => {
+    if (req.path === '/health') return next();
+    try {
+      await ensureDbInitialized();
+      return next();
+    } catch (e) {
+      return next(e);
+    }
   });
 
   // Serve uploaded images

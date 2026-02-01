@@ -22,3 +22,14 @@ Thumbs.db
 
 # Docker
 **/.docker/
+
+# Local restore artifacts
+_mittwald_backup/
+
+# Downloaded hosting backups
+backup-*.zip
+
+# Local backups folder
+backups/
+*.sql
+*.sql.gz
