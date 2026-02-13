@@ -60,6 +60,8 @@ Beim allerersten Start (solange noch **keine** User existieren) kann ein Admin a
 
 Alle Compose‑relevanten Variablen sind in `.env.example` dokumentiert.
 
+Eine vollständige Übersicht inkl. Erklärung, Defaults und Beispielen findest du in `docs/docker-variablen.md`.
+
 ### Wichtig (Production)
 
 - `JWT_SECRET`: unbedingt ändern
