@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { OutlookConnectionDto, SettingsDto } from '$lib/api';
+  import type { HueStatusDto, OutlookConnectionDto, SettingsDto } from '$lib/api';
 
   import DashboardPreview from '$lib/components/DashboardPreview.svelte';
   import BackgroundSection from '$lib/components/settings/BackgroundSection.svelte';
@@ -28,6 +28,18 @@
   export let todoSaving: boolean;
   export let todoError: string | null;
   export let saveTodo: () => void | Promise<void>;
+
+  export let hueEnabled: boolean;
+  export let hueSaving: boolean;
+  export let hueError: string | null;
+  export let saveHue: () => void | Promise<void>;
+  export let hueStatus: HueStatusDto | null;
+  export let hueStatusLoading: boolean;
+  export let refreshHueStatus: () => void | Promise<void>;
+  export let huePairing: boolean;
+  export let huePairError: string | null;
+  export let huePairMessage: string | null;
+  export let pairHue: () => void | Promise<void>;
 
   export let todoListNamesText: string;
   export let todoListNamesSaving: boolean;
@@ -169,6 +181,17 @@
           {todoSaving}
           {todoError}
           {saveTodo}
+          bind:hueEnabled
+          {hueSaving}
+          {hueError}
+          {saveHue}
+          {hueStatus}
+          {hueStatusLoading}
+          {refreshHueStatus}
+          {huePairing}
+          {huePairError}
+          {huePairMessage}
+          {pairHue}
           bind:todoListNamesText
           {todoListNamesSaving}
           {todoListNamesError}

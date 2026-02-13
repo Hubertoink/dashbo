@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onDestroy, tick } from 'svelte';
-  import type { NewsFeedId, OutlookConnectionDto, SettingsDto } from '$lib/api';
+  import type { HueStatusDto, NewsFeedId, OutlookConnectionDto, SettingsDto } from '$lib/api';
 
   import DashboardPreview from '$lib/components/DashboardPreview.svelte';
   import WidgetSettingsCard from '$lib/components/WidgetSettingsCard.svelte';
@@ -23,6 +23,18 @@
   export let todoSaving: boolean;
   export let todoError: string | null;
   export let saveTodo: () => void | Promise<void>;
+
+  export let hueEnabled: boolean;
+  export let hueSaving: boolean;
+  export let hueError: string | null;
+  export let saveHue: () => void | Promise<void>;
+  export let hueStatus: HueStatusDto | null;
+  export let hueStatusLoading: boolean;
+  export let refreshHueStatus: () => void | Promise<void>;
+  export let huePairing: boolean;
+  export let huePairError: string | null;
+  export let huePairMessage: string | null;
+  export let pairHue: () => void | Promise<void>;
 
   export let todoListNamesText: string;
   export let todoListNamesSaving: boolean;
@@ -298,6 +310,74 @@
           <div class="text-xs text-white/40">Gilt für Kalender & Tagesliste.</div>
         </div>
       </div>
+    </div>
+  </WidgetSettingsCard>
+
+  <WidgetSettingsCard
+    title="Philips Hue"
+    icon="💡"
+    kicker="hue"
+    enabled={hueEnabled}
+    widgetKey="hue"
+    saving={hueSaving}
+    error={hueError}
+    on:toggle={() => {
+      hueEnabled = !hueEnabled;
+      void saveHue();
+    }}
+    on:hover={(e) => (highlightWidget = e.detail.key)}
+  >
+    <div class="space-y-2">
+      <div class="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs text-white/70">
+        1) Button an der Hue Bridge drücken<br />
+        2) Dann innerhalb von 30 Sekunden auf <span class="font-semibold text-white/85">Bridge verbinden</span> klicken
+      </div>
+
+      <div class="flex items-center gap-2">
+        <button
+          class="h-8 px-3 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-xs font-medium text-emerald-100 disabled:opacity-50"
+          on:click={pairHue}
+          disabled={!authed || huePairing}
+        >
+          {huePairing ? 'Verbinde…' : 'Bridge verbinden'}
+        </button>
+      </div>
+
+      {#if huePairMessage}
+        <div class="text-xs text-emerald-300">{huePairMessage}</div>
+      {/if}
+
+      {#if huePairError}
+        <div class="text-xs text-rose-300">{huePairError}</div>
+      {/if}
+
+      <div class="text-sm text-white/80">Bridge Status</div>
+      {#if hueStatusLoading}
+        <div class="text-xs text-white/50">Prüfe Verbindung…</div>
+      {:else}
+        <div class="text-xs text-white/60">
+          {#if hueStatus?.configured}
+            <span>Bridge: {hueStatus.bridgeUrl || '—'}</span>
+            <span class={hueStatus.available ? 'text-emerald-300 ml-2' : 'text-amber-300 ml-2'}>
+              {hueStatus.available ? 'Erreichbar' : 'Nicht erreichbar'}
+            </span>
+          {:else}
+            <span>Nicht konfiguriert (Bridge verbinden starten)</span>
+          {/if}
+        </div>
+
+        {#if hueStatus?.error}
+          <div class="text-xs text-rose-300">{hueStatus.error}</div>
+        {/if}
+      {/if}
+
+      <button
+        class="h-8 px-3 rounded-lg bg-white/20 hover:bg-white/25 text-xs font-medium disabled:opacity-50"
+        on:click={refreshHueStatus}
+        disabled={!authed || hueStatusLoading}
+      >
+        Status aktualisieren
+      </button>
     </div>
   </WidgetSettingsCard>
 

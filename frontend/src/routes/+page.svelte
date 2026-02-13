@@ -14,14 +14,18 @@
   import WeekPlanner from '$lib/components/WeekPlanner.svelte';
   import EventsPanel from '$lib/components/EventsPanel.svelte';
   import AddEventModal from '$lib/components/AddEventModal.svelte';
+  import HueControlModal from '$lib/components/HueControlModal.svelte';
   import RecurringEditChoiceModal, { type RecurringEditScope } from '$lib/components/RecurringEditChoiceModal.svelte';
   import {
     fetchEvents,
     fetchHolidays,
     fetchNews,
     fetchScribbles,
+    fetchHueLights,
+    setHueLightState,
     type HolidayDto,
     type EventDto,
+    type HueLightDto,
     type NewsItemDto,
     type ScribbleDto,
     type PersonDto,
@@ -70,6 +74,11 @@
   let holidays: HolidayDto[] = [];
 
   let outlookConnected = false;
+  let hueEnabled = false;
+  let hueModalOpen = false;
+  let hueLights: HueLightDto[] = [];
+  let hueLoading = false;
+  let hueError: string | null = null;
   let scribbleEnabled = false;
 
   let scribbleStandbySeconds = 20;
@@ -238,6 +247,41 @@
       standbyNewsMultiSource = false;
     } finally {
       standbyNewsLoading = false;
+    }
+  }
+
+  async function loadHueLights() {
+    if (!hueEnabled) {
+      hueLights = [];
+      hueError = null;
+      return;
+    }
+
+    hueLoading = true;
+    hueError = null;
+    try {
+      const data = await fetchHueLights();
+      hueLights = Array.isArray(data?.lights) ? data.lights : [];
+    } catch (err: any) {
+      hueError = err?.message || 'Hue konnte nicht geladen werden.';
+      hueLights = [];
+    } finally {
+      hueLoading = false;
+    }
+  }
+
+  function openHueModal() {
+    if (!hueEnabled) return;
+    hueModalOpen = true;
+    void loadHueLights();
+  }
+
+  async function updateHueLight(id: string, input: { on?: boolean; brightness?: number; hexColor?: string }) {
+    try {
+      await setHueLightState(id, input);
+      await loadHueLights();
+    } catch (err: any) {
+      hueError = err?.message || 'Lampe konnte nicht aktualisiert werden.';
     }
   }
 
@@ -1029,6 +1073,7 @@
       try {
         const s = await fetchSettings();
         clockStyle = normalizeClockStyle((s as any)?.clockStyle);
+        hueEnabled = Boolean((s as any)?.hueEnabled);
 
         recurringSuggestionsEnabled = Boolean((s as any)?.recurringSuggestionsEnabled);
         recurringSuggestionsWeekly = (s as any)?.recurringSuggestionsWeekly !== false;
@@ -1126,6 +1171,7 @@
 
         // If holidays/todo/news setting changed (or first load), reload to reflect immediately.
         if (holidaysChanged || todoChanged || newsChanged) void loadEvents();
+        if (hueEnabled) void loadHueLights();
       } catch {
         // ignore
         if (staticImages.length > 0) await applyBackground(staticImages[Math.floor(Math.random() * staticImages.length)]);
@@ -1765,6 +1811,32 @@
       {/if}
     </div>
   </div>
+
+  {#if hueEnabled && !standbyMode}
+    <button
+      type="button"
+      class="hidden md:flex fixed top-6 right-6 z-[95] h-11 w-11 items-center justify-center rounded-full border border-white/20 bg-black/45 backdrop-blur-md text-amber-300 hover:bg-black/60 transition"
+      on:click={openHueModal}
+      aria-label="Philips Hue öffnen"
+      title="Philips Hue"
+    >
+      <svg viewBox="0 0 24 24" class="h-5 w-5" fill="currentColor" aria-hidden="true">
+        <path d="M9 21h6v-1H9v1zm3-19C8.69 2 6 4.69 6 8c0 2.39 1.42 4.44 3.46 5.39.33.15.54.49.54.86V16h4v-1.75c0-.37.21-.71.54-.86A5.99 5.99 0 0 0 18 8c0-3.31-2.69-6-6-6z"/>
+      </svg>
+    </button>
+  {/if}
+
+  <HueControlModal
+    open={hueModalOpen}
+    loading={hueLoading}
+    error={hueError}
+    lights={hueLights}
+    onClose={() => (hueModalOpen = false)}
+    onRefresh={loadHueLights}
+    onToggle={(id, on) => updateHueLight(id, { on })}
+    onSetBrightness={(id, brightness) => updateHueLight(id, { brightness })}
+    onSetColor={(id, hexColor) => updateHueLight(id, { hexColor })}
+  />
 
   <AddEventModal
     open={showAddEventModal}

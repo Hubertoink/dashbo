@@ -56,6 +56,9 @@ services:
       OUTLOOK_SCOPES: ${OUTLOOK_SCOPES:-offline_access Calendars.Read User.Read Tasks.ReadWrite}
       OUTLOOK_SUCCESS_REDIRECT: ${OUTLOOK_SUCCESS_REDIRECT:-/settings}
       OUTLOOK_ERROR_REDIRECT: ${OUTLOOK_ERROR_REDIRECT:-/settings?outlook=error}
+      HUE_BRIDGE_URL: ${HUE_BRIDGE_URL:-}
+      HUE_APP_KEY: ${HUE_APP_KEY:-}
+      HUE_ALLOW_SELF_SIGNED: ${HUE_ALLOW_SELF_SIGNED:-true}
       DASHBO_DATA_REFRESH_MS: ${DASHBO_DATA_REFRESH_MS:-60000}
       TODO_LIST_NAME: ${TODO_LIST_NAME:-Dashbo}
       # Public base URL of the frontend (used for email links)

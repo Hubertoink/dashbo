@@ -65,6 +65,15 @@ Betroffene Dateien:
 - `OUTLOOK_SUCCESS_REDIRECT` (Default: `/settings`) – UI-Redirect nach Erfolg
 - `OUTLOOK_ERROR_REDIRECT` (Default: `/settings?outlook=error`) – UI-Redirect bei Fehler
 
+### Philips Hue (optional)
+
+- `HUE_BRIDGE_URL` (Default: leer) – Basis-URL deiner Hue Bridge (v2 API)
+  - Beispiel: `HUE_BRIDGE_URL=https://192.168.178.40`
+- `HUE_APP_KEY` (Default: leer) – Hue Application Key für authentifizierte Requests
+  - Beispiel: `HUE_APP_KEY=abcdefghijklmnopqrstuvwxyz123456`
+- `HUE_ALLOW_SELF_SIGNED` (Default: `true`) – erlaubt self-signed Zertifikate im lokalen Netz
+  - Beispiel: `HUE_ALLOW_SELF_SIGNED=true`
+
 ### Mail / öffentliche URL
 
 - `PUBLIC_APP_URL` (Default: leer) – öffentliche Frontend-URL für Mail-Links

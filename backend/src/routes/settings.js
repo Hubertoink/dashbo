@@ -38,6 +38,7 @@ settingsRouter.get('/', requireAuth, attachUserContext, async (_req, res) => {
   const weatherLocation = await getUserSetting({ userId, key: 'weather.location' });
   const holidaysEnabledRaw = await getUserSetting({ userId, key: 'holidays.enabled' });
   const todoEnabledRaw = await getUserSetting({ userId, key: 'todo.enabled' });
+  const hueEnabledRaw = await getUserSetting({ userId, key: 'hue.enabled' });
   const todoListNamesRaw = await getUserSetting({ userId, key: 'todo.listNames' });
   const todoDefaultConnectionIdRaw = await getUserSetting({ userId, key: 'todo.defaultConnectionId' });
   const newsEnabledRaw = await getUserSetting({ userId, key: 'news.enabled' });
@@ -112,6 +113,9 @@ settingsRouter.get('/', requireAuth, attachUserContext, async (_req, res) => {
   }
   // Default to true for backwards compatibility
   const todoEnabled = todoEnabledRaw === null ? true : String(todoEnabledRaw).toLowerCase() === 'true';
+  const hueEnabled = hueEnabledRaw === null
+    ? String(process.env.HUE_ENABLED || '').trim().toLowerCase() === 'true'
+    : String(hueEnabledRaw).toLowerCase() === 'true';
   // Default to false
   const newsEnabled = String(newsEnabledRaw ?? '').toLowerCase() === 'true';
   // Default to true for scribble notes
@@ -204,6 +208,7 @@ settingsRouter.get('/', requireAuth, attachUserContext, async (_req, res) => {
     weatherLocation,
     holidaysEnabled,
     todoEnabled,
+    hueEnabled,
     newsEnabled,
     scribbleEnabled,
     scribbleStandbySeconds,
@@ -436,6 +441,18 @@ settingsRouter.post('/todo', requireAuth, async (req, res) => {
 
   const userId = Number(req.auth?.sub);
   await setUserSetting({ userId, key: 'todo.enabled', value: parsed.data.enabled ? 'true' : 'false' });
+  return res.json({ ok: true });
+});
+
+settingsRouter.post('/hue', requireAuth, async (req, res) => {
+  const schema = z.object({ enabled: z.boolean() });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: 'invalid_body', details: parsed.error.flatten() });
+  }
+
+  const userId = Number(req.auth?.sub);
+  await setUserSetting({ userId, key: 'hue.enabled', value: parsed.data.enabled ? 'true' : 'false' });
   return res.json({ ok: true });
 });
 

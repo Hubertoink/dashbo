@@ -34,6 +34,22 @@ export type OutlookConnectionDto = {
   scope: string | null;
 };
 
+export type HueStatusDto = {
+  configured: boolean;
+  available: boolean;
+  bridgeUrl: string | null;
+  lightsCount?: number;
+  error?: string | null;
+};
+
+export type HueLightDto = {
+  id: string;
+  name: string;
+  on: boolean;
+  brightness: number | null;
+  colorHex: string | null;
+};
+
 export type TodoItemDto = {
   connectionId: number;
   connectionLabel: string;
@@ -217,6 +233,31 @@ export async function setOutlookConnectionColor(id: number, color: TagColorKey):
 
 export async function disconnectOutlookConnection(id: number): Promise<{ ok: true }> {
   return api<{ ok: true }>(`/outlook/connections/${id}/disconnect`, { method: 'POST' });
+}
+
+export async function fetchHueStatus(): Promise<HueStatusDto> {
+  return api<HueStatusDto>('/hue/status');
+}
+
+export async function fetchHueLights(): Promise<{ lights: HueLightDto[] }> {
+  return api<{ lights: HueLightDto[] }>('/hue/lights');
+}
+
+export async function setHueLightState(
+  id: string,
+  input: { on?: boolean; brightness?: number; hexColor?: string }
+): Promise<{ ok: true }> {
+  return api<{ ok: true }>(`/hue/lights/${encodeURIComponent(id)}/state`, {
+    method: 'POST',
+    body: JSON.stringify(input)
+  });
+}
+
+export async function pairHueBridge(input?: { bridgeUrl?: string }): Promise<{ ok: true; bridgeUrl: string; status: HueStatusDto }> {
+  return api<{ ok: true; bridgeUrl: string; status: HueStatusDto }>('/hue/pair', {
+    method: 'POST',
+    body: JSON.stringify(input ?? {})
+  });
 }
 
 export async function fetchTodos(): Promise<TodosResponseDto> {
@@ -481,6 +522,7 @@ export type SettingsDto = {
   weatherLocation?: string | null;
   holidaysEnabled?: boolean;
   todoEnabled?: boolean;
+  hueEnabled?: boolean;
   newsEnabled?: boolean;
   scribbleEnabled?: boolean;
   scribbleStandbySeconds?: number;
@@ -621,6 +663,10 @@ export async function setHolidaysEnabled(enabled: boolean): Promise<{ ok: true }
 
 export async function setTodoEnabled(enabled: boolean): Promise<{ ok: true }> {
   return api<{ ok: true }>('/settings/todo', { method: 'POST', body: JSON.stringify({ enabled }) });
+}
+
+export async function setHueEnabled(enabled: boolean): Promise<{ ok: true }> {
+  return api<{ ok: true }>('/settings/hue', { method: 'POST', body: JSON.stringify({ enabled }) });
 }
 
 export async function setTodoListNames(listNames: string[]): Promise<{ ok: true }> {

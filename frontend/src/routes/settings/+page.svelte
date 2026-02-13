@@ -11,6 +11,8 @@
     setBackground,
     deleteBackgroundImage,
     fetchOutlookStatus,
+    fetchHueStatus,
+    pairHueBridge,
     listOutlookConnections,
     getOutlookAuthUrl,
     disconnectOutlook,
@@ -27,6 +29,7 @@
     setWeatherLocation,
     setHolidaysEnabled,
     setTodoEnabled,
+    setHueEnabled,
     setTodoListNames,
     setTodoDefaultConnection,
     setNewsEnabled,
@@ -50,13 +53,14 @@
     type TagColorKey,
     type PersonDto,
     type PersonColorKey,
-    type OutlookStatusDto
-    , type OutlookConnectionDto
-    , type MeDto
-    , fetchMe
-    , decodeJwtPayload
-    , requestEmailVerification
-    , setRecurringSuggestionsSettings
+    type OutlookStatusDto,
+    type OutlookConnectionDto,
+    type HueStatusDto,
+    type MeDto,
+    fetchMe,
+    decodeJwtPayload,
+    requestEmailVerification,
+    setRecurringSuggestionsSettings,
   } from '$lib/api';
 
   import { normalizeClockStyle, type ClockStyle } from '$lib/clockStyle';
@@ -121,6 +125,15 @@
   let todoEnabled = true;
   let todoSaving = false;
   let todoError: string | null = null;
+
+  let hueEnabled = false;
+  let hueSaving = false;
+  let hueError: string | null = null;
+  let hueStatus: HueStatusDto | null = null;
+  let hueStatusLoading = false;
+  let huePairing = false;
+  let huePairError: string | null = null;
+  let huePairMessage: string | null = null;
 
   let todoListNamesText = '';
   let todoListNamesSaving = false;
@@ -713,6 +726,7 @@
     weatherLocation = settings?.weatherLocation ?? '';
     holidaysEnabled = Boolean(settings?.holidaysEnabled);
     todoEnabled = settings?.todoEnabled !== false;
+    hueEnabled = Boolean((settings as any)?.hueEnabled);
     newsEnabled = Boolean(settings?.newsEnabled);
     scribbleEnabled = settings?.scribbleEnabled !== false;
     scribbleStandbySeconds = Number.isFinite(Number(settings?.scribbleStandbySeconds))
@@ -897,6 +911,55 @@
     }
   }
 
+  async function refreshHueStatus() {
+    if (!authed) {
+      hueStatus = null;
+      return;
+    }
+    hueStatusLoading = true;
+    try {
+      hueStatus = await fetchHueStatus();
+    } catch (e: any) {
+      hueStatus = {
+        configured: false,
+        available: false,
+        bridgeUrl: null,
+        error: e?.message || 'Hue Status konnte nicht geladen werden.'
+      };
+    } finally {
+      hueStatusLoading = false;
+    }
+  }
+
+  async function pairHue() {
+    if (!authed) return;
+    huePairError = null;
+    huePairMessage = null;
+    huePairing = true;
+    try {
+      await pairHueBridge();
+      if (!hueEnabled) {
+        hueEnabled = true;
+        await setHueEnabled(true);
+      }
+      await refreshSettings();
+      await refreshHueStatus();
+      huePairMessage = 'Hue Bridge erfolgreich verbunden.';
+      showToast('Hue Bridge verbunden');
+    } catch (e: any) {
+      const raw = String(e?.message || '');
+      if (raw.includes('hue_link_button_required') || raw.includes('Bridge-Button')) {
+        huePairError = 'Bitte zuerst den Button auf der Hue Bridge drücken und dann erneut versuchen.';
+      } else if (raw.includes('hue_bridge_not_found')) {
+        huePairError = 'Keine Hue Bridge gefunden. Stelle sicher, dass Dashbo und Bridge im selben Netzwerk sind.';
+      } else {
+        huePairError = 'Bridge-Kopplung fehlgeschlagen.';
+      }
+    } finally {
+      huePairing = false;
+    }
+  }
+
   async function doLogin() {
     authError = null;
     try {
@@ -927,6 +990,7 @@
       await refreshTags();
       await refreshPersons();
       await refreshOutlook();
+      await refreshHueStatus();
     } catch {
       authError = 'Login fehlgeschlagen';
       authed = false;
@@ -1340,6 +1404,7 @@
         await refreshUsers();
         await refreshPersons();
         await refreshOutlook();
+        await refreshHueStatus();
       } catch {
         authed = false;
         isAdmin = false;
@@ -1396,6 +1461,22 @@
       todoError = 'Fehler beim Speichern.';
     } finally {
       todoSaving = false;
+    }
+  }
+
+  async function saveHue() {
+    if (!authed) return;
+    hueError = null;
+    hueSaving = true;
+    try {
+      await setHueEnabled(hueEnabled);
+      await refreshSettings();
+      await refreshHueStatus();
+      showToast(hueEnabled ? 'Philips Hue aktiviert' : 'Philips Hue deaktiviert');
+    } catch {
+      hueError = 'Fehler beim Speichern.';
+    } finally {
+      hueSaving = false;
     }
   }
 
@@ -1571,6 +1652,17 @@
       {todoSaving}
       {todoError}
       {saveTodo}
+      bind:hueEnabled
+      {hueSaving}
+      {hueError}
+      {saveHue}
+      {hueStatus}
+      {hueStatusLoading}
+      {refreshHueStatus}
+      {huePairing}
+      {huePairError}
+      {huePairMessage}
+      {pairHue}
       bind:todoListNamesText
       {todoListNamesSaving}
       {todoListNamesError}
