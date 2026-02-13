@@ -33,3 +33,6 @@ backup-*.zip
 backups/
 *.sql
 *.sql.gz
+
+# Local secrets (never commit)
+_secrets/

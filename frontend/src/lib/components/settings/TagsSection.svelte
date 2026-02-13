@@ -22,7 +22,17 @@
   export let chooseCustomTagColor: (hex: string) => void;
 
   export let doCreateTag: () => void | Promise<void>;
+  export let doCreateSuggestedTag: (name: string, color: TagColorKey) => void | Promise<void>;
   export let doDeleteTag: (id: number) => void | Promise<void>;
+
+  const suggestedTags: Array<{ name: string; color: TagColorKey }> = [
+    { name: 'Arbeit', color: 'sky' },
+    { name: 'Privat', color: 'violet' },
+    { name: 'Familie', color: 'rose' },
+    { name: 'Gesundheit', color: 'emerald' },
+    { name: 'Wichtig', color: 'amber' },
+    { name: 'Geburtstag', color: 'fuchsia' }
+  ];
 </script>
 
 <!-- Tags -->
@@ -79,6 +89,26 @@
 
   {#if tagError}
     <div class="text-red-400 text-xs mb-2">{tagError}</div>
+  {/if}
+
+  {#if tags.length === 0}
+    <div class="mb-3 rounded-lg border border-white/10 bg-white/5 p-3">
+      <div class="text-xs text-white/60 mb-2">Schnellstart: Vorschläge</div>
+      <div class="flex flex-wrap gap-2">
+        {#each suggestedTags as s}
+          <button
+            type="button"
+            class="h-8 px-3 rounded-lg bg-white/10 hover:bg-white/15 border border-white/10 text-xs text-white/85 inline-flex items-center gap-2 disabled:opacity-50"
+            on:click={() => doCreateSuggestedTag(s.name, s.color)}
+            disabled={!authed}
+          >
+            <span class={`w-2.5 h-2.5 rounded-full ${colorBg[s.color]}`}></span>
+            <span>{s.name}</span>
+            <span class="text-white/60">+</span>
+          </button>
+        {/each}
+      </div>
+    </div>
   {/if}
 
   <div class="flex flex-wrap gap-2">

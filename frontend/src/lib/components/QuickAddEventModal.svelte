@@ -467,12 +467,14 @@
             <div class="flex items-center gap-2 flex-1" transition:fade={{ duration: 150 }}>
               <input
                 type="time"
+                step="900"
                 bind:value={startTime}
                 class="flex-1 px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-sm focus:outline-none focus:ring-2 focus:ring-white/30"
               />
               <span class="text-white/40">–</span>
               <input
                 type="time"
+                step="900"
                 bind:value={endTime}
                 placeholder="Ende"
                 class="flex-1 px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-sm focus:outline-none focus:ring-2 focus:ring-white/30"
@@ -510,8 +512,8 @@
               type="button"
               class={`px-3 py-1.5 rounded-full text-sm font-medium border transition active:scale-95 ${
                 recurrence === 'weekly'
-                  ? 'bg-white/20 border-white/40 text-white'
-                  : 'bg-white/5 border-white/10 text-white/60 hover:bg-white/10'
+                  ? 'bg-emerald-500/35 border-emerald-300/70 text-emerald-100'
+                  : 'bg-emerald-500/10 border-emerald-300/25 text-emerald-200/80 hover:bg-emerald-500/20'
               }`}
               on:click={() => recurrence = 'weekly'}
             >
@@ -521,8 +523,8 @@
               type="button"
               class={`px-3 py-1.5 rounded-full text-sm font-medium border transition active:scale-95 ${
                 recurrence === 'monthly'
-                  ? 'bg-white/20 border-white/40 text-white'
-                  : 'bg-white/5 border-white/10 text-white/60 hover:bg-white/10'
+                  ? 'bg-violet-500/35 border-violet-300/70 text-violet-100'
+                  : 'bg-violet-500/10 border-violet-300/25 text-violet-200/80 hover:bg-violet-500/20'
               }`}
               on:click={() => recurrence = 'monthly'}
             >
@@ -619,16 +621,16 @@
             </div>
 
             {#if todoSectionOpen}
-              <div class="mt-3">
-                <div class="sm:grid sm:grid-cols-2 sm:gap-4">
-                  <div>
+              <div class="mt-3 rounded-xl border border-white/10 bg-white/5 p-3">
+                <div class="space-y-3">
+                  <div class="sm:grid sm:grid-cols-2 sm:gap-3">
                     {#if todoAccounts.length > 1}
-                      <div class="mb-3">
+                      <div>
                         <div class="text-[11px] uppercase tracking-widest text-white/45 mb-1">Konto</div>
                         <div class="relative">
                           <button
                             type="button"
-                            class="w-full h-10 px-3 rounded-lg bg-white/10 border border-white/10 text-sm text-white/90 flex items-center gap-2 focus:outline-none focus:ring-2 focus:ring-white/10"
+                            class="w-full h-10 px-3 rounded-lg bg-black/20 border border-white/10 text-sm text-white/90 flex items-center gap-2 focus:outline-none focus:ring-2 focus:ring-white/10"
                             on:click={() => (todoAccountMenuOpen = !todoAccountMenuOpen)}
                           >
                             <span class={`h-2.5 w-2.5 rounded-full flex-shrink-0 ${connectionColorClass(selectedTodoAccount?.color)}`}></span>
@@ -678,11 +680,11 @@
                     {/if}
 
                     {#if todoListNames.length > 1}
-                      <div class="mb-3">
+                      <div>
                         <div class="text-[11px] uppercase tracking-widest text-white/45 mb-1">Liste</div>
                         <div class="relative">
                           <select
-                            class="w-full h-10 px-3 pr-10 rounded-lg bg-white/10 border border-white/10 text-sm text-white/90 appearance-none focus:outline-none focus:ring-2 focus:ring-white/10"
+                            class="w-full h-10 px-3 pr-10 rounded-lg bg-black/20 border border-white/10 text-sm text-white/90 appearance-none focus:outline-none focus:ring-2 focus:ring-white/10"
                             bind:value={todoSelectedListName}
                           >
                             {#each todoListNames as ln}
@@ -705,45 +707,43 @@
                     {/if}
                   </div>
 
-                  <div>
-                    <div class="text-[11px] uppercase tracking-widest text-white/45 mb-1">Was muss gemacht werden?</div>
-                    <textarea
-                      class="w-full min-h-[96px] px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-sm placeholder:text-white/40 focus:outline-none focus:ring-2 focus:ring-white/30"
-                      placeholder="Eine Zeile = ein ToDo\nz.B. Müll rausbringen\nEinkaufsliste schreiben"
-                      bind:value={todoText}
-                    ></textarea>
-                    <div class="mt-1 flex items-center justify-between">
-                        <div class="flex items-center gap-2 min-w-0">
-                          <div class="text-xs text-white/40 whitespace-nowrap">Fällig (optional)</div>
-                          <div class="flex items-center gap-1">
-                            <input
-                              type="date"
-                              class="h-8 px-2 rounded-lg bg-white/10 border border-white/10 text-xs text-white/90 focus:outline-none focus:ring-2 focus:ring-white/10"
-                              bind:value={todoDueDateStr}
-                              on:input={() => (todoDueAutofill = false)}
-                            />
-                            {#if todoDueDateStr}
-                              <button
-                                type="button"
-                                class="h-8 w-8 rounded-lg bg-white/10 hover:bg-white/15 active:scale-95 transition grid place-items-center text-white/70"
-                                aria-label="Fälligkeit löschen"
-                                on:click={() => {
-                                  todoDueDateStr = '';
-                                  todoDueAutofill = false;
-                                }}
-                              >
-                                ✕
-                              </button>
-                            {/if}
-                          </div>
+                  <div class="text-[11px] uppercase tracking-widest text-white/45">Was muss gemacht werden?</div>
+                  <textarea
+                    class="w-full min-h-[96px] px-3 py-2 rounded-xl bg-black/20 border border-white/10 text-sm placeholder:text-white/40 focus:outline-none focus:ring-2 focus:ring-white/30"
+                    placeholder="Eine Zeile = ein ToDo\nz.B. Müll rausbringen\nEinkaufsliste schreiben"
+                    bind:value={todoText}
+                  ></textarea>
+                  <div class="mt-1 flex items-center justify-between">
+                      <div class="flex items-center gap-2 min-w-0">
+                        <div class="text-xs text-white/40 whitespace-nowrap">Fällig (optional)</div>
+                        <div class="flex items-center gap-1">
+                          <input
+                            type="date"
+                            class="h-8 px-2 rounded-lg bg-black/20 border border-white/10 text-xs text-white/90 focus:outline-none focus:ring-2 focus:ring-white/10"
+                            bind:value={todoDueDateStr}
+                            on:input={() => (todoDueAutofill = false)}
+                          />
+                          {#if todoDueDateStr}
+                            <button
+                              type="button"
+                              class="h-8 w-8 rounded-lg bg-white/10 hover:bg-white/15 active:scale-95 transition grid place-items-center text-white/70"
+                              aria-label="Fälligkeit löschen"
+                              on:click={() => {
+                                todoDueDateStr = '';
+                                todoDueAutofill = false;
+                              }}
+                            >
+                              ✕
+                            </button>
+                          {/if}
                         </div>
-                        <div class="text-xs text-white/50 whitespace-nowrap">{parseTodos(todoText).length} ToDo(s)</div>
-                    </div>
-
-                    {#if todoError}
-                      <div class="mt-2 text-xs text-rose-300">{todoError}</div>
-                    {/if}
+                      </div>
+                      <div class="text-xs text-white/50 whitespace-nowrap">{parseTodos(todoText).length} ToDo(s)</div>
                   </div>
+
+                  {#if todoError}
+                    <div class="mt-2 text-xs text-rose-300">{todoError}</div>
+                  {/if}
                 </div>
               </div>
             {/if}

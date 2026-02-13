@@ -68,6 +68,7 @@
   let newAllDay = false;
   let newStartTime = '';
   let newEndTime = '';
+  let newRecurrence: 'weekly' | 'monthly' | null = null;
   let newTagIdStr = '';
   let newPersonIds: number[] = [];
 
@@ -366,6 +367,7 @@
     const h = Number(m[1]);
     const min = Number(m[2]);
     if (!Number.isFinite(h) || !Number.isFinite(min) || h < 0 || h > 23 || min < 0 || min > 59) return null;
+    if (min % 15 !== 0) return null;
     return { h, m: min };
   }
 
@@ -872,6 +874,7 @@
     newAllDay = s.allDay;
     newStartTime = s.startTime ?? '';
     newEndTime = s.endTime ?? '';
+    newRecurrence = null;
     newTagIdStr = s.tagId != null ? String(s.tagId) : '';
     newPersonIds = s.personIds.slice();
     todoSectionOpen = false;
@@ -992,6 +995,7 @@
         startAt: startAt.toISOString(),
         endAt: endAt ? endAt.toISOString() : null,
         allDay: newAllDay,
+        recurrence: newRecurrence,
         tagId: newTagId != null && Number.isFinite(newTagId) && newTagId > 0 ? newTagId : null,
         personIds: newPersonIds.length > 0 ? newPersonIds : null
       });
@@ -1026,6 +1030,7 @@
       newTitle = '';
       newLocation = '';
       if (!newAllDay) newEndTime = '';
+      newRecurrence = null;
       newTagIdStr = '';
       newPersonIds = [];
       todoText = '';
@@ -1047,7 +1052,7 @@
 
   // Swipe handlers
   function handleSwipeStart(e: TouchEvent | MouseEvent) {
-    if (creating) return;
+    if (creating || !canSubmit) return;
     swiping = true;
     swipeStartX = 'touches' in e ? e.touches[0].clientX : e.clientX;
     swipeCurrentX = 0;
@@ -1061,7 +1066,7 @@
 
   function handleSwipeEnd() {
     if (!swiping) return;
-    if (swipeCurrentX >= SWIPE_THRESHOLD) {
+    if (canSubmit && swipeCurrentX >= SWIPE_THRESHOLD) {
       void doCreate();
     }
     swiping = false;
@@ -1069,7 +1074,7 @@
   }
 
   $: swipeProgress = Math.min(1, swipeCurrentX / SWIPE_THRESHOLD);
-  $: canSubmit = newTitle.trim().length > 0;
+  $: canSubmit = newTitle.trim().length > 0 && (newAllDay || parseTime(newStartTime) !== null) && !creating && !todoSaving;
   $: anyModalOpen = quickAddOpen || scribbleModalOpen || editOpen || openEvent !== null || todoCreateOpen;
 
   onMount(() => {
@@ -2040,6 +2045,7 @@
               <input
                 class="h-12 w-full px-4 pt-4 rounded-xl bg-white/10 border-0 text-sm"
                 type="time"
+                step="900"
                 bind:value={newStartTime}
               />
             </div>
@@ -2048,11 +2054,51 @@
               <input
                 class="h-12 w-full px-4 pt-4 rounded-xl bg-white/10 border-0 text-sm"
                 type="time"
+                step="900"
                 bind:value={newEndTime}
               />
             </div>
           </div>
         {/if}
+
+        <div>
+          <div class="text-xs text-white/50 mb-2">Wiederholung</div>
+          <div class="flex flex-wrap gap-2">
+            <button
+              type="button"
+              class={`px-3 py-1.5 rounded-full text-sm font-medium border transition active:scale-95 ${
+                newRecurrence === null
+                  ? 'bg-white/20 border-white/40 text-white'
+                  : 'bg-white/5 border-white/10 text-white/60 hover:bg-white/10'
+              }`}
+              on:click={() => (newRecurrence = null)}
+            >
+              Keine
+            </button>
+            <button
+              type="button"
+              class={`px-3 py-1.5 rounded-full text-sm font-medium border transition active:scale-95 ${
+                newRecurrence === 'weekly'
+                  ? 'bg-emerald-500/35 border-emerald-300/70 text-emerald-100'
+                  : 'bg-emerald-500/10 border-emerald-300/25 text-emerald-200/80 hover:bg-emerald-500/20'
+              }`}
+              on:click={() => (newRecurrence = 'weekly')}
+            >
+              Wöchentlich
+            </button>
+            <button
+              type="button"
+              class={`px-3 py-1.5 rounded-full text-sm font-medium border transition active:scale-95 ${
+                newRecurrence === 'monthly'
+                  ? 'bg-violet-500/35 border-violet-300/70 text-violet-100'
+                  : 'bg-violet-500/10 border-violet-300/25 text-violet-200/80 hover:bg-violet-500/20'
+              }`}
+              on:click={() => (newRecurrence = 'monthly')}
+            >
+              Monatlich
+            </button>
+          </div>
+        </div>
 
         <div class="grid grid-cols-2 gap-3">
           {#if tags.length > 0}
@@ -2201,7 +2247,7 @@
 
         <!-- ToDos (optional) -->
         {#if todoEnabled}
-          <div class="border-t border-white/10 pt-3 mt-1">
+          <div class="border-t border-white/10 pt-3 mt-1 rounded-xl bg-white/[0.03] px-3 pb-3">
             <div class="flex items-center justify-between">
               <div class="text-xs text-white/50">ToDos (optional)</div>
               <button
@@ -2292,7 +2338,7 @@
         <div class="pt-2">
           <!-- svelte-ignore a11y_interactive_supports_focus -->
           <div
-            class="relative h-14 rounded-full bg-white/5 border border-white/10 overflow-hidden select-none touch-pan-x"
+            class={`relative h-14 rounded-full overflow-hidden select-none touch-pan-x transition-colors ${canSubmit ? 'bg-white/5 border border-white/10' : 'bg-white/[0.03] border border-white/5'}`}
             role="slider"
             aria-valuemin={0}
             aria-valuemax={100}
@@ -2308,18 +2354,14 @@
             <!-- Progress trail (only shows when swiping) -->
             {#if swipeCurrentX > 0}
               <div
-                class="absolute inset-y-0 left-0 bg-gradient-to-r from-emerald-500/30 to-emerald-400/40 rounded-full"
+                class={`absolute inset-y-0 left-0 rounded-full ${canSubmit ? 'bg-gradient-to-r from-emerald-500/30 to-emerald-400/40' : 'bg-gradient-to-r from-white/10 to-white/15'}`}
                 style="width: calc({swipeCurrentX}px + 56px)"
               ></div>
             {/if}
 
             <!-- Swipe handle -->
             <div
-              class="absolute top-1 bottom-1 left-1 w-12 rounded-full shadow-lg flex items-center justify-center transition-colors"
-              class:bg-gradient-to-br={!creating}
-              class:from-emerald-400={!creating}
-              class:to-emerald-600={!creating}
-              class:bg-emerald-500={creating}
+              class={`absolute top-1 bottom-1 left-1 w-12 rounded-full shadow-lg flex items-center justify-center transition-colors ${creating ? 'bg-emerald-500' : canSubmit ? 'bg-gradient-to-br from-emerald-400 to-emerald-600' : 'bg-white/20'}`}
               style="transform: translateX({swipeCurrentX}px)"
             >
               {#if creating}
@@ -2336,7 +2378,7 @@
 
             <!-- Label -->
             <div class="absolute inset-0 flex items-center justify-center pointer-events-none">
-              <span class="text-white/50 text-sm font-medium pl-14">
+              <span class={`text-sm font-medium pl-14 ${canSubmit ? 'text-white/50' : 'text-white/35'}`}>
                 {creating ? 'Wird angelegt…' : swipeProgress > 0.5 ? 'Loslassen zum Anlegen' : 'Schieben zum Anlegen →'}
               </span>
             </div>
@@ -2344,10 +2386,10 @@
             <!-- Destination indicator -->
             <div class="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
               <div 
-                class="w-8 h-8 rounded-full border-2 flex items-center justify-center transition-colors {swipeProgress > 0.8 ? 'border-emerald-400 border-solid' : 'border-dashed border-white/20'}"
+                class="w-8 h-8 rounded-full border-2 flex items-center justify-center transition-colors {canSubmit && swipeProgress > 0.8 ? 'border-emerald-400 border-solid' : 'border-dashed border-white/20'}"
               >
                 <svg 
-                  class="w-4 h-4 transition-colors {swipeProgress > 0.8 ? 'text-emerald-400' : 'text-white/20'}" 
+                  class="w-4 h-4 transition-colors {canSubmit && swipeProgress > 0.8 ? 'text-emerald-400' : 'text-white/20'}" 
                   fill="none" 
                   stroke="currentColor" 
                   viewBox="0 0 24 24"

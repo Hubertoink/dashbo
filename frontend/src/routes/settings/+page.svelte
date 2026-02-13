@@ -1058,6 +1058,26 @@
     }
   }
 
+  async function doCreateSuggestedTag(name: string, color: TagColorKey) {
+    if (!authed) return;
+    const normalizedName = String(name || '').trim();
+    if (!normalizedName) return;
+
+    const alreadyExists = tags.some((t) => t.name.trim().toLowerCase() === normalizedName.toLowerCase());
+    if (alreadyExists) {
+      tagError = 'Tag existiert bereits.';
+      return;
+    }
+
+    tagError = null;
+    try {
+      await createTag({ name: normalizedName, color });
+      await refreshTags();
+    } catch {
+      tagError = 'Tag konnte nicht angelegt werden.';
+    }
+  }
+
   function chooseTagColor(c: TagColorKey) {
     newTagColor = c;
     tagColorMenuOpen = false;
@@ -1523,6 +1543,7 @@
       {chooseTagColor}
       {chooseCustomTagColor}
       {doCreateTag}
+      {doCreateSuggestedTag}
       {doDeleteTag}
       {choosePersonColor}
       {chooseCustomPersonColor}

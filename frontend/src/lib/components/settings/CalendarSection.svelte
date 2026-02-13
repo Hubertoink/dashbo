@@ -34,6 +34,7 @@
   export let chooseTagColor: (key: TagColorKey) => void;
   export let chooseCustomTagColor: (hex: string) => void;
   export let doCreateTag: () => void | Promise<void>;
+  export let doCreateSuggestedTag: (name: string, color: TagColorKey) => void | Promise<void>;
   export let doDeleteTag: (id: number) => void | Promise<void>;
 
   export let choosePersonColor: (key: TagColorKey) => void;
@@ -149,6 +150,7 @@
       {chooseTagColor}
       {chooseCustomTagColor}
       {doCreateTag}
+      {doCreateSuggestedTag}
       {doDeleteTag}
     />
 

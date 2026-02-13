@@ -726,8 +726,8 @@
                 type="button"
                 class={`px-3 py-1.5 rounded-full text-sm font-medium border transition active:scale-95 ${
                   recurrence === 'weekly'
-                    ? 'bg-white/20 border-white/40 text-white'
-                    : 'bg-white/5 border-white/10 text-white/60 hover:bg-white/10'
+                    ? 'bg-emerald-500/35 border-emerald-300/70 text-emerald-100'
+                    : 'bg-emerald-500/10 border-emerald-300/25 text-emerald-200/80 hover:bg-emerald-500/20'
                 }`}
                 on:click={() => recurrence = 'weekly'}
               >
@@ -737,8 +737,8 @@
                 type="button"
                 class={`px-3 py-1.5 rounded-full text-sm font-medium border transition active:scale-95 ${
                   recurrence === 'monthly'
-                    ? 'bg-white/20 border-white/40 text-white'
-                    : 'bg-white/5 border-white/10 text-white/60 hover:bg-white/10'
+                    ? 'bg-violet-500/35 border-violet-300/70 text-violet-100'
+                    : 'bg-violet-500/10 border-violet-300/25 text-violet-200/80 hover:bg-violet-500/20'
                 }`}
                 on:click={() => recurrence = 'monthly'}
               >
