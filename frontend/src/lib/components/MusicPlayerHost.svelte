@@ -12,6 +12,7 @@
   import {
     edgeFetchJson,
     getEdgeBaseUrlFromStorage,
+    getEdgePlayerWidgetEnabledFromStorage,
     getEdgeHeosEnabledFromStorage,
     getEdgeHeosHostsFromStorage,
     getEdgeHeosSelectedPlayerIdFromStorage,
@@ -151,6 +152,12 @@
     stopSpotifyStatusPolling();
 
     const tick = async () => {
+      const playerWidgetEnabled = getEdgePlayerWidgetEnabledFromStorage();
+      if (!playerWidgetEnabled) {
+        resetSpotifyPlaybackStatus({ enabled: false, active: false, isPlaying: false, error: null });
+        return;
+      }
+
       try {
         const r = await fetchSpotifyNowPlaying();
         const enabled = Boolean(r?.enabled);
@@ -234,12 +241,20 @@
     stopHeosStatusPolling();
 
     const tick = async () => {
+      const playerWidgetEnabled = getEdgePlayerWidgetEnabledFromStorage();
       const heosEnabled = getEdgeHeosEnabledFromStorage();
       const pid = getEdgeHeosSelectedPlayerIdFromStorage();
       const edgeBaseUrl = getEdgeBaseUrlFromStorage();
       const edgeToken = getEdgeTokenFromStorage();
 
-      if (!heosEnabled || !pid || !edgeBaseUrl) {
+      if (!playerWidgetEnabled || !heosEnabled || !pid || !edgeBaseUrl) {
+        if (!playerWidgetEnabled) {
+          stopHeosPolling();
+          heosActive = false;
+          heosPlaying = false;
+          setNowPlaying(null, false);
+          setProgress(0, 0);
+        }
         resetHeosPlaybackStatus({ enabled: Boolean(heosEnabled), pid: pid ?? null });
         return;
       }
