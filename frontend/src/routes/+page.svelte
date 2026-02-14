@@ -277,11 +277,24 @@
   }
 
   async function updateHueLight(id: string, input: { on?: boolean; brightness?: number; hexColor?: string }) {
+    // Optimistic update – patch local lights array immediately so the UI stays stable
+    hueLights = hueLights.map((l) => {
+      if (l.id !== id) return l;
+      const patched = { ...l };
+      if (input.on !== undefined) patched.on = input.on;
+      if (input.brightness !== undefined) patched.brightness = input.brightness;
+      if (input.hexColor !== undefined) patched.colorHex = input.hexColor;
+      return patched;
+    });
     try {
       await setHueLightState(id, input);
-      await loadHueLights();
+      // Background refresh to sync real state (no loading flash)
+      const data = await fetchHueLights();
+      if (Array.isArray(data?.lights)) hueLights = data.lights;
     } catch (err: any) {
       hueError = err?.message || 'Lampe konnte nicht aktualisiert werden.';
+      // Revert on failure
+      await loadHueLights();
     }
   }
 
@@ -1222,7 +1235,22 @@
     <!-- Left: weather + ToDo + clock -->
     {#if !upcomingMode}
       <div class="w-[30%] lg:w-[34%] min-w-[260px] lg:min-w-[320px] hidden md:flex flex-col p-6 lg:p-10 h-screen">
-        <div class="text-white"><WeatherWidget tone="light" /></div>
+        <div class="text-white flex items-start justify-between gap-3">
+          <WeatherWidget tone="light" />
+          {#if hueEnabled}
+            <button
+              type="button"
+              class="mt-1 h-10 w-10 shrink-0 flex items-center justify-center rounded-full border border-white/15 bg-white/8 backdrop-blur-sm text-amber-300/90 hover:bg-white/15 hover:text-amber-200 active:scale-95 transition-all duration-200"
+              on:click={openHueModal}
+              aria-label="Philips Hue öffnen"
+              title="Philips Hue"
+            >
+              <svg viewBox="0 0 24 24" class="h-5 w-5" fill="currentColor" aria-hidden="true">
+                <path d="M9 21h6v-1H9v1zm3-19C8.69 2 6 4.69 6 8c0 2.39 1.42 4.44 3.46 5.39.33.15.54.49.54.86V16h4v-1.75c0-.37.21-.71.54-.86A5.99 5.99 0 0 0 18 8c0-3.31-2.69-6-6-6z"/>
+              </svg>
+            </button>
+          {/if}
+        </div>
 
         {#if expandedWidget === 'todo'}
           <!-- Expanded To-Do takes all space between weather and clock -->
@@ -1812,19 +1840,7 @@
     </div>
   </div>
 
-  {#if hueEnabled && !standbyMode}
-    <button
-      type="button"
-      class="hidden md:flex fixed top-6 right-6 z-[95] h-11 w-11 items-center justify-center rounded-full border border-white/20 bg-black/45 backdrop-blur-md text-amber-300 hover:bg-black/60 transition"
-      on:click={openHueModal}
-      aria-label="Philips Hue öffnen"
-      title="Philips Hue"
-    >
-      <svg viewBox="0 0 24 24" class="h-5 w-5" fill="currentColor" aria-hidden="true">
-        <path d="M9 21h6v-1H9v1zm3-19C8.69 2 6 4.69 6 8c0 2.39 1.42 4.44 3.46 5.39.33.15.54.49.54.86V16h4v-1.75c0-.37.21-.71.54-.86A5.99 5.99 0 0 0 18 8c0-3.31-2.69-6-6-6z"/>
-      </svg>
-    </button>
-  {/if}
+
 
   <HueControlModal
     open={hueModalOpen}
