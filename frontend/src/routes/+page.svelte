@@ -490,6 +490,7 @@
       void loadEvents();
       if (newsEnabled) void loadNews();
       if (scribbleEnabled) void loadStandbyScribbles();
+      if (hueEnabled) void loadHueLights();
       standbyOverlayVisible = false;
       standbySwitchTimer = null;
     }, STANDBY_TRANSITION_MS);
@@ -1409,6 +1410,22 @@
               {/if}
 
               <div class="mt-auto pb-2">
+                {#if hueEnabled && hueLights.some(l => l.on)}
+                  <div class="mb-4 flex items-center gap-2 flex-wrap">
+                    <svg viewBox="0 0 24 24" class="h-4 w-4 shrink-0 text-amber-300/60" fill="currentColor">
+                      <path d="M9 21h6v-1H9v1zm3-19C8.69 2 6 4.69 6 8c0 2.39 1.42 4.44 3.46 5.39.33.15.54.49.54.86V16h4v-1.75c0-.37.21-.71.54-.86A5.99 5.99 0 0 0 18 8c0-3.31-2.69-6-6-6z"/>
+                    </svg>
+                    {#each hueLights.filter(l => l.on) as light (light.id)}
+                      <div class="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-white/8 border border-white/10">
+                        <div
+                          class="h-2 w-2 rounded-full shrink-0"
+                          style="background-color: {light.colorHex || '#FBBF24'}; box-shadow: 0 0 6px {light.colorHex || '#FBBF24'}50;"
+                        ></div>
+                        <span class="text-[11px] text-white/60 font-medium">{light.name}</span>
+                      </div>
+                    {/each}
+                  </div>
+                {/if}
                 <div class="text-white">
                   <div class="text-xl md:text-2xl font-semibold tracking-wide mb-3">{todayFullDate}</div>
                   <Clock tone="light" style={clockStyle} />
@@ -1677,6 +1694,22 @@
               {/if}
 
               <div class="mt-auto pb-2">
+                {#if hueEnabled && hueLights.some(l => l.on)}
+                  <div class="mb-4 flex items-center gap-2 flex-wrap">
+                    <svg viewBox="0 0 24 24" class="h-4 w-4 shrink-0 text-amber-300/60" fill="currentColor">
+                      <path d="M9 21h6v-1H9v1zm3-19C8.69 2 6 4.69 6 8c0 2.39 1.42 4.44 3.46 5.39.33.15.54.49.54.86V16h4v-1.75c0-.37.21-.71.54-.86A5.99 5.99 0 0 0 18 8c0-3.31-2.69-6-6-6z"/>
+                    </svg>
+                    {#each hueLights.filter(l => l.on) as light (light.id)}
+                      <div class="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-white/8 border border-white/10">
+                        <div
+                          class="h-2 w-2 rounded-full shrink-0"
+                          style="background-color: {light.colorHex || '#FBBF24'}; box-shadow: 0 0 6px {light.colorHex || '#FBBF24'}50;"
+                        ></div>
+                        <span class="text-[11px] text-white/60 font-medium">{light.name}</span>
+                      </div>
+                    {/each}
+                  </div>
+                {/if}
                 <div class="text-white">
                   <div class="text-xl md:text-2xl font-semibold tracking-wide mb-3">{todayFullDate}</div>
                   <Clock tone="light" style={clockStyle} />
