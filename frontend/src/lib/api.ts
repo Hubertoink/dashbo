@@ -1,4 +1,5 @@
 import type { ClockStyle } from './clockStyle';
+import { edgeFetchJson, getEdgeBaseUrlFromStorage, getEdgeTokenFromStorage } from './edge';
 
 export type EventDto = {
   id: number;
@@ -206,6 +207,17 @@ async function apiForm<T>(path: string, form: FormData, init?: RequestInit): Pro
   return (await resp.json()) as T;
 }
 
+async function edgeApi<T>(path: string, init?: RequestInit): Promise<T> {
+  const edgeBaseUrl = getEdgeBaseUrlFromStorage();
+  if (!edgeBaseUrl) throw new Error('edge_not_configured');
+  const edgeToken = getEdgeTokenFromStorage();
+  return edgeFetchJson<T>(edgeBaseUrl, path, edgeToken || undefined, init);
+}
+
+function shouldUseEdgeForHue(): boolean {
+  return Boolean(getEdgeBaseUrlFromStorage());
+}
+
 export async function fetchEvents(from: Date, to: Date): Promise<EventDto[]> {
   const qs = new URLSearchParams({ from: from.toISOString(), to: to.toISOString() });
   return api<EventDto[]>(`/events?${qs.toString()}`);
@@ -236,10 +248,12 @@ export async function disconnectOutlookConnection(id: number): Promise<{ ok: tru
 }
 
 export async function fetchHueStatus(): Promise<HueStatusDto> {
+  if (shouldUseEdgeForHue()) return edgeApi<HueStatusDto>('/api/hue/status');
   return api<HueStatusDto>('/hue/status');
 }
 
 export async function fetchHueLights(): Promise<{ lights: HueLightDto[] }> {
+  if (shouldUseEdgeForHue()) return edgeApi<{ lights: HueLightDto[] }>('/api/hue/lights');
   return api<{ lights: HueLightDto[] }>('/hue/lights');
 }
 
@@ -247,6 +261,13 @@ export async function setHueLightState(
   id: string,
   input: { on?: boolean; brightness?: number; hexColor?: string }
 ): Promise<{ ok: true }> {
+  if (shouldUseEdgeForHue()) {
+    return edgeApi<{ ok: true }>(`/api/hue/lights/${encodeURIComponent(id)}/state`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
   return api<{ ok: true }>(`/hue/lights/${encodeURIComponent(id)}/state`, {
     method: 'POST',
     body: JSON.stringify(input)
@@ -254,6 +275,13 @@ export async function setHueLightState(
 }
 
 export async function pairHueBridge(input?: { bridgeUrl?: string }): Promise<{ ok: true; bridgeUrl: string; status: HueStatusDto }> {
+  if (shouldUseEdgeForHue()) {
+    return edgeApi<{ ok: true; bridgeUrl: string; status: HueStatusDto }>('/api/hue/pair', {
+      method: 'POST',
+      body: JSON.stringify(input ?? {}),
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
   return api<{ ok: true; bridgeUrl: string; status: HueStatusDto }>('/hue/pair', {
     method: 'POST',
     body: JSON.stringify(input ?? {})

@@ -4,6 +4,7 @@ const cors = require('cors');
 const { requireEdgeAuth } = require('./middleware/edgeAuth');
 const { musicRouter } = require('./routes/music');
 const { heosRouter } = require('./routes/heos');
+const { hueRouter } = require('./routes/hue');
 
 const EDGE_API_VERSION = 1;
 let edgeVersion = null;
@@ -80,6 +81,7 @@ app.use('/api', requireEdgeAuth);
 
 app.use('/api/music', musicRouter);
 app.use('/api/heos', heosRouter);
+app.use('/api/hue', hueRouter);
 
 app.use((err, req, res, next) => {
   console.error('[edge] unhandled error', err);

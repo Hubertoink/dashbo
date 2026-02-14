@@ -3,6 +3,7 @@
 Lokaler Edge-Service für DashbO (Raspberry Pi):
 - Musikbibliothek lesen/streamen von `/mnt/music`
 - HEOS im LAN steuern
+- Philips Hue im LAN steuern
 
 ## Konfiguration (ENV)
 - `PORT` (default `8787`)
@@ -17,6 +18,11 @@ Lokaler Edge-Service für DashbO (Raspberry Pi):
 - `HEOS_COMMAND_TIMEOUT_MS` (optional)
 - `HEOS_SCAN_TIMEOUT_MS` (optional)
 - `HEOS_SCAN_CONCURRENCY` (optional)
+- `HUE_BRIDGE_URL` (optional): Feste Bridge URL, z.B. `https://192.168.178.50`
+- `HUE_APP_KEY` (optional): Fester Hue App Key (wenn Pairing nicht via UI erfolgen soll)
+- `HUE_ALLOW_SELF_SIGNED` (optional, default `true`): Self-signed Hue TLS Zertifikate erlauben
+- `HUE_TIMEOUT_MS` (optional)
+- `HUE_CONFIG_PATH` (optional, default `/var/lib/dashbo-edge/hue.json`): Persistenz für Pairing-Daten
 
 ## Run lokal (dev)
 - `npm install`
@@ -31,5 +37,9 @@ Lokaler Edge-Service für DashbO (Raspberry Pi):
 - `POST /api/heos/scan`
 - `POST /api/heos/play_stream`
 - `POST /api/heos/play_state`
+- `GET /api/hue/status`
+- `POST /api/hue/pair`
+- `GET /api/hue/lights`
+- `POST /api/hue/lights/:id/state`
 
 > Hinweis: Wenn dein Dashboard auf `https://dashbohub.de` läuft, brauchst du für den Zugriff auf Edge am Pi i.d.R. HTTPS (sonst Mixed-Content im Browser).

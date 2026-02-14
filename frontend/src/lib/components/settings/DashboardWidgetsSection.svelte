@@ -131,6 +131,7 @@
   export let showPreview = true;
   export let previewClass = 'mb-6';
   export let highlightWidget: string | null = null;
+  let hueSetupOpen = false;
 
   function toggleNewsFeed(id: NewsFeedId) {
     if (newsFeeds.includes(id)) newsFeeds = newsFeeds.filter((x) => x !== id);
@@ -341,6 +342,13 @@
         >
           {huePairing ? 'Verbinde…' : 'Bridge verbinden'}
         </button>
+
+        <button
+          class="h-8 px-3 rounded-lg bg-white/20 hover:bg-white/25 text-xs font-medium"
+          on:click={() => (hueSetupOpen = true)}
+        >
+          Setup-Anleitung
+        </button>
       </div>
 
       {#if huePairMessage}
@@ -380,6 +388,64 @@
       </button>
     </div>
   </WidgetSettingsCard>
+
+  {#if hueSetupOpen}
+    <div class="fixed inset-0 z-[1000] flex items-center justify-center p-4">
+      <button
+        class="absolute inset-0 bg-black/70"
+        aria-label="Schließen"
+        on:click={() => (hueSetupOpen = false)}
+      ></button>
+
+      <div class="relative z-[1001] w-full max-w-xl rounded-xl border border-white/15 bg-zinc-900/95 p-5 text-white shadow-2xl">
+        <div class="flex items-start justify-between gap-3">
+          <div>
+            <div class="text-sm uppercase tracking-wide text-white/50">Philips Hue</div>
+            <h3 class="text-lg font-semibold">Setup für dashbohub.de + lokalen Edge</h3>
+          </div>
+          <button
+            class="h-8 px-2 rounded-lg bg-white/10 hover:bg-white/20 text-sm"
+            on:click={() => (hueSetupOpen = false)}
+          >
+            ✕
+          </button>
+        </div>
+
+        <div class="mt-4 space-y-3 text-sm text-white/80">
+          <div class="rounded-lg border border-white/10 bg-white/5 p-3">
+            1) Lokalen <span class="font-semibold text-white">dashbo-edge</span> Container starten (im Heimnetz, nicht auf Mittwald).
+          </div>
+          <div class="rounded-lg border border-white/10 bg-white/5 p-3">
+            2) Im Bereich <span class="font-semibold text-white">Musik-Player → Edge-Service Verbindung</span> Base-URL und Token eintragen und speichern.
+          </div>
+          <div class="rounded-lg border border-white/10 bg-white/5 p-3">
+            3) Hier bei <span class="font-semibold text-white">Philips Hue</span>: Bridge-Button drücken, dann <span class="font-semibold text-white">Bridge verbinden</span> klicken.
+          </div>
+          <div class="rounded-lg border border-white/10 bg-white/5 p-3">
+            4) Danach <span class="font-semibold text-white">Status aktualisieren</span> und prüfen, ob die Bridge erreichbar ist.
+          </div>
+        </div>
+
+        <div class="mt-4 flex flex-wrap items-center gap-2">
+          <button
+            class="h-8 px-3 rounded-lg bg-cyan-500/25 hover:bg-cyan-500/35 text-xs font-medium text-cyan-100"
+            on:click={() => {
+              hueSetupOpen = false;
+              openEdgeSetup();
+            }}
+          >
+            Edge-Setup öffnen
+          </button>
+          <button
+            class="h-8 px-3 rounded-lg bg-white/20 hover:bg-white/25 text-xs font-medium"
+            on:click={() => (hueSetupOpen = false)}
+          >
+            Schließen
+          </button>
+        </div>
+      </div>
+    </div>
+  {/if}
 
   <!-- Wetter Widget -->
   <WidgetSettingsCard

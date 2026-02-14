@@ -13,7 +13,7 @@
 services:
   dashbo-edge:
     # Prebuilt image (recommended). Override via EDGE_IMAGE env.
-    image: ${EDGE_IMAGE:-ghcr.io/Hubertoink/dashbo-edge:latest}
+    image: ${EDGE_IMAGE:-ghcr.io/hubertoink/dashbo-edge:latest}
     container_name: dashbo-edge
     restart: unless-stopped
     environment:
@@ -32,6 +32,12 @@ services:
       HEOS_COMMAND_TIMEOUT_MS: ${HEOS_COMMAND_TIMEOUT_MS:-5000}
       HEOS_SCAN_TIMEOUT_MS: ${HEOS_SCAN_TIMEOUT_MS:-200}
       HEOS_SCAN_CONCURRENCY: ${HEOS_SCAN_CONCURRENCY:-64}
+      # Hue bridge (optional): can be discovered + paired from the UI.
+      HUE_BRIDGE_URL: ${HUE_BRIDGE_URL:-}
+      HUE_APP_KEY: ${HUE_APP_KEY:-}
+      HUE_ALLOW_SELF_SIGNED: ${HUE_ALLOW_SELF_SIGNED:-true}
+      HUE_TIMEOUT_MS: ${HUE_TIMEOUT_MS:-8000}
+      HUE_CONFIG_PATH: /var/lib/dashbo-edge/hue.json
     ports:
       - "${EDGE_PORT:-8787}:8787"
     volumes:
