@@ -1,6 +1,6 @@
 const express = require('express');
 
-const { getHueStatus, listHueLights, setHueLightState, pairHueBridge } = require('../services/hueService');
+const { getHueStatus, listHueLights, setHueLightState, pairHueBridge, listHueRooms, setHueRoomState } = require('../services/hueService');
 
 const hueRouter = express.Router();
 
@@ -52,6 +52,45 @@ hueRouter.post('/pair', (req, res) => {
   })().catch((err) => {
     const msg = err instanceof Error ? err.message : String(err || 'hue_pair_failed');
     res.status(502).json({ error: 'hue_pair_failed', message: msg });
+  });
+});
+
+hueRouter.get('/rooms', (req, res) => {
+  (async () => {
+    const status = await getHueStatus();
+    if (!status.configured) {
+      return res.status(400).json({ error: 'hue_not_configured', message: status.error || 'Hue ist nicht konfiguriert.' });
+    }
+    if (!status.available) {
+      return res.status(502).json({ error: 'hue_unavailable', message: status.error || 'Hue Bridge nicht erreichbar.' });
+    }
+
+    const rooms = await listHueRooms();
+    res.json({ rooms });
+  })().catch((err) => {
+    const msg = err instanceof Error ? err.message : String(err || 'hue_rooms_failed');
+    res.status(502).json({ error: 'hue_error', message: msg });
+  });
+});
+
+hueRouter.post('/rooms/:id/state', (req, res) => {
+  (async () => {
+    const id = String(req.params.id || '').trim();
+    if (!id) return res.status(400).json({ error: 'invalid_id' });
+
+    const body = req?.body || {};
+    await setHueRoomState({
+      id,
+      on: typeof body.on === 'boolean' ? body.on : undefined,
+      brightness: body.brightness
+    });
+    return res.json({ ok: true });
+  })().catch((e) => {
+    const msg = String(e?.message || e);
+    if (msg.includes('invalid_brightness')) return res.status(400).json({ error: 'invalid_brightness' });
+    if (msg.includes('empty_state')) return res.status(400).json({ error: 'empty_state' });
+    if (msg.includes('hue_not_configured')) return res.status(400).json({ error: 'hue_not_configured' });
+    return res.status(502).json({ error: 'hue_error', message: msg });
   });
 });
 

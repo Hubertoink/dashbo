@@ -337,6 +337,74 @@ async function listHueLights() {
   return rows.map(mapLight).filter((x) => x.id).sort((a, b) => a.name.localeCompare(b.name));
 }
 
+function mapGroupedLight(gl) {
+  const id = String(gl?.id || '').trim();
+  const on = Boolean(gl?.on?.on);
+  const brightness = Number.isFinite(Number(gl?.dimming?.brightness))
+    ? Math.max(1, Math.min(100, Math.round(Number(gl.dimming.brightness))))
+    : null;
+  return { id, on, brightness };
+}
+
+function mapRoom(room, groupedLightsMap) {
+  const id = String(room?.id || '').trim();
+  const name = String(room?.metadata?.name || 'Zimmer').trim();
+  const childLightIds = (Array.isArray(room?.children) ? room.children : [])
+    .filter((c) => c?.rtype === 'device' || c?.rtype === 'light')
+    .map((c) => String(c?.rid || ''));
+
+  const groupedLightRef = (Array.isArray(room?.services) ? room.services : [])
+    .find((s) => s?.rtype === 'grouped_light');
+  const groupedLightId = String(groupedLightRef?.rid || '').trim();
+  const gl = groupedLightsMap[groupedLightId] || {};
+
+  return {
+    id,
+    name,
+    groupedLightId: groupedLightId || null,
+    on: Boolean(gl.on),
+    brightness: gl.brightness ?? null,
+    lightCount: childLightIds.length
+  };
+}
+
+async function listHueRooms() {
+  const [roomsPayload, groupedPayload] = await Promise.all([
+    requestHue('/clip/v2/resource/room'),
+    requestHue('/clip/v2/resource/grouped_light')
+  ]);
+
+  const groupedLights = Array.isArray(groupedPayload?.data) ? groupedPayload.data : [];
+  const groupedMap = {};
+  for (const gl of groupedLights) {
+    const mapped = mapGroupedLight(gl);
+    if (mapped.id) groupedMap[mapped.id] = mapped;
+  }
+
+  const rooms = Array.isArray(roomsPayload?.data) ? roomsPayload.data : [];
+  return rooms
+    .map((r) => mapRoom(r, groupedMap))
+    .filter((r) => r.id && r.groupedLightId)
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+async function setHueRoomState({ id, on, brightness }) {
+  const roomId = String(id || '').trim();
+  if (!roomId) throw new Error('invalid_room_id');
+
+  const body = {};
+  if (typeof on === 'boolean') body.on = { on };
+  if (brightness != null) {
+    const b = Number(brightness);
+    if (!Number.isFinite(b)) throw new Error('invalid_brightness');
+    body.dimming = { brightness: Math.max(1, Math.min(100, b)) };
+  }
+
+  if (Object.keys(body).length === 0) throw new Error('empty_state');
+  await requestHue(`/clip/v2/resource/grouped_light/${encodeURIComponent(roomId)}`, { method: 'PUT', body });
+  return { ok: true };
+}
+
 async function setHueLightState({ id, on, brightness, hexColor }) {
   const lightId = String(id || '').trim();
   if (!lightId) throw new Error('invalid_light_id');
@@ -363,5 +431,7 @@ module.exports = {
   getHueStatus,
   listHueLights,
   setHueLightState,
+  listHueRooms,
+  setHueRoomState,
   pairHueBridge
 };

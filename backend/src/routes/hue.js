@@ -2,7 +2,7 @@ const express = require('express');
 const { z } = require('zod');
 
 const { requireAuth, attachUserContext, requireAdmin } = require('../middleware/auth');
-const { getHueStatus, listHueLights, setHueLightState, pairHueBridge } = require('../services/hueService');
+const { getHueStatus, listHueLights, setHueLightState, pairHueBridge, listHueRooms, setHueRoomState } = require('../services/hueService');
 
 const hueRouter = express.Router();
 
@@ -46,6 +46,49 @@ hueRouter.post('/pair', requireAuth, attachUserContext, requireAdmin, async (req
       return res.status(404).json({ error: 'hue_bridge_not_found', message: 'Keine Hue Bridge im Netzwerk gefunden.' });
     }
     return res.status(502).json({ error: 'hue_pair_failed', message: msg });
+  }
+});
+
+hueRouter.get('/rooms', requireAuth, async (_req, res) => {
+  const status = await getHueStatus();
+  if (!status.configured) {
+    return res.status(400).json({ error: 'hue_not_configured', message: status.error || 'Hue ist nicht konfiguriert.' });
+  }
+  if (!status.available) {
+    return res.status(502).json({ error: 'hue_unavailable', message: status.error || 'Hue Bridge nicht erreichbar.' });
+  }
+
+  const rooms = await listHueRooms();
+  res.json({ rooms });
+});
+
+hueRouter.post('/rooms/:id/state', requireAuth, async (req, res) => {
+  const schema = z
+    .object({
+      on: z.boolean().optional(),
+      brightness: z.number().min(1).max(100).optional(),
+    })
+    .refine((v) => typeof v.on === 'boolean' || typeof v.brightness === 'number', {
+      message: 'at_least_one_field_required',
+    });
+
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: 'invalid_body', details: parsed.error.flatten() });
+  }
+
+  const id = String(req.params.id || '').trim();
+  if (!id) return res.status(400).json({ error: 'invalid_id' });
+
+  try {
+    await setHueRoomState({ id, ...parsed.data });
+    return res.json({ ok: true });
+  } catch (e) {
+    const msg = String(e?.message || e);
+    if (msg.includes('invalid_brightness')) return res.status(400).json({ error: 'invalid_brightness' });
+    if (msg.includes('empty_state')) return res.status(400).json({ error: 'empty_state' });
+    if (msg.includes('hue_not_configured')) return res.status(400).json({ error: 'hue_not_configured' });
+    return res.status(502).json({ error: 'hue_error', message: msg });
   }
 });
 

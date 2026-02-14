@@ -23,9 +23,12 @@
     fetchScribbles,
     fetchHueLights,
     setHueLightState,
+    fetchHueRooms,
+    setHueRoomState,
     type HolidayDto,
     type EventDto,
     type HueLightDto,
+    type HueRoomDto,
     type NewsItemDto,
     type ScribbleDto,
     type PersonDto,
@@ -77,6 +80,7 @@
   let hueEnabled = false;
   let hueModalOpen = false;
   let hueLights: HueLightDto[] = [];
+  let hueRooms: HueRoomDto[] = [];
   let hueLoading = false;
   let hueError: string | null = null;
   let scribbleEnabled = false;
@@ -253,6 +257,7 @@
   async function loadHueLights() {
     if (!hueEnabled) {
       hueLights = [];
+      hueRooms = [];
       hueError = null;
       return;
     }
@@ -260,11 +265,16 @@
     hueLoading = true;
     hueError = null;
     try {
-      const data = await fetchHueLights();
-      hueLights = Array.isArray(data?.lights) ? data.lights : [];
+      const [lightsData, roomsData] = await Promise.all([
+        fetchHueLights(),
+        fetchHueRooms()
+      ]);
+      hueLights = Array.isArray(lightsData?.lights) ? lightsData.lights : [];
+      hueRooms = Array.isArray(roomsData?.rooms) ? roomsData.rooms : [];
     } catch (err: any) {
       hueError = err?.message || 'Hue konnte nicht geladen werden.';
       hueLights = [];
+      hueRooms = [];
     } finally {
       hueLoading = false;
     }
@@ -294,6 +304,27 @@
     } catch (err: any) {
       hueError = err?.message || 'Lampe konnte nicht aktualisiert werden.';
       // Revert on failure
+      await loadHueLights();
+    }
+  }
+
+  async function updateHueRoom(groupedLightId: string, input: { on?: boolean; brightness?: number }) {
+    // Optimistic update
+    hueRooms = hueRooms.map((r) => {
+      if (r.groupedLightId !== groupedLightId) return r;
+      const patched = { ...r };
+      if (input.on !== undefined) patched.on = input.on;
+      if (input.brightness !== undefined) patched.brightness = input.brightness;
+      return patched;
+    });
+    try {
+      await setHueRoomState(groupedLightId, input);
+      // Background refresh to sync real state
+      const [roomsData, lightsData] = await Promise.all([fetchHueRooms(), fetchHueLights()]);
+      if (Array.isArray(roomsData?.rooms)) hueRooms = roomsData.rooms;
+      if (Array.isArray(lightsData?.lights)) hueLights = lightsData.lights;
+    } catch (err: any) {
+      hueError = err?.message || 'Zimmer konnte nicht aktualisiert werden.';
       await loadHueLights();
     }
   }
@@ -1880,11 +1911,14 @@
     loading={hueLoading}
     error={hueError}
     lights={hueLights}
+    rooms={hueRooms}
     onClose={() => (hueModalOpen = false)}
     onRefresh={loadHueLights}
     onToggle={(id, on) => updateHueLight(id, { on })}
     onSetBrightness={(id, brightness) => updateHueLight(id, { brightness })}
     onSetColor={(id, hexColor) => updateHueLight(id, { hexColor })}
+    onRoomToggle={(groupedLightId, on) => updateHueRoom(groupedLightId, { on })}
+    onRoomSetBrightness={(groupedLightId, brightness) => updateHueRoom(groupedLightId, { brightness })}
   />
 
   <AddEventModal

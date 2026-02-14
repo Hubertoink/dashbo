@@ -51,6 +51,15 @@ export type HueLightDto = {
   colorHex: string | null;
 };
 
+export type HueRoomDto = {
+  id: string;
+  name: string;
+  groupedLightId: string | null;
+  on: boolean;
+  brightness: number | null;
+  lightCount: number;
+};
+
 export type TodoItemDto = {
   connectionId: number;
   connectionLabel: string;
@@ -285,6 +294,28 @@ export async function pairHueBridge(input?: { bridgeUrl?: string }): Promise<{ o
   return api<{ ok: true; bridgeUrl: string; status: HueStatusDto }>('/hue/pair', {
     method: 'POST',
     body: JSON.stringify(input ?? {})
+  });
+}
+
+export async function fetchHueRooms(): Promise<{ rooms: HueRoomDto[] }> {
+  if (shouldUseEdgeForHue()) return edgeApi<{ rooms: HueRoomDto[] }>('/api/hue/rooms');
+  return api<{ rooms: HueRoomDto[] }>('/hue/rooms');
+}
+
+export async function setHueRoomState(
+  groupedLightId: string,
+  input: { on?: boolean; brightness?: number }
+): Promise<{ ok: true }> {
+  if (shouldUseEdgeForHue()) {
+    return edgeApi<{ ok: true }>(`/api/hue/rooms/${encodeURIComponent(groupedLightId)}/state`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
+  return api<{ ok: true }>(`/hue/rooms/${encodeURIComponent(groupedLightId)}/state`, {
+    method: 'POST',
+    body: JSON.stringify(input)
   });
 }
 
