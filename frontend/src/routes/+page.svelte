@@ -386,8 +386,10 @@
 
   $: bgOverlay =
     tone === 'dark'
-      ? 'linear-gradient(to right, rgba(0,0,0,0.75), rgba(0,0,0,0.88))'
-      : 'linear-gradient(to right, rgba(0,0,0,0.55), rgba(0,0,0,0.78))';
+      ? 'linear-gradient(to right, rgba(255,255,255,0.18), rgba(255,255,255,0.3))'
+      : 'linear-gradient(to right, rgba(0,0,0,0.22), rgba(0,0,0,0.42))';
+
+  $: bgFilter = tone === 'dark' ? 'brightness(1.03) contrast(0.96)' : 'brightness(0.97) contrast(1.02)';
 
   function openAddEventModal() {
     addEventPrefill = null;
@@ -772,7 +774,7 @@
       }
 
       const avg = n > 0 ? sum / n : 0.5;
-      return avg > 0.72 ? 'dark' : 'light';
+      return avg >= 0.62 ? 'dark' : 'light';
     } catch {
       return 'light';
     }
@@ -1243,11 +1245,11 @@
 <!-- Capture ensures clicks still exit even if inner components stopPropagation -->
 <svelte:window on:click|capture={() => ((standbyMode || upcomingMode) ? exitStandby() : undefined)} />
 
-<div class="h-screen text-white overflow-hidden relative bg-black">
+<div class={`h-screen overflow-hidden relative bg-black ${tone === 'dark' ? 'dashboard-tone-dark text-zinc-900' : 'dashboard-tone-light text-white'}`}>
   <div class="absolute inset-0 overflow-hidden">
     <div
       class="kenburns absolute inset-0"
-      style={`background-image: ${bgOverlay}, url('${backgroundUrl}'); background-size: cover; background-position: center;`}
+      style={`background-image: ${bgOverlay}, url('${backgroundUrl}'); background-size: cover; background-position: center; filter: ${bgFilter};`}
     ></div>
   </div>
 
@@ -1268,7 +1270,7 @@
     {#if !upcomingMode}
       <div class="w-[30%] lg:w-[34%] min-w-[260px] lg:min-w-[320px] hidden md:flex flex-col p-4 lg:p-6 xl:p-10 h-screen">
         <div class="text-white flex items-start justify-between gap-3">
-          <WeatherWidget tone="light" />
+          <WeatherWidget {tone} />
           {#if hueEnabled}
             <button
               type="button"
@@ -1355,7 +1357,7 @@
         {/if}
 
         <div class="mt-auto pb-2">
-          <div class="text-white"><Clock tone="light" style={clockStyle} /></div>
+          <div class={tone === 'dark' ? 'text-zinc-900' : 'text-white'}><Clock {tone} style={clockStyle} /></div>
         </div>
       </div>
     {/if}
@@ -1459,7 +1461,7 @@
                 {/if}
                 <div class="text-white">
                   <div class="text-xl md:text-2xl font-semibold tracking-wide mb-3">{todayFullDate}</div>
-                  <Clock tone="light" style={clockStyle} />
+                  <Clock {tone} style={clockStyle} />
                 </div>
               </div>
             </div>
@@ -1744,7 +1746,7 @@
                 {/if}
                 <div class="text-white">
                   <div class="text-xl md:text-2xl font-semibold tracking-wide mb-3">{todayFullDate}</div>
-                  <Clock tone="light" style={clockStyle} />
+                  <Clock {tone} style={clockStyle} />
                 </div>
               </div>
             </div>
@@ -1968,8 +1970,8 @@
   {#if !upcomingMode}
     <div class="relative z-10 md:hidden p-6 border-t border-white/10 glass">
       <div class="flex items-center justify-between">
-        <WeatherWidget />
-        <Clock style={clockStyle} />
+        <WeatherWidget {tone} />
+        <Clock {tone} style={clockStyle} />
       </div>
     </div>
   {/if}
@@ -1994,6 +1996,42 @@
 </div>
 
 <style>
+  .dashboard-tone-dark {
+    color: rgb(24 24 27);
+  }
+
+  .dashboard-tone-dark :global(.text-white) {
+    color: rgb(24 24 27) !important;
+  }
+
+  .dashboard-tone-dark :global(.text-white\/80) {
+    color: rgba(24, 24, 27, 0.82) !important;
+  }
+
+  .dashboard-tone-dark :global(.text-white\/70) {
+    color: rgba(24, 24, 27, 0.74) !important;
+  }
+
+  .dashboard-tone-dark :global(.text-white\/60) {
+    color: rgba(24, 24, 27, 0.66) !important;
+  }
+
+  .dashboard-tone-dark :global(.text-white\/50) {
+    color: rgba(24, 24, 27, 0.56) !important;
+  }
+
+  .dashboard-tone-dark :global(.text-white\/40) {
+    color: rgba(24, 24, 27, 0.46) !important;
+  }
+
+  .dashboard-tone-dark :global(.text-white\/35) {
+    color: rgba(24, 24, 27, 0.4) !important;
+  }
+
+  .dashboard-tone-dark :global(.text-shadow) {
+    text-shadow: 0 2px 14px rgba(255, 255, 255, 0.38) !important;
+  }
+
   .standby-zeit-news {
     -webkit-mask-image: radial-gradient(120% 120% at 50% 50%, #000 72%, transparent 100%);
     mask-image: radial-gradient(120% 120% at 50% 50%, #000 72%, transparent 100%);
