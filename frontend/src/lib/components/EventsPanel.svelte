@@ -583,11 +583,11 @@
     ></button>
 
     <!-- Bottom-anchored search bar with results floating above -->
-    <div class="absolute inset-x-0 bottom-0 flex flex-col items-center px-4 md:px-12 lg:px-24 pb-6" in:fly={{ y: 24, duration: 220 }} out:fade={{ duration: 140 }}>
-      <div class="max-w-4xl w-full flex flex-col items-stretch">
+    <div class="absolute inset-0 flex flex-col items-center justify-end px-4 md:px-12 lg:px-24 pb-6 pt-6" in:fly={{ y: 24, duration: 220 }} out:fade={{ duration: 140 }}>
+      <div class="max-w-4xl w-full flex flex-col items-stretch min-h-0">
         <!-- Results above search bar -->
         {#if searchBusy || searchError || searchTokens.length > 0}
-          <div class="mb-2 rounded-2xl border border-white/20 bg-zinc-950/90 backdrop-blur-xl shadow-2xl shadow-black/50 max-h-[55vh] overflow-y-auto">
+          <div class="mb-2 rounded-2xl border border-white/20 bg-zinc-950/90 backdrop-blur-xl shadow-2xl shadow-black/50 min-h-0 overflow-y-auto">
             <div class="p-3 md:p-4">
               {#if searchBusy}
                 <div class="text-sm text-white/55 px-2 py-2">Lade Todos…</div>
