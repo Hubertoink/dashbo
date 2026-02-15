@@ -119,7 +119,7 @@
   }
 
   function formatTodoMeta(todo: TodoItemDto) {
-    const due = formatDateLabel(todo.dueAt ?? null);
+    const due = formatDateTimeLabel(todo.dueAt ?? null);
     const state = todo.completed ? 'Erledigt' : 'Offen';
     const list = todo.listId?.startsWith('dashbo:') ? 'Dashbo' : todo.connectionLabel || 'Todo';
     if (due) return `${list} · ${state} · Fällig ${due}`;
@@ -585,35 +585,7 @@
     <div class="absolute inset-0 flex items-start justify-center pt-[10vh] pb-6 px-4 md:px-12 lg:px-24 overflow-hidden">
       <div class="max-w-4xl w-full max-h-full flex flex-col" in:fly={{ y: 16, duration: 220 }} out:fade={{ duration: 140 }}>
         <div class="rounded-2xl border border-white/20 bg-zinc-950/90 backdrop-blur-xl shadow-2xl shadow-black/50 p-3 md:p-4 flex flex-col max-h-full overflow-hidden">
-          <div class="flex items-center gap-3 px-2">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-white/55 shrink-0">
-              <circle cx="11" cy="11" r="8"></circle>
-              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-            </svg>
-            <input
-              bind:this={searchInputEl}
-              bind:value={searchQuery}
-              type="text"
-              class="w-full bg-transparent outline-none text-lg md:text-xl text-white placeholder:text-white/35"
-              placeholder="Termine und Todos durchsuchen…"
-              aria-label="Suche nach Terminen und Todos"
-            />
-            <button
-              type="button"
-              class="h-9 w-9 rounded-lg bg-white/8 hover:bg-white/14 text-white/60 hover:text-white/90 grid place-items-center transition"
-              aria-label="Suche schließen"
-              on:click={closeSearch}
-            >
-              <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <line x1="18" y1="6" x2="6" y2="18"></line>
-                <line x1="6" y1="6" x2="18" y2="18"></line>
-              </svg>
-            </button>
-          </div>
-
-          <div class="mt-3 h-px bg-gradient-to-r from-white/15 via-white/8 to-transparent"></div>
-
-          <div class="mt-3 min-h-0 flex-1 overflow-y-auto pr-1">
+          <div class="min-h-0 flex-1 overflow-y-auto pr-1">
             {#if searchBusy}
               <div class="text-sm text-white/55 px-2 py-3">Lade Todos…</div>
             {/if}
@@ -653,6 +625,34 @@
                 {/each}
               </div>
             {/if}
+          </div>
+
+          <div class="mt-3 h-px bg-gradient-to-r from-white/15 via-white/8 to-transparent"></div>
+
+          <div class="mt-3 flex items-center gap-3 px-2">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-white/55 shrink-0">
+              <circle cx="11" cy="11" r="8"></circle>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            </svg>
+            <input
+              bind:this={searchInputEl}
+              bind:value={searchQuery}
+              type="text"
+              class="w-full bg-transparent outline-none text-lg md:text-xl text-white placeholder:text-white/35"
+              placeholder="Termine und Todos durchsuchen…"
+              aria-label="Suche nach Terminen und Todos"
+            />
+            <button
+              type="button"
+              class="h-9 w-9 rounded-lg bg-white/8 hover:bg-white/14 text-white/60 hover:text-white/90 grid place-items-center transition"
+              aria-label="Suche schließen"
+              on:click={closeSearch}
+            >
+              <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+              </svg>
+            </button>
           </div>
         </div>
       </div>
