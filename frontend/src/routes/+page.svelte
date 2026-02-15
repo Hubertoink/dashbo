@@ -1584,7 +1584,7 @@
                         >
                           {#if n.imageUrl}
                             <div class="absolute inset-0 bg-cover bg-center opacity-45" style={`background-image: url('${n.imageUrl}');`}></div>
-                            <div class="absolute inset-0 bg-gradient-to-r from-black/55 via-black/35 to-black/15"></div>
+                            <div class="absolute inset-0 bg-gradient-to-r from-black/65 via-black/45 to-black/25"></div>
                           {:else}
                             <div class="absolute inset-0 bg-white/5"></div>
                           {/if}
@@ -1596,7 +1596,7 @@
                                 <span class="ml-2 text-white/35">{newsSourceLabel(n.source)}</span>
                               {/if}
                             </div>
-                            <div class="mt-3 text-xl md:text-2xl font-semibold leading-snug">{n.title}</div>
+                            <div class="mt-3 text-xl md:text-2xl font-semibold leading-snug text-shadow">{n.title}</div>
                             {#if validTeaser}
                               <div class="mt-3 text-white/60 text-base leading-relaxed line-clamp-3">{n.teaser}</div>
                             {/if}
@@ -1874,7 +1874,7 @@
                         >
                           {#if n.imageUrl}
                             <div class="absolute inset-0 bg-cover bg-center opacity-45" style={`background-image: url('${n.imageUrl}');`}></div>
-                            <div class="absolute inset-0 bg-gradient-to-r from-black/55 via-black/35 to-black/15"></div>
+                            <div class="absolute inset-0 bg-gradient-to-r from-black/65 via-black/45 to-black/25"></div>
                           {:else}
                             <div class="absolute inset-0 bg-white/5"></div>
                           {/if}
@@ -1886,7 +1886,7 @@
                                 <span class="ml-2 text-white/35">{newsSourceLabel(n.source)}</span>
                               {/if}
                             </div>
-                            <div class="mt-3 text-xl md:text-2xl font-semibold leading-snug">{n.title}</div>
+                            <div class="mt-3 text-xl md:text-2xl font-semibold leading-snug text-shadow">{n.title}</div>
                             {#if validTeaser}
                               <div class="mt-3 text-white/60 text-base leading-relaxed line-clamp-3">{n.teaser}</div>
                             {/if}
@@ -2063,5 +2063,31 @@
   .standby-zeit-news {
     -webkit-mask-image: radial-gradient(120% 120% at 50% 50%, #000 72%, transparent 100%);
     mask-image: radial-gradient(120% 120% at 50% 50%, #000 72%, transparent 100%);
+  }
+
+  /* Standby news must always show white text regardless of dashboard tone */
+  .dashboard-tone-dark :global(.standby-zeit-news) {
+    color: rgb(255 255 255) !important;
+  }
+  .dashboard-tone-dark :global(.standby-zeit-news .text-white\/50) {
+    color: rgba(255, 255, 255, 0.5) !important;
+  }
+  .dashboard-tone-dark :global(.standby-zeit-news .text-white\/60) {
+    color: rgba(255, 255, 255, 0.6) !important;
+  }
+  .dashboard-tone-dark :global(.standby-zeit-news .text-white\/35) {
+    color: rgba(255, 255, 255, 0.35) !important;
+  }
+  .dashboard-tone-dark :global(.standby-zeit-news .text-white\/70) {
+    color: rgba(255, 255, 255, 0.7) !important;
+  }
+  .dashboard-tone-dark :global(.standby-zeit-news .bg-white\/30) {
+    background-color: rgba(255, 255, 255, 0.3) !important;
+  }
+  .dashboard-tone-dark :global(.standby-zeit-news .bg-white\/70) {
+    background-color: rgba(255, 255, 255, 0.7) !important;
+  }
+  .dashboard-tone-dark :global(.standby-zeit-news .bg-white\/20) {
+    background-color: rgba(255, 255, 255, 0.2) !important;
   }
 </style>
