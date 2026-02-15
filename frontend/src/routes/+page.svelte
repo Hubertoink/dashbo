@@ -1266,7 +1266,7 @@
   <div class="relative z-10 flex h-screen overflow-hidden items-stretch">
     <!-- Left: weather + ToDo + clock -->
     {#if !upcomingMode}
-      <div class="w-[30%] lg:w-[34%] min-w-[260px] lg:min-w-[320px] hidden md:flex flex-col p-6 lg:p-10 h-screen">
+      <div class="w-[30%] lg:w-[34%] min-w-[260px] lg:min-w-[320px] hidden md:flex flex-col p-4 lg:p-6 xl:p-10 h-screen">
         <div class="text-white flex items-start justify-between gap-3">
           <WeatherWidget tone="light" />
           {#if hueEnabled}
