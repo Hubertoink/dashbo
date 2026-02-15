@@ -18,6 +18,7 @@
   import { fade, fly } from 'svelte/transition';
 
   export let open: boolean;
+  export let tone: 'light' | 'dark' = 'light';
   export let selectedDate: Date;
   export let onClose: () => void;
   export let onCreated: () => void;
@@ -576,7 +577,7 @@
   <!-- Backdrop -->
   <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
   <div
-    class="fixed inset-0 z-[1000] bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center"
+    class={`fixed inset-0 z-[1000] backdrop-blur-sm flex items-end sm:items-center justify-center ${tone === 'dark' ? 'bg-black/35' : 'bg-black/60'}`}
     style="padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom);"
     transition:fade={{ duration: 200 }}
     on:click|self={onClose}

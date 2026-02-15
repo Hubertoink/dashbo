@@ -1245,7 +1245,7 @@
 <!-- Capture ensures clicks still exit even if inner components stopPropagation -->
 <svelte:window on:click|capture={() => ((standbyMode || upcomingMode) ? exitStandby() : undefined)} />
 
-<div class={`h-screen overflow-hidden relative bg-black ${tone === 'dark' ? 'dashboard-tone-dark text-zinc-900' : 'dashboard-tone-light text-white'}`}>
+<div class="h-screen overflow-hidden relative bg-black">
   <div class="absolute inset-0 overflow-hidden">
     <div
       class="kenburns absolute inset-0"
@@ -1265,7 +1265,7 @@
     ></div>
   {/if}
 
-  <div class="relative z-10 flex h-screen overflow-hidden items-stretch">
+  <div class={`relative z-10 flex h-screen overflow-hidden items-stretch ${tone === 'dark' ? 'dashboard-tone-dark text-zinc-900' : 'dashboard-tone-light text-white'}`}>
     <!-- Left: weather + ToDo + clock -->
     {#if !upcomingMode}
       <div class="w-[30%] lg:w-[34%] min-w-[260px] lg:min-w-[320px] hidden md:flex flex-col p-4 lg:p-6 xl:p-10 h-screen">
@@ -1274,7 +1274,11 @@
           {#if hueEnabled}
             <button
               type="button"
-              class="mt-1 h-10 w-10 shrink-0 flex items-center justify-center rounded-full border border-white/15 bg-white/8 backdrop-blur-sm text-amber-300/90 hover:bg-white/15 hover:text-amber-200 active:scale-95 transition-all duration-200"
+              class={`mt-1 h-10 w-10 shrink-0 flex items-center justify-center rounded-full backdrop-blur-sm active:scale-95 transition-all duration-200 ${
+                tone === 'dark'
+                  ? 'border border-black/20 bg-black/10 text-amber-700 hover:bg-black/15 hover:text-amber-800'
+                  : 'border border-white/15 bg-white/8 text-amber-300/90 hover:bg-white/15 hover:text-amber-200'
+              }`}
               on:click={openHueModal}
               aria-label="Philips Hue öffnen"
               title="Philips Hue"
@@ -1293,8 +1297,8 @@
           </div>
         {:else if expandedWidget === 'news'}
           <!-- Expanded News takes all space between weather and clock -->
-          <div class="mt-4 lg:mt-6 pb-6 lg:pb-8 text-white flex-1 flex flex-col min-h-0" transition:slide={{ duration: 300 }}>
-            <ZeitNewsWidget expanded={true} onToggleExpand={() => expandedWidget = null} />
+            <div class="mt-4 lg:mt-6 pb-6 lg:pb-8 text-white flex-1 flex flex-col min-h-0" transition:slide={{ duration: 300 }}>
+              <ZeitNewsWidget expanded={true} {tone} onToggleExpand={() => expandedWidget = null} />
           </div>
         {:else if expandedWidget === 'scribble'}
           <!-- Expanded Scribble takes all space between weather and clock -->
@@ -1311,7 +1315,7 @@
 
           {#if newsEnabled}
             <div class="mt-2 {compactWidgets ? 'pb-3 lg:pb-4' : 'pb-6 lg:pb-8'} text-white" transition:slide={{ duration: 300 }}>
-              <ZeitNewsWidget compact={compactWidgets} onToggleExpand={() => expandedWidget = 'news'} />
+              <ZeitNewsWidget compact={compactWidgets} {tone} onToggleExpand={() => expandedWidget = 'news'} />
             </div>
           {/if}
 
@@ -1445,7 +1449,7 @@
               <div class="mt-auto pb-2">
                 {#if hueEnabled && hueLights.some(l => l.on)}
                   <div class="mb-4 flex items-center gap-2 flex-wrap">
-                    <svg viewBox="0 0 24 24" class="h-4 w-4 shrink-0 text-amber-300/60" fill="currentColor">
+                    <svg viewBox="0 0 24 24" class={`h-4 w-4 shrink-0 ${tone === 'dark' ? 'text-amber-700/80' : 'text-amber-300/60'}`} fill="currentColor">
                       <path d="M9 21h6v-1H9v1zm3-19C8.69 2 6 4.69 6 8c0 2.39 1.42 4.44 3.46 5.39.33.15.54.49.54.86V16h4v-1.75c0-.37.21-.71.54-.86A5.99 5.99 0 0 0 18 8c0-3.31-2.69-6-6-6z"/>
                     </svg>
                     {#each hueLights.filter(l => l.on) as light (light.id)}
@@ -1454,7 +1458,7 @@
                           class="h-2 w-2 rounded-full shrink-0"
                           style="background-color: {light.colorHex || '#FBBF24'}; box-shadow: 0 0 6px {light.colorHex || '#FBBF24'}50;"
                         ></div>
-                        <span class="text-[11px] text-white/60 font-medium">{light.name}</span>
+                        <span class={`text-[11px] font-medium ${tone === 'dark' ? 'text-zinc-800/80' : 'text-white/60'}`}>{light.name}</span>
                       </div>
                     {/each}
                   </div>
@@ -1641,6 +1645,7 @@
               {selectedDate}
               {events}
               {holidays}
+              {tone}
               suggestions={dashboardSuggestions}
               onCreate={openAddEventModal}
               onCreateFromSuggestion={openAddEventModalFromSuggestion}
@@ -1730,7 +1735,7 @@
               <div class="mt-auto pb-2">
                 {#if hueEnabled && hueLights.some(l => l.on)}
                   <div class="mb-4 flex items-center gap-2 flex-wrap">
-                    <svg viewBox="0 0 24 24" class="h-4 w-4 shrink-0 text-amber-300/60" fill="currentColor">
+                    <svg viewBox="0 0 24 24" class={`h-4 w-4 shrink-0 ${tone === 'dark' ? 'text-amber-700/80' : 'text-amber-300/60'}`} fill="currentColor">
                       <path d="M9 21h6v-1H9v1zm3-19C8.69 2 6 4.69 6 8c0 2.39 1.42 4.44 3.46 5.39.33.15.54.49.54.86V16h4v-1.75c0-.37.21-.71.54-.86A5.99 5.99 0 0 0 18 8c0-3.31-2.69-6-6-6z"/>
                     </svg>
                     {#each hueLights.filter(l => l.on) as light (light.id)}
@@ -1739,7 +1744,7 @@
                           class="h-2 w-2 rounded-full shrink-0"
                           style="background-color: {light.colorHex || '#FBBF24'}; box-shadow: 0 0 6px {light.colorHex || '#FBBF24'}50;"
                         ></div>
-                        <span class="text-[11px] text-white/60 font-medium">{light.name}</span>
+                        <span class={`text-[11px] font-medium ${tone === 'dark' ? 'text-zinc-800/80' : 'text-white/60'}`}>{light.name}</span>
                       </div>
                     {/each}
                   </div>
@@ -1911,6 +1916,7 @@
 
   <HueControlModal
     open={hueModalOpen}
+    {tone}
     loading={hueLoading}
     error={hueError}
     lights={hueLights}
@@ -1926,6 +1932,7 @@
 
   <AddEventModal
     open={showAddEventModal}
+    {tone}
     {selectedDate}
     {eventToEdit}
     {editScope}
@@ -1940,6 +1947,7 @@
 
   <RecurringEditChoiceModal
     open={recurringEditChoiceOpen}
+    {tone}
     title={recurringEditChoiceEvent?.title ?? ''}
     onChoose={chooseRecurringEdit}
     onClose={closeRecurringEditChoice}
@@ -1951,6 +1959,7 @@
       {selectedDate}
       {events}
       {holidays}
+      {tone}
       {outlookConnected}
       {todoEnabled}
       {recurringSuggestionsEnabled}
@@ -1980,7 +1989,11 @@
   {#if !standbyMode && !plannerOpen}
     <a
       href="/planner"
-      class="fixed bottom-6 right-6 z-50 md:hidden flex items-center gap-2 px-4 py-3 rounded-full bg-white/20 backdrop-blur-md border border-white/10 shadow-lg text-white text-sm font-medium hover:bg-white/30 transition-colors"
+      class={`fixed bottom-6 right-6 z-50 md:hidden flex items-center gap-2 px-4 py-3 rounded-full backdrop-blur-md border shadow-lg text-sm font-medium transition-colors ${
+        tone === 'dark'
+          ? 'bg-black/18 border-black/20 text-zinc-900 hover:bg-black/25'
+          : 'bg-white/20 border-white/10 text-white hover:bg-white/30'
+      }`}
       in:fly={{ y: 20, duration: 250, delay: 500 }}
       out:fade={{ duration: 150 }}
     >

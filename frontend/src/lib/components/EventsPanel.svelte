@@ -25,6 +25,7 @@
   export let onDismissSuggestion: ((s: DashboardSuggestionDto) => void) | null = null;
   export let onEdit: (e: EventDto) => void;
   export let onSelectDate: ((d: Date) => void) | null = null;
+  export let tone: 'light' | 'dark' = 'light';
 
   let panelActivated = false;
   let hideTimer: ReturnType<typeof setTimeout> | null = null;
@@ -593,14 +594,15 @@
     ></button>
 
     <!-- Bottom-anchored search bar with results floating above -->
-    <div class="absolute inset-0 flex flex-col items-center justify-end px-4 md:px-12 lg:px-24 pb-6 pt-6" in:fly={{ y: 24, duration: 220 }} out:fade={{ duration: 140 }}>
-      <div class="max-w-4xl w-full flex flex-col items-stretch min-h-0">
+    <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+    <div class="absolute inset-0 flex flex-col items-center justify-end px-4 md:px-12 lg:px-24 pb-6 pt-6" in:fly={{ y: 24, duration: 220 }} out:fade={{ duration: 140 }} on:click={closeSearch}>
+      <div class="max-w-4xl w-full flex flex-col items-stretch min-h-0" on:click|stopPropagation>
         <!-- Results above search bar -->
         {#if searchBusy || searchError || searchTokens.length > 0}
-          <div class="mb-2 rounded-2xl border border-white/20 bg-zinc-950/90 backdrop-blur-xl shadow-2xl shadow-black/50 min-h-0 overflow-y-auto">
+          <div class={`mb-2 rounded-2xl border backdrop-blur-xl shadow-2xl min-h-0 overflow-y-auto ${tone === 'dark' ? 'border-black/15 bg-white/86 shadow-black/15' : 'border-white/20 bg-zinc-950/90 shadow-black/50'}`}>
             <div class="p-3 md:p-4">
               {#if searchBusy}
-                <div class="text-sm text-white/55 px-2 py-2">Lade Todos…</div>
+                <div class={`text-sm px-2 py-2 ${tone === 'dark' ? 'text-zinc-700/85' : 'text-white/55'}`}>Lade Todos…</div>
               {/if}
 
               {#if searchError}
@@ -608,28 +610,28 @@
               {/if}
 
               {#if searchTokens.length > 0 && searchResults.length === 0 && !searchBusy}
-                <div class="text-sm text-white/45 px-2 py-2">Keine Treffer für „{searchQuery.trim()}".</div>
+                <div class={`text-sm px-2 py-2 ${tone === 'dark' ? 'text-zinc-700/75' : 'text-white/45'}`}>Keine Treffer für „{searchQuery.trim()}".</div>
               {:else if searchResults.length > 0}
                 <div class="space-y-1">
                   {#each searchResults as item (item.key)}
                     <button
                       type="button"
-                      class="w-full text-left rounded-xl px-3 py-2.5 hover:bg-white/8 active:bg-white/12 transition"
+                      class={`w-full text-left rounded-xl px-3 py-2.5 transition ${tone === 'dark' ? 'hover:bg-black/6 active:bg-black/10' : 'hover:bg-white/8 active:bg-white/12'}`}
                       on:click={() => onSelectSearchResult(item)}
                     >
                       <div class="flex items-start gap-3">
                         <div class="mt-1 h-2.5 w-2.5 rounded-full shrink-0 {item.kind === 'event' ? 'bg-cyan-400' : 'bg-emerald-400'}"></div>
                         <div class="min-w-0 flex-1">
                           <div class="flex items-center gap-2 min-w-0">
-                            <div class="font-semibold text-white truncate">{item.title}</div>
-                            <span class="text-[10px] uppercase tracking-wide rounded-full px-2 py-0.5 border border-white/15 text-white/55 shrink-0">
+                            <div class={`font-semibold truncate ${tone === 'dark' ? 'text-zinc-900' : 'text-white'}`}>{item.title}</div>
+                            <span class={`text-[10px] uppercase tracking-wide rounded-full px-2 py-0.5 border shrink-0 ${tone === 'dark' ? 'border-black/15 text-zinc-700/80' : 'border-white/15 text-white/55'}`}>
                               {item.kind === 'event' ? 'Termin' : 'Todo'}
                             </span>
                           </div>
                           {#if item.subtitle}
-                            <div class="text-xs text-white/55 mt-0.5 line-clamp-1">{item.subtitle}</div>
+                            <div class={`text-xs mt-0.5 line-clamp-1 ${tone === 'dark' ? 'text-zinc-700/80' : 'text-white/55'}`}>{item.subtitle}</div>
                           {/if}
-                          <div class="text-[11px] text-white/40 mt-0.5">{item.meta}</div>
+                          <div class={`text-[11px] mt-0.5 ${tone === 'dark' ? 'text-zinc-700/65' : 'text-white/40'}`}>{item.meta}</div>
                         </div>
                       </div>
                     </button>
@@ -641,8 +643,8 @@
         {/if}
 
         <!-- Search input bar (always at bottom) -->
-        <div class="rounded-2xl border border-white/20 bg-zinc-950/90 backdrop-blur-xl shadow-2xl shadow-black/50 px-4 py-3 flex items-center gap-3">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-white/55 shrink-0">
+        <div class={`rounded-2xl border backdrop-blur-xl shadow-2xl px-4 py-3 flex items-center gap-3 ${tone === 'dark' ? 'border-black/15 bg-white/86 shadow-black/15' : 'border-white/20 bg-zinc-950/90 shadow-black/50'}`}>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class={`shrink-0 ${tone === 'dark' ? 'text-zinc-700/75' : 'text-white/55'}`}>
             <circle cx="11" cy="11" r="8"></circle>
             <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
           </svg>
@@ -650,13 +652,13 @@
             bind:this={searchInputEl}
             bind:value={searchQuery}
             type="text"
-            class="w-full bg-transparent outline-none text-lg md:text-xl text-white placeholder:text-white/35"
+            class={`w-full bg-transparent outline-none text-lg md:text-xl ${tone === 'dark' ? 'text-zinc-900 placeholder:text-zinc-700/55' : 'text-white placeholder:text-white/35'}`}
             placeholder="Termine und Todos durchsuchen…"
             aria-label="Suche nach Terminen und Todos"
           />
           <button
             type="button"
-            class="h-9 w-9 rounded-lg bg-white/8 hover:bg-white/14 text-white/60 hover:text-white/90 grid place-items-center transition"
+            class={`h-9 w-9 rounded-lg grid place-items-center transition ${tone === 'dark' ? 'bg-black/7 hover:bg-black/12 text-zinc-700/75 hover:text-zinc-900' : 'bg-white/8 hover:bg-white/14 text-white/60 hover:text-white/90'}`}
             aria-label="Suche schließen"
             on:click={closeSearch}
           >

@@ -20,6 +20,7 @@
   export let days: Date[] = [];
   export let events: EventDto[] = [];
   export let holidays: HolidayDto[] = [];
+  export let tone: 'light' | 'dark' = 'light';
   export let suggestions: EventSuggestionDto[] = [];
   export let backgroundUrl: string = '';
   export let onAddEvent: (d: Date) => void;
@@ -744,7 +745,7 @@
   });
 </script>
 
-<div class="h-full flex flex-col rounded-2xl border border-white/10 bg-black/20 overflow-hidden relative">
+<div class={`h-full flex flex-col rounded-2xl overflow-hidden relative ${tone === 'dark' ? 'wp-grid-tone-dark border border-black/12 bg-white/36 text-zinc-900' : 'wp-grid-tone-light border border-white/10 bg-black/20 text-white'}`}>
   <!-- Background image -->
   {#if backgroundUrl}
     <div
@@ -1098,12 +1099,72 @@
     width: 0;
     height: 0;
   }
+
+  .wp-grid-tone-dark :global(.text-white) {
+    color: rgb(24 24 27) !important;
+  }
+
+  .wp-grid-tone-dark :global(.text-white\/80) {
+    color: rgba(24, 24, 27, 0.84) !important;
+  }
+
+  .wp-grid-tone-dark :global(.text-white\/75) {
+    color: rgba(24, 24, 27, 0.78) !important;
+  }
+
+  .wp-grid-tone-dark :global(.text-white\/70) {
+    color: rgba(24, 24, 27, 0.72) !important;
+  }
+
+  .wp-grid-tone-dark :global(.text-white\/65) {
+    color: rgba(24, 24, 27, 0.68) !important;
+  }
+
+  .wp-grid-tone-dark :global(.text-white\/60) {
+    color: rgba(24, 24, 27, 0.62) !important;
+  }
+
+  .wp-grid-tone-dark :global(.text-white\/50) {
+    color: rgba(24, 24, 27, 0.54) !important;
+  }
+
+  .wp-grid-tone-dark :global(.text-white\/45) {
+    color: rgba(24, 24, 27, 0.5) !important;
+  }
+
+  .wp-grid-tone-dark :global(.text-white\/40) {
+    color: rgba(24, 24, 27, 0.44) !important;
+  }
+
+  .wp-grid-tone-dark :global(.border-white\/10) {
+    border-color: rgba(24, 24, 27, 0.16) !important;
+  }
+
+  .wp-grid-tone-dark :global(.border-white\/5) {
+    border-color: rgba(24, 24, 27, 0.09) !important;
+  }
+
+  .wp-grid-tone-dark :global(.bg-white\/5) {
+    background-color: rgba(24, 24, 27, 0.05) !important;
+  }
+
+  .wp-grid-tone-dark :global(.bg-white\/10) {
+    background-color: rgba(24, 24, 27, 0.1) !important;
+  }
+
+  .wp-grid-tone-dark :global(.bg-white\/15) {
+    background-color: rgba(24, 24, 27, 0.14) !important;
+  }
+
+  .wp-grid-tone-dark :global(.bg-black\/35) {
+    background-color: rgba(255, 255, 255, 0.68) !important;
+  }
 </style>
 
 <!-- Delete Confirmation Modal -->
 {#if deleteConfirmEvent}
   <div
-    class="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm"
+    class={`fixed inset-0 z-[60] flex items-center justify-center backdrop-blur-sm ${tone === 'dark' ? 'bg-black/35' : 'bg-black/60'}`}
     transition:fade={{ duration: 150 }}
     on:click|self={cancelDelete}
     on:keydown={(e) => {
@@ -1117,7 +1178,7 @@
     tabindex="0"
   >
     <div
-      class="mx-4 max-w-sm w-full bg-neutral-900/95 backdrop-blur-xl border border-white/10 rounded-2xl overflow-hidden"
+      class={`mx-4 max-w-sm w-full backdrop-blur-xl rounded-2xl overflow-hidden ${tone === 'dark' ? 'bg-white/96 border border-black/12 text-zinc-900' : 'bg-neutral-900/95 border border-white/10 text-white'}`}
       in:scale={{ start: 0.9, duration: 200 }}
       out:scale={{ start: 0.9, duration: 150 }}
     >

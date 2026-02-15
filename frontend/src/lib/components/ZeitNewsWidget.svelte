@@ -6,6 +6,7 @@
   export let variant: 'panel' | 'plain' = 'panel';
   export let expanded = false;
   export let compact = false;
+  export let tone: 'light' | 'dark' = 'light';
   export let onToggleExpand: (() => void) | null = null;
 
   let items: NewsItemDto[] = [];
@@ -111,7 +112,13 @@
     return typeof s === 'string' && SOURCE_LABEL[s] ? SOURCE_LABEL[s] : '';
   }
 
-  $: containerClass = variant === 'plain' ? 'text-white' : 'rounded-lg bg-white/5 p-3 text-white';
+  $: containerClass = variant === 'plain'
+    ? tone === 'dark'
+      ? 'text-zinc-900'
+      : 'text-white'
+    : tone === 'dark'
+      ? 'rounded-lg bg-black/8 border border-black/10 p-3 text-zinc-900'
+      : 'rounded-lg bg-white/5 p-3 text-white';
   $: effectivePageSize = expanded ? 12 : compact ? 2 : PAGE_SIZE;
 
   onMount(() => {
@@ -130,7 +137,7 @@
     <div class="mb-2 flex items-center justify-between">
       <div class="text-base font-semibold">News</div>
       <div class="flex items-center gap-2">
-        <div class="text-xs text-white/60">RSS</div>
+        <div class={`text-xs ${tone === 'dark' ? 'text-zinc-700/75' : 'text-white/60'}`}>RSS</div>
         {#if onToggleExpand}
           <button
             type="button"
@@ -138,7 +145,7 @@
             on:click|stopPropagation={onToggleExpand}
             title={expanded ? 'Verkleinern' : 'Vergrößern'}
           >
-            <svg class="w-4 h-4 text-white/60" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <svg class={`w-4 h-4 ${tone === 'dark' ? 'text-zinc-700/80' : 'text-white/60'}`} fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
               {#if expanded}
                 <path stroke-linecap="round" stroke-linejoin="round" d="M4 14h6m0 0v6m0-6L3 21M20 10h-6m0 0V4m0 6l7-7" />
               {:else}
@@ -169,14 +176,14 @@
           >
             {#each view as it (it.url)}
               <a
-                class="block text-sm leading-snug min-h-[2.5rem] line-clamp-2 text-white/85 hover:text-white underline-offset-2 hover:underline whitespace-normal break-words"
+                class={`block text-sm leading-snug min-h-[2.5rem] line-clamp-2 underline-offset-2 hover:underline whitespace-normal break-words ${tone === 'dark' ? 'text-zinc-800/90 hover:text-zinc-900' : 'text-white/85 hover:text-white'}`}
                 href={it.url}
                 rel="noopener"
               >
                 {#if source === 'mixed'}
                   {@const lbl = itemSourceLabel(it)}
                   {#if lbl}
-                    <span class="mr-2 text-[10px] tracking-widest uppercase text-white/45">{lbl}</span>
+                    <span class={`mr-2 text-[10px] tracking-widest uppercase ${tone === 'dark' ? 'text-zinc-700/70' : 'text-white/45'}`}>{lbl}</span>
                   {/if}
                 {/if}
                 {it.title}
@@ -184,7 +191,7 @@
             {/each}
 
             {#if pageCount > 1 && !expanded}
-              <div class="pt-1 text-[10px] tracking-widest uppercase text-white/35">
+              <div class={`pt-1 text-[10px] tracking-widest uppercase ${tone === 'dark' ? 'text-zinc-700/65' : 'text-white/35'}`}>
                 {page + 1}/{pageCount}
               </div>
             {/if}
@@ -192,7 +199,7 @@
         {/key}
       </div>
     {:else}
-      <div class="text-white/50 text-sm">Keine Artikel verfügbar.</div>
+      <div class={`text-sm ${tone === 'dark' ? 'text-zinc-700/75' : 'text-white/50'}`}>Keine Artikel verfügbar.</div>
     {/if}
   </div>
 {/if}

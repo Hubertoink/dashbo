@@ -4,6 +4,7 @@
   import type { HueLightDto, HueRoomDto } from '$lib/api';
 
   export let open = false;
+  export let tone: 'light' | 'dark' = 'light';
   export let loading = false;
   export let error: string | null = null;
   export let lights: HueLightDto[] = [];
@@ -54,7 +55,7 @@
     <!-- Backdrop -->
     <button
       type="button"
-      class="absolute inset-0 bg-black/60 backdrop-blur-sm"
+      class={`absolute inset-0 backdrop-blur-sm ${tone === 'dark' ? 'bg-black/35' : 'bg-black/60'}`}
       aria-label="Schließen"
       on:click={onClose}
       transition:fade={{ duration: 250 }}
@@ -62,7 +63,7 @@
 
     <!-- Panel -->
     <div
-      class="relative w-[420px] max-w-[90vw] h-full border-r border-white/10 bg-zinc-950/[.97] backdrop-blur-xl overflow-hidden flex flex-col"
+      class={`relative w-[420px] max-w-[90vw] h-full backdrop-blur-xl overflow-hidden flex flex-col ${tone === 'dark' ? 'hue-tone-dark border-r border-black/10 bg-white/95 text-zinc-900' : 'hue-tone-light border-r border-white/10 bg-zinc-950/[.97] text-white'}`}
       transition:fly={{ x: -420, duration: 380, easing: cubicOut }}
     >
       <!-- Header -->
@@ -308,6 +309,54 @@
 {/if}
 
 <style>
+  .hue-tone-dark :global(.text-white) {
+    color: rgb(24 24 27) !important;
+  }
+
+  .hue-tone-dark :global(.text-white\/60) {
+    color: rgba(24, 24, 27, 0.62) !important;
+  }
+
+  .hue-tone-dark :global(.text-white\/50) {
+    color: rgba(24, 24, 27, 0.54) !important;
+  }
+
+  .hue-tone-dark :global(.text-white\/45) {
+    color: rgba(24, 24, 27, 0.5) !important;
+  }
+
+  .hue-tone-dark :global(.text-white\/35) {
+    color: rgba(24, 24, 27, 0.42) !important;
+  }
+
+  .hue-tone-dark :global(.text-white\/30) {
+    color: rgba(24, 24, 27, 0.34) !important;
+  }
+
+  .hue-tone-dark :global(.border-white\/10) {
+    border-color: rgba(24, 24, 27, 0.16) !important;
+  }
+
+  .hue-tone-dark :global(.border-white\/8) {
+    border-color: rgba(24, 24, 27, 0.13) !important;
+  }
+
+  .hue-tone-dark :global(.bg-white\/8) {
+    background-color: rgba(24, 24, 27, 0.08) !important;
+  }
+
+  .hue-tone-dark :global(.bg-white\/5) {
+    background-color: rgba(24, 24, 27, 0.05) !important;
+  }
+
+  .hue-tone-dark :global(.bg-white\/15) {
+    background-color: rgba(24, 24, 27, 0.15) !important;
+  }
+
+  .hue-tone-dark :global(.bg-white\/\[\.03\]) {
+    background-color: rgba(24, 24, 27, 0.04) !important;
+  }
+
   @keyframes lightCardIn {
     from {
       opacity: 0;

@@ -35,6 +35,7 @@
   export let onBack: () => void;
   export let onEventsChanged: () => void = () => {};
   export let backgroundUrl: string = '';
+  export let tone: 'light' | 'dark' = 'light';
 
   // Quick Add Modal state
   let quickAddOpen = false;
@@ -798,7 +799,7 @@
 
 <!-- Backdrop -->
 <div
-  class="fixed inset-0 z-40 bg-black/40"
+  class={`fixed inset-0 z-40 ${tone === 'dark' ? 'bg-black/25' : 'bg-black/40'}`}
   in:fade={{ duration: 200 }}
   out:fade={{ duration: 150 }}
   on:click={onBack}
@@ -809,15 +810,15 @@
 
 <!-- Planner Panel -->
 <div
-  class="fixed inset-0 z-50 flex flex-col bg-black/70 backdrop-blur-2xl"
+  class={`fixed inset-0 z-50 flex flex-col backdrop-blur-2xl ${tone === 'dark' ? 'wp-tone-dark bg-white/62 text-zinc-900' : 'wp-tone-light bg-black/70 text-white'}`}
   in:fly={{ y: 40, duration: 280, opacity: 0 }}
   out:fly={{ y: 30, duration: 180, opacity: 0 }}
 >
   <!-- Header -->
-  <div class="flex items-center justify-between px-4 py-2 border-b border-white/10" in:fade={{ duration: 200, delay: 80 }}>
+  <div class={`flex items-center justify-between px-4 py-2 border-b ${tone === 'dark' ? 'border-black/12' : 'border-white/10'}`} in:fade={{ duration: 200, delay: 80 }}>
     <button
       type="button"
-      class="h-10 w-10 rounded-xl bg-white/10 hover:bg-white/15 active:scale-95 transition grid place-items-center text-lg"
+      class={`h-10 w-10 rounded-xl active:scale-95 transition grid place-items-center text-lg ${tone === 'dark' ? 'bg-black/8 hover:bg-black/12' : 'bg-white/10 hover:bg-white/15'}`}
       on:click={onBack}
       aria-label="Zurück"
     >
@@ -827,7 +828,7 @@
     <div class="flex items-center gap-3">
       <button
         type="button"
-        class="h-10 w-10 rounded-xl bg-white/10 hover:bg-white/15 active:scale-95 transition grid place-items-center text-xl"
+        class={`h-10 w-10 rounded-xl active:scale-95 transition grid place-items-center text-xl ${tone === 'dark' ? 'bg-black/8 hover:bg-black/12' : 'bg-white/10 hover:bg-white/15'}`}
         on:click={() => shiftWeek(-1)}
         aria-label="Vorherige Woche"
       >
@@ -836,14 +837,14 @@
 
       <div class="text-center min-w-[180px]">
         <div class="text-lg font-semibold tracking-wide">KW {weekNumber}</div>
-        <div class="text-xs text-white/70">
+        <div class={`text-xs ${tone === 'dark' ? 'text-zinc-700/80' : 'text-white/70'}`}>
           {formatGermanShortDate(weekStart)} – {formatGermanShortDate(weekEnd)}
         </div>
       </div>
 
       <button
         type="button"
-        class="h-10 w-10 rounded-xl bg-white/10 hover:bg-white/15 active:scale-95 transition grid place-items-center text-xl"
+        class={`h-10 w-10 rounded-xl active:scale-95 transition grid place-items-center text-xl ${tone === 'dark' ? 'bg-black/8 hover:bg-black/12' : 'bg-white/10 hover:bg-white/15'}`}
         on:click={() => shiftWeek(1)}
         aria-label="Nächste Woche"
       >
@@ -854,8 +855,12 @@
         type="button"
         class={`h-10 px-3 rounded-xl text-sm font-medium transition active:scale-95 ${
           isCurrentWeek
-            ? 'bg-white/10 hover:bg-white/15 text-white/60'
-            : 'bg-white/15 hover:bg-white/20 text-white shadow-[0_0_12px_rgba(255,255,255,0.3)] ring-1 ring-white/30'
+            ? tone === 'dark'
+              ? 'bg-black/8 hover:bg-black/12 text-zinc-700/80'
+              : 'bg-white/10 hover:bg-white/15 text-white/60'
+            : tone === 'dark'
+              ? 'bg-black/12 hover:bg-black/18 text-zinc-900 shadow-[0_0_10px_rgba(0,0,0,0.12)] ring-1 ring-black/20'
+              : 'bg-white/15 hover:bg-white/20 text-white shadow-[0_0_12px_rgba(255,255,255,0.3)] ring-1 ring-white/30'
         }`}
         on:click={() => onSelect(new Date())}
       >
@@ -874,6 +879,7 @@
         {days}
         {events}
         {holidays}
+        {tone}
         suggestions={suggestions}
         {backgroundUrl}
         {todosByDay}
@@ -911,7 +917,7 @@
     />
   {:else}
     <!-- Footer hint -->
-    <div class="px-6 py-3 border-t border-white/10 text-center text-sm text-white/50" in:fade={{ duration: 200, delay: 200 }}>
+    <div class={`px-6 py-3 border-t text-center text-sm ${tone === 'dark' ? 'border-black/12 text-zinc-700/75' : 'border-white/10 text-white/50'}`} in:fade={{ duration: 200, delay: 200 }}>
       Tippe in einen Tag um einen Termin hinzuzufügen · Tippe auf einen Termin zum Bearbeiten · Wische für Wochenwechsel
     </div>
   {/if}
@@ -920,12 +926,12 @@
   {#if todoEnabled}
     <button
       type="button"
-      class="fixed z-[60] h-14 w-14 rounded-full bg-gradient-to-br from-blue-400 to-indigo-500 shadow-xl flex items-center justify-center hover:scale-105 active:scale-95 transition-transform ring-2 ring-blue-300/20"
+      class={`fixed z-[60] h-14 w-14 rounded-full shadow-xl flex items-center justify-center hover:scale-105 active:scale-95 transition-transform ${tone === 'dark' ? 'bg-gradient-to-br from-zinc-800 to-zinc-900 text-white ring-2 ring-black/15' : 'bg-gradient-to-br from-blue-400 to-indigo-500 text-white ring-2 ring-blue-300/20'}`}
       style="bottom: calc(1.5rem + env(safe-area-inset-bottom)); right: 1.5rem;"
       aria-label="Neuen Termin erstellen"
       on:click={() => openQuickAdd(new Date(selectedDate))}
     >
-      <svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
         <path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
       </svg>
     </button>
