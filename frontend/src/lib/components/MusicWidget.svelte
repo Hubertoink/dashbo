@@ -1,5 +1,7 @@
 <script lang="ts">
   import { onDestroy, onMount } from 'svelte';
+  import { fly, fade } from 'svelte/transition';
+  import { cubicOut } from 'svelte/easing';
   import { musicPlayerState, togglePlayPause, playNext, playPrev } from '$lib/stores/musicPlayer';
   import { heosPlaybackStatus, setHeosPlaybackStatus } from '$lib/stores/heosPlayback';
   import { spotifyPlaybackStatus } from '$lib/stores/spotifyPlayback';
@@ -196,6 +198,10 @@
 
   function closeSpeakerModal() {
     speakerOpen = false;
+  }
+
+  function handleSpeakerKeydown(e: KeyboardEvent) {
+    if (e.key === 'Escape') closeSpeakerModal();
     groupingMode = false;
     selectedForGroup = new Set();
     groupError = null;
@@ -703,63 +709,90 @@
 
 </div>
 
+<svelte:window on:keydown={speakerOpen ? handleSpeakerKeydown : undefined} />
+
 {#if heosEnabled && speakerOpen}
-  <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-  <div class="fixed inset-0 z-50" on:click={closeSpeakerModal}>
-    <div class="absolute inset-0 bg-black/55"></div>
-    <div class="absolute inset-0 flex items-center justify-center p-4">
-      <div
-        class="w-full max-w-sm rounded-2xl bg-black/85 border border-white/10 backdrop-blur-md p-4"
-        on:click|stopPropagation
-      >
-        <!-- Header -->
-        <div class="flex items-center">
-          <div class="font-medium">HEOS Speaker</div>
-          <button
-            class="ml-auto h-8 px-3 rounded-lg bg-white/10 hover:bg-white/15 text-xs font-medium"
-            type="button"
-            on:click={closeSpeakerModal}
-          >
-            Schließen
-          </button>
+  <div class="fixed inset-0 z-[120] flex" role="dialog" aria-modal="true" aria-label="HEOS Speaker">
+    <!-- Backdrop -->
+    <button
+      type="button"
+      class="absolute inset-0 bg-black/60 backdrop-blur-sm"
+      aria-label="Schließen"
+      on:click={closeSpeakerModal}
+      transition:fade={{ duration: 250 }}
+    ></button>
+
+    <!-- Panel -->
+    <div
+      class="relative w-[420px] max-w-[90vw] h-full border-r border-white/10 bg-zinc-950/[.97] backdrop-blur-xl overflow-hidden flex flex-col"
+      transition:fly={{ x: -420, duration: 380, easing: cubicOut }}
+    >
+      <!-- Header -->
+      <div class="shrink-0 px-6 pt-6 pb-4">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-3">
+            <div class="h-9 w-9 rounded-xl bg-cyan-400/15 flex items-center justify-center">
+              <svg viewBox="0 0 24 24" class="h-5 w-5 text-cyan-300" fill="currentColor">
+                <path d="M4 10v4c0 1.1.9 2 2 2h2l5 4V4L8 8H6c-1.1 0-2 .9-2 2zm13.5 2c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z" />
+              </svg>
+            </div>
+            <div>
+              <h3 class="text-base font-semibold text-white leading-tight">HEOS Speaker</h3>
+              <p class="text-[11px] text-white/45 mt-0.5">Wähle, auf welchem Speaker abgespielt wird.</p>
+            </div>
+          </div>
+          <div class="flex items-center gap-1.5">
+            <button
+              type="button"
+              class="h-8 w-8 rounded-lg bg-white/8 hover:bg-white/14 text-white/60 hover:text-white/90 flex items-center justify-center transition-all duration-200 disabled:opacity-50"
+              title="Aktualisieren"
+              aria-label="Aktualisieren"
+              disabled={speakersBusy || groupsBusy || groupBusy}
+              on:click={async () => {
+                await fetchSpeakers({ force: true });
+                await fetchGroups();
+                await fetchVolumeForSelected();
+              }}
+            >
+              <svg viewBox="0 0 24 24" class="h-4 w-4 {speakersBusy || groupsBusy ? 'animate-spin' : ''}" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="23 4 23 10 17 10"></polyline>
+                <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+              </svg>
+            </button>
+            <button
+              type="button"
+              class="h-8 w-8 rounded-lg bg-white/8 hover:bg-white/14 text-white/60 hover:text-white/90 flex items-center justify-center transition-all duration-200"
+              aria-label="Schließen"
+              on:click={closeSpeakerModal}
+            >
+              <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+              </svg>
+            </button>
+          </div>
         </div>
+      </div>
 
-        <div class="text-xs text-white/60 mt-1">Wähle, auf welchem Speaker abgespielt wird.</div>
+      <!-- Divider -->
+      <div class="mx-6 h-px bg-gradient-to-r from-white/10 via-white/5 to-transparent"></div>
 
-        <!-- Status line with refresh button -->
-        <div class="flex items-center gap-2 mt-2">
-          {#if heosStatusLine}
-            <div class="text-[11px] text-white/50 flex-1">{heosStatusLine}</div>
-          {/if}
-          <button
-            type="button"
-            class="h-6 w-6 rounded-md bg-white/10 hover:bg-white/15 inline-flex items-center justify-center disabled:opacity-50"
-            title="Aktualisieren"
-            aria-label="Aktualisieren"
-            disabled={speakersBusy || groupsBusy || groupBusy}
-            on:click={async () => {
-              await fetchSpeakers({ force: true });
-              await fetchGroups();
-              await fetchVolumeForSelected();
-            }}
-          >
-            <svg viewBox="0 0 24 24" class="h-3.5 w-3.5 {speakersBusy || groupsBusy ? 'animate-spin' : ''}" fill="currentColor">
-              <path d="M17.65 6.35A7.958 7.958 0 0012 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0112 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
-            </svg>
-          </button>
-        </div>
-
-        <!-- Groups line -->
+      <!-- Status info -->
+      <div class="shrink-0 px-6 pt-3 pb-1">
+        {#if heosStatusLine}
+          <div class="text-[11px] text-white/50">{heosStatusLine}</div>
+        {/if}
         {#if heosGroupsLine}
-          <div class="text-[11px] text-white/50 mt-1">{heosGroupsLine}</div>
+          <div class="text-[11px] text-white/50 mt-0.5">{heosGroupsLine}</div>
         {/if}
-
-        <!-- Error display -->
         {#if groupError}
-          <div class="text-xs text-red-300 mt-2">{groupError}</div>
+          <div class="text-xs text-red-300 mt-1">{groupError}</div>
         {/if}
+      </div>
 
-        <div class="mt-3">
+      <!-- Content -->
+      <div class="flex-1 overflow-y-auto px-6 py-4 scroll-smooth" style="scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.15) transparent;">
+        <div>
           {#if speakersBusy || groupsBusy}
             <div class="text-xs text-white/60">Lade…</div>
           {:else if speakersError || groupsError}
@@ -770,7 +803,7 @@
               {#if !groupingMode}
                 <button
                   type="button"
-                  class={`w-full px-3 py-2 text-left text-sm hover:bg-white/10 transition ${!selectedPid ? 'bg-white/10' : ''}`}
+                  class={`w-full px-4 py-3 text-left text-sm hover:bg-white/10 transition rounded-xl ${!selectedPid ? 'bg-white/10' : ''}`}
                   on:click={() => {
                     selectedPid = '';
                     persistSelectedPid('');
@@ -782,15 +815,15 @@
 
               <!-- Groups Section -->
               {#if groups.length > 0}
-                <div class="px-3 py-2 text-[11px] text-white/50 border-t border-white/10 flex items-center justify-between">
+                <div class="px-4 py-2 text-[11px] text-white/50 border-t border-white/10 flex items-center justify-between">
                   <span>Gruppen</span>
                 </div>
                 {#each groups as g (String(g.gid))}
                   <div class="border-t border-white/5">
-                    <div class="flex items-center hover:bg-white/10 transition">
+                    <div class="flex items-center hover:bg-white/10 transition rounded-xl">
                       <button
                         type="button"
-                        class={`flex-1 px-3 py-2 text-left text-sm ${selectedName === g.name ? 'bg-white/10' : ''}`}
+                        class={`flex-1 px-4 py-3 text-left text-sm ${selectedName === g.name ? 'bg-white/10' : ''}`}
                         disabled={groupingMode}
                         on:click={() => {
                           if (groupingMode) return;
@@ -839,8 +872,8 @@
               {/if}
 
               <!-- Speakers Section -->
-              <div class="max-h-56 overflow-auto">
-                <div class="px-3 py-2 text-[11px] text-white/50 border-t border-white/10 flex items-center justify-between">
+              <div>
+                <div class="px-4 py-2 text-[11px] text-white/50 border-t border-white/10 flex items-center justify-between">
                   <span>Speaker</span>
                   {#if !groupingMode && speakers.length >= 2}
                     <button
@@ -852,11 +885,12 @@
                     </button>
                   {/if}
                 </div>
-                {#each speakers as s}
+                {#each speakers as s, i}
                   {#if groupingMode}
                     <!-- Grouping mode: checkboxes -->
                     <label
-                      class={`flex items-center gap-2 w-full px-3 py-2 text-left text-sm hover:bg-white/10 transition cursor-pointer ${selectedForGroup.has(s.pid) ? 'bg-white/10' : ''}`}
+                      class={`flex items-center gap-2 w-full px-4 py-3 text-left text-sm hover:bg-white/10 transition cursor-pointer rounded-xl ${selectedForGroup.has(s.pid) ? 'bg-white/10' : ''}`}
+                      style="animation: speakerCardIn {180 + i * 60}ms {i * 40}ms both cubic-bezier(.22,1,.36,1)"
                     >
                       <input
                         type="checkbox"
@@ -870,7 +904,8 @@
                     <!-- Normal mode: selection -->
                     <button
                       type="button"
-                      class={`w-full px-3 py-2 text-left text-sm hover:bg-white/10 transition ${selectedPid === String(s.pid) ? 'bg-white/10' : ''}`}
+                      class={`w-full px-4 py-3 text-left text-sm hover:bg-white/10 transition rounded-xl ${selectedPid === String(s.pid) ? 'bg-cyan-400/10 text-cyan-300' : ''}`}
+                      style="animation: speakerCardIn {180 + i * 60}ms {i * 40}ms both cubic-bezier(.22,1,.36,1)"
                       on:click={() => {
                         selectedPid = String(s.pid);
                         persistSelectedPid(selectedPid);
@@ -912,32 +947,83 @@
 
         <!-- Volume control (only when not grouping) -->
         {#if selectedPid && !groupingMode}
-          <div class="mt-3">
-            <div class="flex items-center justify-between">
-              <div class="text-xs text-white/60">Lautstärke</div>
-              <div class="text-xs text-white/50 tabular-nums">{heosVolumeLevel ?? '--'}</div>
+          <div class="mt-4 rounded-2xl border border-white/8 bg-white/[.03] p-4">
+            <div class="flex items-center justify-between mb-3">
+              <div class="text-xs text-white/60 font-medium">Lautstärke</div>
+              <div class="text-xs text-white/50 tabular-nums font-medium">{heosVolumeLevel ?? '--'}</div>
             </div>
 
             {#if heosVolumeError}
-              <div class="text-xs text-red-300 mt-1">{heosVolumeError}</div>
+              <div class="text-xs text-red-300 mb-2">{heosVolumeError}</div>
             {/if}
 
-            <input
-              class="w-full mt-2"
-              type="range"
-              min="0"
-              max="100"
-              step="1"
-              value={heosVolumeLevel ?? 0}
-              disabled={heosVolumeBusy}
-              on:change={(e) => {
-                const v = Number((e.currentTarget as HTMLInputElement).value);
-                void setVolumeForSelected(v);
-              }}
-            />
+            <div class="flex items-center gap-3">
+              <svg viewBox="0 0 24 24" class="h-4 w-4 shrink-0 text-white/35" fill="currentColor">
+                <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z" />
+              </svg>
+              <input
+                class="heos-range flex-1"
+                type="range"
+                min="0"
+                max="100"
+                step="1"
+                value={heosVolumeLevel ?? 0}
+                disabled={heosVolumeBusy}
+                on:change={(e) => {
+                  const v = Number((e.currentTarget as HTMLInputElement).value);
+                  void setVolumeForSelected(v);
+                }}
+              />
+            </div>
           </div>
         {/if}
       </div>
     </div>
   </div>
 {/if}
+
+<style>
+  @keyframes speakerCardIn {
+    from {
+      opacity: 0;
+      transform: translateX(-12px);
+    }
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
+
+  .heos-range {
+    -webkit-appearance: none;
+    appearance: none;
+    height: 4px;
+    border-radius: 9999px;
+    background: linear-gradient(to right, rgba(255,255,255,0.1), rgba(34,211,238,0.5));
+    outline: none;
+  }
+  .heos-range::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: #22d3ee;
+    cursor: pointer;
+    box-shadow: 0 0 6px rgba(34,211,238,0.4);
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+  }
+  .heos-range::-webkit-slider-thumb:hover {
+    transform: scale(1.2);
+    box-shadow: 0 0 10px rgba(34,211,238,0.6);
+  }
+  .heos-range::-moz-range-thumb {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: #22d3ee;
+    cursor: pointer;
+    border: none;
+    box-shadow: 0 0 6px rgba(34,211,238,0.4);
+  }
+</style>
