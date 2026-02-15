@@ -1,4 +1,4 @@
-<script lang="ts">
+﻿<script lang="ts">
   import type { EventDto, HolidayDto, TagColorKey } from '$lib/api';
   import { fetchTodos, type TodoItemDto } from '$lib/api';
   import type { DashboardSuggestionDto } from '$lib/components/CalendarMonth.svelte';
@@ -582,78 +582,79 @@
       transition:fade={{ duration: 180 }}
     ></button>
 
-    <div class="absolute inset-0 flex items-start justify-center pt-[10vh] pb-6 px-4 md:px-12 lg:px-24 overflow-hidden">
-      <div class="max-w-4xl w-full max-h-full flex flex-col" in:fly={{ y: 16, duration: 220 }} out:fade={{ duration: 140 }}>
-        <div class="rounded-2xl border border-white/20 bg-zinc-950/90 backdrop-blur-xl shadow-2xl shadow-black/50 p-3 md:p-4 flex flex-col max-h-full overflow-hidden">
-          <div class="min-h-0 flex-1 overflow-y-auto pr-1">
-            {#if searchBusy}
-              <div class="text-sm text-white/55 px-2 py-3">Lade Todos…</div>
-            {/if}
+    <!-- Bottom-anchored search bar with results floating above -->
+    <div class="absolute inset-x-0 bottom-0 flex flex-col items-center px-4 md:px-12 lg:px-24 pb-6" in:fly={{ y: 24, duration: 220 }} out:fade={{ duration: 140 }}>
+      <div class="max-w-4xl w-full flex flex-col items-stretch">
+        <!-- Results above search bar -->
+        {#if searchBusy || searchError || searchTokens.length > 0}
+          <div class="mb-2 rounded-2xl border border-white/20 bg-zinc-950/90 backdrop-blur-xl shadow-2xl shadow-black/50 max-h-[55vh] overflow-y-auto">
+            <div class="p-3 md:p-4">
+              {#if searchBusy}
+                <div class="text-sm text-white/55 px-2 py-2">Lade Todos…</div>
+              {/if}
 
-            {#if searchError}
-              <div class="text-sm text-rose-300 px-2 py-2">{searchError}</div>
-            {/if}
+              {#if searchError}
+                <div class="text-sm text-rose-300 px-2 py-2">{searchError}</div>
+              {/if}
 
-            {#if searchTokens.length === 0}
-              <div class="text-sm text-white/45 px-2 py-3">Suche nach Titel, Ort, Beschreibung, Person oder Fälligkeitsdatum.</div>
-            {:else if searchResults.length === 0}
-              <div class="text-sm text-white/45 px-2 py-3">Keine Treffer für „{searchQuery.trim()}“.</div>
-            {:else}
-              <div class="space-y-1.5">
-                {#each searchResults as item (item.key)}
-                  <button
-                    type="button"
-                    class="w-full text-left rounded-xl px-3 py-2.5 hover:bg-white/8 active:bg-white/12 transition"
-                    on:click={() => onSelectSearchResult(item)}
-                  >
-                    <div class="flex items-start gap-3">
-                      <div class="mt-1 h-2.5 w-2.5 rounded-full shrink-0 {item.kind === 'event' ? 'bg-cyan-400' : 'bg-emerald-400'}"></div>
-                      <div class="min-w-0 flex-1">
-                        <div class="flex items-center gap-2 min-w-0">
-                          <div class="font-semibold text-white truncate">{item.title}</div>
-                          <span class="text-[10px] uppercase tracking-wide rounded-full px-2 py-0.5 border border-white/15 text-white/55 shrink-0">
-                            {item.kind === 'event' ? 'Termin' : 'Todo'}
-                          </span>
+              {#if searchTokens.length > 0 && searchResults.length === 0 && !searchBusy}
+                <div class="text-sm text-white/45 px-2 py-2">Keine Treffer für „{searchQuery.trim()}".</div>
+              {:else if searchResults.length > 0}
+                <div class="space-y-1">
+                  {#each searchResults as item (item.key)}
+                    <button
+                      type="button"
+                      class="w-full text-left rounded-xl px-3 py-2.5 hover:bg-white/8 active:bg-white/12 transition"
+                      on:click={() => onSelectSearchResult(item)}
+                    >
+                      <div class="flex items-start gap-3">
+                        <div class="mt-1 h-2.5 w-2.5 rounded-full shrink-0 {item.kind === 'event' ? 'bg-cyan-400' : 'bg-emerald-400'}"></div>
+                        <div class="min-w-0 flex-1">
+                          <div class="flex items-center gap-2 min-w-0">
+                            <div class="font-semibold text-white truncate">{item.title}</div>
+                            <span class="text-[10px] uppercase tracking-wide rounded-full px-2 py-0.5 border border-white/15 text-white/55 shrink-0">
+                              {item.kind === 'event' ? 'Termin' : 'Todo'}
+                            </span>
+                          </div>
+                          {#if item.subtitle}
+                            <div class="text-xs text-white/55 mt-0.5 line-clamp-1">{item.subtitle}</div>
+                          {/if}
+                          <div class="text-[11px] text-white/40 mt-0.5">{item.meta}</div>
                         </div>
-                        {#if item.subtitle}
-                          <div class="text-xs text-white/55 mt-0.5 line-clamp-1">{item.subtitle}</div>
-                        {/if}
-                        <div class="text-[11px] text-white/40 mt-0.5">{item.meta}</div>
                       </div>
-                    </div>
-                  </button>
-                {/each}
-              </div>
-            {/if}
+                    </button>
+                  {/each}
+                </div>
+              {/if}
+            </div>
           </div>
+        {/if}
 
-          <div class="mt-3 h-px bg-gradient-to-r from-white/15 via-white/8 to-transparent"></div>
-
-          <div class="mt-3 flex items-center gap-3 px-2">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-white/55 shrink-0">
-              <circle cx="11" cy="11" r="8"></circle>
-              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+        <!-- Search input bar (always at bottom) -->
+        <div class="rounded-2xl border border-white/20 bg-zinc-950/90 backdrop-blur-xl shadow-2xl shadow-black/50 px-4 py-3 flex items-center gap-3">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-white/55 shrink-0">
+            <circle cx="11" cy="11" r="8"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+          </svg>
+          <input
+            bind:this={searchInputEl}
+            bind:value={searchQuery}
+            type="text"
+            class="w-full bg-transparent outline-none text-lg md:text-xl text-white placeholder:text-white/35"
+            placeholder="Termine und Todos durchsuchen…"
+            aria-label="Suche nach Terminen und Todos"
+          />
+          <button
+            type="button"
+            class="h-9 w-9 rounded-lg bg-white/8 hover:bg-white/14 text-white/60 hover:text-white/90 grid place-items-center transition"
+            aria-label="Suche schließen"
+            on:click={closeSearch}
+          >
+            <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
             </svg>
-            <input
-              bind:this={searchInputEl}
-              bind:value={searchQuery}
-              type="text"
-              class="w-full bg-transparent outline-none text-lg md:text-xl text-white placeholder:text-white/35"
-              placeholder="Termine und Todos durchsuchen…"
-              aria-label="Suche nach Terminen und Todos"
-            />
-            <button
-              type="button"
-              class="h-9 w-9 rounded-lg bg-white/8 hover:bg-white/14 text-white/60 hover:text-white/90 grid place-items-center transition"
-              aria-label="Suche schließen"
-              on:click={closeSearch}
-            >
-              <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <line x1="18" y1="6" x2="6" y2="18"></line>
-                <line x1="6" y1="6" x2="18" y2="18"></line>
-              </svg>
-            </button>
-          </div>
+          </button>
         </div>
       </div>
     </div>
