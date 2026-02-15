@@ -724,7 +724,7 @@
 
     <!-- Panel -->
     <div
-      class="relative w-[420px] max-w-[90vw] h-full border-r border-white/10 bg-zinc-950/[.97] backdrop-blur-xl overflow-hidden flex flex-col"
+      class="heos-speaker-panel relative w-[420px] max-w-[90vw] h-full border-r border-white/10 bg-zinc-950/[.97] backdrop-blur-xl overflow-hidden flex flex-col"
       transition:fly={{ x: -420, duration: 380, easing: cubicOut }}
     >
       <!-- Header -->
@@ -983,6 +983,56 @@
 {/if}
 
 <style>
+  /* Reset dashboard tone overrides — HEOS panel always keeps its dark bg + white text */
+  :global(.dashboard-tone-dark) .heos-speaker-panel :global(.text-white) {
+    color: rgb(255 255 255) !important;
+  }
+  :global(.dashboard-tone-dark) .heos-speaker-panel :global(.text-white\/80) {
+    color: rgba(255, 255, 255, 0.8) !important;
+  }
+  :global(.dashboard-tone-dark) .heos-speaker-panel :global(.text-white\/70) {
+    color: rgba(255, 255, 255, 0.7) !important;
+  }
+  :global(.dashboard-tone-dark) .heos-speaker-panel :global(.text-white\/60) {
+    color: rgba(255, 255, 255, 0.6) !important;
+  }
+  :global(.dashboard-tone-dark) .heos-speaker-panel :global(.text-white\/50) {
+    color: rgba(255, 255, 255, 0.5) !important;
+  }
+  :global(.dashboard-tone-dark) .heos-speaker-panel :global(.text-white\/45) {
+    color: rgba(255, 255, 255, 0.45) !important;
+  }
+  :global(.dashboard-tone-dark) .heos-speaker-panel :global(.text-white\/40) {
+    color: rgba(255, 255, 255, 0.4) !important;
+  }
+  :global(.dashboard-tone-dark) .heos-speaker-panel :global(.text-white\/35) {
+    color: rgba(255, 255, 255, 0.35) !important;
+  }
+  :global(.dashboard-tone-dark) .heos-speaker-panel :global(.bg-white\/5) {
+    background-color: rgba(255, 255, 255, 0.05) !important;
+  }
+  :global(.dashboard-tone-dark) .heos-speaker-panel :global(.bg-white\/8) {
+    background-color: rgba(255, 255, 255, 0.08) !important;
+  }
+  :global(.dashboard-tone-dark) .heos-speaker-panel :global(.bg-white\/10) {
+    background-color: rgba(255, 255, 255, 0.1) !important;
+  }
+  :global(.dashboard-tone-dark) .heos-speaker-panel :global(.border-white\/10) {
+    border-color: rgba(255, 255, 255, 0.1) !important;
+  }
+  :global(.dashboard-tone-dark) .heos-speaker-panel :global(.border-white\/5) {
+    border-color: rgba(255, 255, 255, 0.05) !important;
+  }
+  :global(.dashboard-tone-dark) .heos-speaker-panel :global(.border-white\/30) {
+    border-color: rgba(255, 255, 255, 0.3) !important;
+  }
+  :global(.dashboard-tone-dark) .heos-speaker-panel {
+    color: rgb(255 255 255) !important;
+  }
+  :global(.dashboard-tone-dark) .heos-speaker-panel :global(.text-shadow) {
+    text-shadow: 0 2px 16px rgba(0, 0, 0, 0.55) !important;
+  }
+
   @keyframes speakerCardIn {
     from {
       opacity: 0;
