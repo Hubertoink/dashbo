@@ -106,6 +106,9 @@
   export let dashboardTextStyle: ClockStyle;
   export let saveDashboardTextStyle: () => void | Promise<void>;
 
+  export let dashboardBgDimming: number;
+  export let saveDashboardBgDimming: () => void | Promise<void>;
+
   type HeosPlayerDto = { pid: number; name: string; model?: string };
   export let heosGroupPlayers: HeosPlayerDto[];
   export let heosGroupSelected: Record<string, boolean>;
@@ -280,6 +283,33 @@
               : 'translate-x-0'}"
           ></span>
         </button>
+      </div>
+
+      <div>
+        <div class="text-sm text-white/80">Hintergrund-Abdunklung</div>
+        <div class="text-xs text-white/50 mb-2">Steuert die Stärke des Overlays über dem Hintergrundbild für bessere Lesbarkeit.</div>
+        <div class="flex items-center gap-3">
+          <input
+            type="range"
+            min="0"
+            max="100"
+            step="5"
+            bind:value={dashboardBgDimming}
+            disabled={!authed}
+            class="flex-1 h-1.5 rounded-full appearance-none bg-white/20 accent-cyan-500 cursor-pointer disabled:opacity-50"
+            aria-label="Hintergrund-Abdunklung"
+          />
+          <span class="text-xs text-white/60 w-10 text-right tabular-nums">{dashboardBgDimming} %</span>
+        </div>
+        <div class="mt-1 flex items-center gap-2">
+          <button
+            class="h-7 px-2.5 rounded-lg bg-white/20 hover:bg-white/25 text-xs font-medium disabled:opacity-50"
+            on:click={saveDashboardBgDimming}
+            disabled={!authed}
+          >
+            Speichern
+          </button>
+        </div>
       </div>
 
       <div>

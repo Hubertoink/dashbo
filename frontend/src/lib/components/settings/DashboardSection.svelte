@@ -111,6 +111,9 @@
   export let dashboardTextStyle: import('$lib/clockStyle').ClockStyle;
   export let saveDashboardTextStyle: () => void | Promise<void>;
 
+  export let dashboardBgDimming: number;
+  export let saveDashboardBgDimming: () => void | Promise<void>;
+
   export let heosGroupPlayers: HeosPlayerDto[];
   export let heosGroupSelected: Record<string, boolean>;
   export let heosGroupBusy: boolean;
@@ -246,6 +249,8 @@
           {saveDashboardGlassBlurEnabled}
           bind:dashboardTextStyle
           {saveDashboardTextStyle}
+          bind:dashboardBgDimming
+          {saveDashboardBgDimming}
           {heosGroupPlayers}
           {heosGroupSelected}
           {heosGroupBusy}

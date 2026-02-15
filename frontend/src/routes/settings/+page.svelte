@@ -78,8 +78,11 @@
   import {
     DASHBOARD_GLASS_BLUR_ENABLED_KEY,
     DASHBOARD_TEXT_STYLE_KEY,
+    DASHBOARD_BG_DIMMING_KEY,
+    DASHBOARD_BG_DIMMING_DEFAULT,
     getDashboardGlassBlurEnabledFromStorage,
-    getDashboardTextStyleFromStorage
+    getDashboardTextStyleFromStorage,
+    getDashboardBgDimmingFromStorage
   } from '$lib/dashboard';
 
   import CalendarSection from '$lib/components/settings/CalendarSection.svelte';
@@ -170,6 +173,7 @@
 
   let dashboardGlassBlurEnabled = false;
   let dashboardTextStyle: ClockStyle = 'modern';
+  let dashboardBgDimming = DASHBOARD_BG_DIMMING_DEFAULT;
 
   let tags: TagDto[] = [];
   let newTagName = '';
@@ -570,6 +574,7 @@
     // Dashboard UI tweaks (local-only)
     dashboardGlassBlurEnabled = getDashboardGlassBlurEnabledFromStorage();
     dashboardTextStyle = getDashboardTextStyleFromStorage();
+    dashboardBgDimming = getDashboardBgDimmingFromStorage();
   }
 
   function saveDashboardGlassBlurEnabled() {
@@ -589,6 +594,17 @@
         localStorage.setItem(DASHBOARD_TEXT_STYLE_KEY, normalizeClockStyle(dashboardTextStyle));
       }
       showToast('Dashboard Schriftstil gespeichert');
+    } catch {
+      // ignore
+    }
+  }
+
+  function saveDashboardBgDimming() {
+    try {
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem(DASHBOARD_BG_DIMMING_KEY, String(dashboardBgDimming));
+      }
+      showToast(`Hintergrund-Abdunklung: ${dashboardBgDimming} %`);
     } catch {
       // ignore
     }
@@ -1717,6 +1733,8 @@
       {saveDashboardGlassBlurEnabled}
       bind:dashboardTextStyle
       {saveDashboardTextStyle}
+      bind:dashboardBgDimming
+      {saveDashboardBgDimming}
       {heosGroupPlayers}
       {heosGroupSelected}
       {heosGroupBusy}

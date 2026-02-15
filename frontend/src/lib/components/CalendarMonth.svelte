@@ -43,6 +43,7 @@
   export let upcomingMode: boolean = false;
   export let onToggleUpcoming: () => void;
   export let onOpenPlanner: (() => void) | null = null;
+  export let tone: 'light' | 'dark' = 'light';
 
   // Keep public props referenced even if the current template variant doesn't use them.
   $: void onAcceptSuggestion;
@@ -272,7 +273,7 @@
   }
 </script>
 
-<div class="h-full min-h-0 flex flex-col">
+<div class="h-full min-h-0 flex flex-col {tone === 'dark' ? 'text-shadow-light' : 'text-shadow'}">
   <div class="relative overflow-hidden">
     <div class="px-4 lg:px-8 pt-6 lg:pt-8 pb-3 lg:pb-4 opacity-0 pointer-events-none select-none" aria-hidden="true">
       <div class="flex items-center justify-between gap-4">

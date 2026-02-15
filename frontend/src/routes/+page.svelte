@@ -40,7 +40,7 @@
   } from '$lib/api';
   import { daysForMonthGrid } from '$lib/date';
   import { getEdgePlayerWidgetEnabledFromStorage } from '$lib/edge';
-  import { getDashboardGlassBlurEnabledFromStorage, getDashboardTextStyleFromStorage } from '$lib/dashboard';
+  import { getDashboardGlassBlurEnabledFromStorage, getDashboardTextStyleFromStorage, getDashboardBgDimmingFromStorage, DASHBOARD_BG_DIMMING_DEFAULT } from '$lib/dashboard';
   import { musicPlayerState } from '$lib/stores/musicPlayer';
   import { heosPlaybackStatus } from '$lib/stores/heosPlayback';
   import { clockStyleClasses, normalizeClockStyle, type ClockStyle } from '$lib/clockStyle';
@@ -64,6 +64,7 @@
   let musicWidgetEnabled = false;
   let dashboardGlassBlurEnabled = false;
   let dashboardTextStyle: ClockStyle = 'modern';
+  let dashboardBgDimming = DASHBOARD_BG_DIMMING_DEFAULT;
 
   const STANDBY_TRANSITION_MS = 700;
   let standbyTransitioning = false;
@@ -334,10 +335,12 @@
       musicWidgetEnabled = getEdgePlayerWidgetEnabledFromStorage();
       dashboardGlassBlurEnabled = getDashboardGlassBlurEnabledFromStorage();
       dashboardTextStyle = getDashboardTextStyleFromStorage();
+      dashboardBgDimming = getDashboardBgDimmingFromStorage();
     } catch {
       musicWidgetEnabled = false;
       dashboardGlassBlurEnabled = false;
       dashboardTextStyle = 'modern';
+      dashboardBgDimming = DASHBOARD_BG_DIMMING_DEFAULT;
     }
   }
 
@@ -384,10 +387,21 @@
   } | null = null;
   let addEventPrefillKey: string | null = null;
 
-  $: bgOverlay =
-    tone === 'dark'
-      ? 'linear-gradient(to right, rgba(255,255,255,0.18), rgba(255,255,255,0.3))'
-      : 'linear-gradient(to right, rgba(0,0,0,0.22), rgba(0,0,0,0.42))';
+  $: bgOverlay = (() => {
+    // dimming 0–100 maps to overlay opacity. At 50 (default) use moderate overlay; at 100 fully opaque.
+    const t = dashboardBgDimming / 100;
+    if (tone === 'dark') {
+      // Bright image → lighten overlay (white gradient)
+      const leftA = (0.12 + t * 0.30).toFixed(2);
+      const rightA = (0.20 + t * 0.45).toFixed(2);
+      return `linear-gradient(to right, rgba(255,255,255,${leftA}), rgba(255,255,255,${rightA}))`;
+    } else {
+      // Dark image → darken overlay (black gradient)
+      const leftA = (0.15 + t * 0.35).toFixed(2);
+      const rightA = (0.28 + t * 0.45).toFixed(2);
+      return `linear-gradient(to right, rgba(0,0,0,${leftA}), rgba(0,0,0,${rightA}))`;
+    }
+  })();
 
   $: bgFilter = tone === 'dark' ? 'brightness(1.03) contrast(0.96)' : 'brightness(0.97) contrast(1.02)';
 
@@ -1629,6 +1643,7 @@
                 onSelect={onSelect}
                 {events}
                 {holidays}
+                {tone}
                 suggestions={dashboardSuggestions}
                 onMonthChange={handleMonthChange}
                 onJumpToToday={jumpToToday}
@@ -2042,7 +2057,7 @@
   }
 
   .dashboard-tone-dark :global(.text-shadow) {
-    text-shadow: 0 2px 14px rgba(255, 255, 255, 0.38) !important;
+    text-shadow: 0 1px 8px rgba(255, 255, 255, 0.5), 0 0 2px rgba(255, 255, 255, 0.25) !important;
   }
 
   .standby-zeit-news {
