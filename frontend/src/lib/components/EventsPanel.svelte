@@ -6,6 +6,16 @@
   import { onDestroy } from 'svelte';
   import { formatGermanShortDate, sameDay, startOfDay, endOfDay } from '$lib/date';
 
+  /** Moves the node to document.body so it escapes overflow-hidden / backdrop-filter containing blocks. */
+  function portal(node: HTMLElement) {
+    document.body.appendChild(node);
+    return {
+      destroy() {
+        node.remove();
+      }
+    };
+  }
+
   export let selectedDate: Date;
   export let events: EventDto[];
   export let holidays: HolidayDto[] = [];
@@ -573,7 +583,7 @@
 </div>
 
 {#if searchOpen}
-  <div class="fixed inset-0 z-[130]">
+  <div class="fixed inset-0 z-[130]" use:portal>
     <button
       type="button"
       class="absolute inset-0 bg-black/65 backdrop-blur-sm"
