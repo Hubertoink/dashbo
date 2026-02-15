@@ -1644,6 +1644,7 @@
               onCreateFromSuggestion={openAddEventModalFromSuggestion}
               onDismissSuggestion={dismissDashboardSuggestion}
               onEdit={openEditEventModal}
+              onSelectDate={onSelect}
             />
           </div>
         </div>

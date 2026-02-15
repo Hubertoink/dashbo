@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { EventDto, HolidayDto, TagColorKey } from '$lib/api';
+  import { fetchTodos, type TodoItemDto } from '$lib/api';
   import type { DashboardSuggestionDto } from '$lib/components/CalendarMonth.svelte';
   import { fade, fly } from 'svelte/transition';
   import { onDestroy } from 'svelte';
@@ -13,12 +14,24 @@
   export let onCreateFromSuggestion: ((s: DashboardSuggestionDto) => void) | null = null;
   export let onDismissSuggestion: ((s: DashboardSuggestionDto) => void) | null = null;
   export let onEdit: (e: EventDto) => void;
+  export let onSelectDate: ((d: Date) => void) | null = null;
 
   let panelActivated = false;
   let hideTimer: ReturnType<typeof setTimeout> | null = null;
 
   let editPromptFor: string | null = null;
   let editPromptTimer: ReturnType<typeof setTimeout> | null = null;
+
+  let searchOpen = false;
+  let searchQuery = '';
+  let searchBusy = false;
+  let searchError: string | null = null;
+  let searchInputEl: HTMLInputElement | null = null;
+
+  let todosIndex: TodoItemDto[] = [];
+  let todosLoadedAt = 0;
+  const TODOS_INDEX_TTL_MS = 60_000;
+  const SEARCH_MAX_RESULTS = 60;
 
   $: isToday = sameDay(selectedDate, new Date());
   $: header = isToday ? 'HEUTE' : formatGermanShortDate(selectedDate);
@@ -31,9 +44,215 @@
     panelActivated = true;
     if (hideTimer) clearTimeout(hideTimer);
     hideTimer = setTimeout(() => {
+      if (searchOpen) return;
       panelActivated = false;
       hideTimer = null;
     }, 10_000);
+  }
+
+  async function ensureTodosLoaded(force = false) {
+    const fresh = !force && todosLoadedAt > 0 && Date.now() - todosLoadedAt < TODOS_INDEX_TTL_MS;
+    if (fresh || searchBusy) return;
+
+    searchBusy = true;
+    searchError = null;
+    try {
+      const data = await fetchTodos();
+      todosIndex = Array.isArray(data?.items) ? data.items : [];
+      todosLoadedAt = Date.now();
+    } catch (e: any) {
+      searchError = e?.message ? String(e.message) : 'Todos konnten nicht geladen werden.';
+    } finally {
+      searchBusy = false;
+    }
+  }
+
+  function openSearch() {
+    panelActivated = true;
+    searchOpen = true;
+    void ensureTodosLoaded();
+    setTimeout(() => searchInputEl?.focus(), 0);
+  }
+
+  function closeSearch() {
+    searchOpen = false;
+    searchError = null;
+  }
+
+  function normalizeForSearch(value: unknown): string {
+    return String(value ?? '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .trim();
+  }
+
+  function tokenizeSearch(value: string): string[] {
+    return normalizeForSearch(value)
+      .split(/\s+/)
+      .map((t) => t.trim())
+      .filter(Boolean);
+  }
+
+  function formatDateTimeLabel(iso: string | null | undefined) {
+    if (!iso) return '';
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return '';
+    return d.toLocaleString('de-DE', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  }
+
+  function formatDateLabel(iso: string | null | undefined) {
+    if (!iso) return '';
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return '';
+    return d.toLocaleDateString('de-DE', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric'
+    });
+  }
+
+  function formatTodoMeta(todo: TodoItemDto) {
+    const due = formatDateLabel(todo.dueAt ?? null);
+    const state = todo.completed ? 'Erledigt' : 'Offen';
+    const list = todo.listId?.startsWith('dashbo:') ? 'Dashbo' : todo.connectionLabel || 'Todo';
+    if (due) return `${list} · ${state} · Fällig ${due}`;
+    return `${list} · ${state}`;
+  }
+
+  function formatEventMeta(event: EventDto) {
+    const when = event.allDay
+      ? `${formatDateLabel(event.startAt)} · Ganztägig`
+      : formatDateTimeLabel(event.startAt);
+    const where = event.location ? ` · ${event.location}` : '';
+    return `${when}${where}`;
+  }
+
+  type SearchResultItem = {
+    kind: 'event' | 'todo';
+    key: string;
+    title: string;
+    subtitle: string;
+    meta: string;
+    rank: number;
+    timestamp: number;
+    event?: EventDto;
+    todo?: TodoItemDto;
+  };
+
+  function scoreTokens(haystack: string, tokens: string[]) {
+    if (tokens.length === 0) return 0;
+    let score = 0;
+    for (const token of tokens) {
+      const idx = haystack.indexOf(token);
+      if (idx < 0) return -1;
+      score += idx === 0 ? 16 : idx < 30 ? 10 : 6;
+      score += Math.min(8, token.length);
+    }
+    return score;
+  }
+
+  $: searchTokens = tokenizeSearch(searchQuery);
+
+  $: searchResults = (() => {
+    if (searchTokens.length === 0) return [] as SearchResultItem[];
+    const out: SearchResultItem[] = [];
+
+    for (const event of events) {
+      const persons = event.persons && event.persons.length > 0
+        ? event.persons.map((p) => p.name).join(' ')
+        : event.person?.name || '';
+      const haystack = normalizeForSearch([
+        event.title,
+        event.description,
+        event.location,
+        event.tag?.name,
+        persons,
+        formatDateLabel(event.startAt)
+      ].join(' '));
+      const tokenScore = scoreTokens(haystack, searchTokens);
+      if (tokenScore < 0) continue;
+
+      const startTs = new Date(event.startAt).getTime();
+      const isUpcoming = Number.isFinite(startTs) && startTs >= Date.now();
+      const rank = tokenScore + (isUpcoming ? 8 : 0);
+
+      out.push({
+        kind: 'event',
+        key: `event:${event.occurrenceId ?? `${event.id}:${event.startAt}`}`,
+        title: event.title,
+        subtitle: event.description || event.location || '',
+        meta: formatEventMeta(event),
+        rank,
+        timestamp: Number.isFinite(startTs) ? startTs : 0,
+        event
+      });
+    }
+
+    for (const todo of todosIndex) {
+      const haystack = normalizeForSearch([
+        todo.title,
+        todo.bodyPreview,
+        todo.connectionLabel,
+        todo.listId,
+        formatDateLabel(todo.dueAt)
+      ].join(' '));
+      const tokenScore = scoreTokens(haystack, searchTokens);
+      if (tokenScore < 0) continue;
+
+      const dueTs = todo.dueAt ? new Date(todo.dueAt).getTime() : 0;
+      const rank = tokenScore + (todo.completed ? 0 : 5);
+
+      out.push({
+        kind: 'todo',
+        key: `todo:${todo.connectionId}:${todo.listId}:${todo.taskId}`,
+        title: todo.title,
+        subtitle: todo.bodyPreview || '',
+        meta: formatTodoMeta(todo),
+        rank,
+        timestamp: Number.isFinite(dueTs) ? dueTs : 0,
+        todo
+      });
+    }
+
+    return out
+      .sort((a, b) => {
+        if (b.rank !== a.rank) return b.rank - a.rank;
+        const aTs = a.timestamp || Number.POSITIVE_INFINITY;
+        const bTs = b.timestamp || Number.POSITIVE_INFINITY;
+        return aTs - bTs;
+      })
+      .slice(0, SEARCH_MAX_RESULTS);
+  })();
+
+  function onSelectSearchResult(item: SearchResultItem) {
+    if (item.kind === 'event' && item.event) {
+      const start = new Date(item.event.startAt);
+      if (!Number.isNaN(start.getTime())) onSelectDate?.(start);
+      if (item.event.source !== 'outlook') onEdit(item.event);
+    } else if (item.kind === 'todo' && item.todo?.dueAt) {
+      const due = new Date(item.todo.dueAt);
+      if (!Number.isNaN(due.getTime())) onSelectDate?.(due);
+    }
+    closeSearch();
+  }
+
+  function onSearchKeydown(e: KeyboardEvent) {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      closeSearch();
+      return;
+    }
+    if (e.key === 'Enter' && searchResults.length > 0) {
+      e.preventDefault();
+      onSelectSearchResult(searchResults[0]);
+    }
   }
 
   onDestroy(() => {
@@ -165,6 +384,8 @@
   }
 </script>
 
+<svelte:window on:keydown={searchOpen ? onSearchKeydown : undefined} />
+
 <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
 <div class="h-full flex flex-col min-h-0 px-6 md:px-8 py-3" on:click={activatePanel}>
   <div class="flex items-end justify-between gap-6 shrink-0">
@@ -182,6 +403,18 @@
 
     {#if panelActivated}
       <div class="fixed right-6 bottom-6 z-40 flex flex-col items-center gap-2" in:fly={{ y: 10, duration: 180 }} out:fade={{ duration: 120 }}>
+        <button
+          type="button"
+          class="h-14 w-14 rounded-2xl bg-white/10 hover:bg-white/15 active:bg-white/20 active:scale-95 backdrop-blur-md transition-all duration-150 grid place-items-center"
+          aria-label="Suche"
+          title="Termine und Todos suchen"
+          on:click|stopPropagation={openSearch}
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="11" cy="11" r="8"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+          </svg>
+        </button>
         <button
           type="button"
           class="h-14 w-14 rounded-2xl bg-white/15 hover:bg-white/20 active:bg-white/25 active:scale-95 backdrop-blur-md text-3xl font-semibold transition-all duration-150"
@@ -242,7 +475,7 @@
                             {' · '}
                             {#each ps as p, i (p.id)}
                               {#if i > 0}, {/if}
-                              <span class={`${textFg[p.color] ?? 'text-white/70'} font-medium`}>{p.name}</span>
+                              <span class={`${textFg[p.color as TagColorKey] ?? 'text-white/70'} font-medium`}>{p.name}</span>
                             {/each}
                           {/if}
                         </div>
@@ -325,7 +558,7 @@
                           {/if}
                         </div>
 
-                        <div class="text-white/50 text-xs leading-tight">{#if isMultiDayEvent(e)}{fmtDateRange(e)} · {/if}{#if e.allDay}Ganztägig{:else}{fmtTimeRange(e.startAt, e.endAt)}{/if}{#if e.location} · {e.location}{/if}{#if e.tag} · {e.tag.name}{/if}{#if ps.length > 0} · {#each ps as p, i (p.id)}{#if i > 0},{/if}<span class={`${textFg[p.color] ?? 'text-white/70'} font-medium ${i > 0 ? 'pl-0.5' : ''}`}>{p.name}</span>{/each}{/if}</div>
+                        <div class="text-white/50 text-xs leading-tight">{#if isMultiDayEvent(e)}{fmtDateRange(e)} · {/if}{#if e.allDay}Ganztägig{:else}{fmtTimeRange(e.startAt, e.endAt)}{/if}{#if e.location} · {e.location}{/if}{#if e.tag} · {e.tag.name}{/if}{#if ps.length > 0} · {#each ps as p, i (p.id)}{#if i > 0},{/if}<span class={`${textFg[p.color as TagColorKey] ?? 'text-white/70'} font-medium ${i > 0 ? 'pl-0.5' : ''}`}>{p.name}</span>{/each}{/if}</div>
                       </div>
                     </div>
                   </button>
@@ -338,3 +571,91 @@
     </div>
   </div>
 </div>
+
+{#if searchOpen}
+  <div class="fixed inset-0 z-[130]">
+    <button
+      type="button"
+      class="absolute inset-0 bg-black/65 backdrop-blur-sm"
+      aria-label="Suche schließen"
+      on:click={closeSearch}
+      transition:fade={{ duration: 180 }}
+    ></button>
+
+    <div class="absolute inset-x-4 md:inset-x-12 lg:inset-x-24 top-[12vh]">
+      <div class="max-w-4xl mx-auto" in:fly={{ y: 16, duration: 220 }} out:fade={{ duration: 140 }}>
+        <div class="rounded-2xl border border-white/20 bg-zinc-950/90 backdrop-blur-xl shadow-2xl shadow-black/50 p-3 md:p-4">
+          <div class="flex items-center gap-3 px-2">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-white/55 shrink-0">
+              <circle cx="11" cy="11" r="8"></circle>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            </svg>
+            <input
+              bind:this={searchInputEl}
+              bind:value={searchQuery}
+              type="text"
+              class="w-full bg-transparent outline-none text-lg md:text-xl text-white placeholder:text-white/35"
+              placeholder="Termine und Todos durchsuchen…"
+              aria-label="Suche nach Terminen und Todos"
+            />
+            <button
+              type="button"
+              class="h-9 w-9 rounded-lg bg-white/8 hover:bg-white/14 text-white/60 hover:text-white/90 grid place-items-center transition"
+              aria-label="Suche schließen"
+              on:click={closeSearch}
+            >
+              <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+              </svg>
+            </button>
+          </div>
+
+          <div class="mt-3 h-px bg-gradient-to-r from-white/15 via-white/8 to-transparent"></div>
+
+          <div class="mt-3 max-h-[52vh] overflow-y-auto pr-1">
+            {#if searchBusy}
+              <div class="text-sm text-white/55 px-2 py-3">Lade Todos…</div>
+            {/if}
+
+            {#if searchError}
+              <div class="text-sm text-rose-300 px-2 py-2">{searchError}</div>
+            {/if}
+
+            {#if searchTokens.length === 0}
+              <div class="text-sm text-white/45 px-2 py-3">Suche nach Titel, Ort, Beschreibung, Person oder Fälligkeitsdatum.</div>
+            {:else if searchResults.length === 0}
+              <div class="text-sm text-white/45 px-2 py-3">Keine Treffer für „{searchQuery.trim()}“.</div>
+            {:else}
+              <div class="space-y-1.5">
+                {#each searchResults as item (item.key)}
+                  <button
+                    type="button"
+                    class="w-full text-left rounded-xl px-3 py-2.5 hover:bg-white/8 active:bg-white/12 transition"
+                    on:click={() => onSelectSearchResult(item)}
+                  >
+                    <div class="flex items-start gap-3">
+                      <div class="mt-1 h-2.5 w-2.5 rounded-full shrink-0 {item.kind === 'event' ? 'bg-cyan-400' : 'bg-emerald-400'}"></div>
+                      <div class="min-w-0 flex-1">
+                        <div class="flex items-center gap-2 min-w-0">
+                          <div class="font-semibold text-white truncate">{item.title}</div>
+                          <span class="text-[10px] uppercase tracking-wide rounded-full px-2 py-0.5 border border-white/15 text-white/55 shrink-0">
+                            {item.kind === 'event' ? 'Termin' : 'Todo'}
+                          </span>
+                        </div>
+                        {#if item.subtitle}
+                          <div class="text-xs text-white/55 mt-0.5 line-clamp-1">{item.subtitle}</div>
+                        {/if}
+                        <div class="text-[11px] text-white/40 mt-0.5">{item.meta}</div>
+                      </div>
+                    </div>
+                  </button>
+                {/each}
+              </div>
+            {/if}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+{/if}
