@@ -582,9 +582,9 @@
       transition:fade={{ duration: 180 }}
     ></button>
 
-    <div class="absolute inset-x-4 md:inset-x-12 lg:inset-x-24 top-[12vh]">
-      <div class="max-w-4xl mx-auto" in:fly={{ y: 16, duration: 220 }} out:fade={{ duration: 140 }}>
-        <div class="rounded-2xl border border-white/20 bg-zinc-950/90 backdrop-blur-xl shadow-2xl shadow-black/50 p-3 md:p-4">
+    <div class="absolute inset-0 flex items-start justify-center pt-[10vh] pb-6 px-4 md:px-12 lg:px-24 overflow-hidden">
+      <div class="max-w-4xl w-full max-h-full flex flex-col" in:fly={{ y: 16, duration: 220 }} out:fade={{ duration: 140 }}>
+        <div class="rounded-2xl border border-white/20 bg-zinc-950/90 backdrop-blur-xl shadow-2xl shadow-black/50 p-3 md:p-4 flex flex-col max-h-full overflow-hidden">
           <div class="flex items-center gap-3 px-2">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-white/55 shrink-0">
               <circle cx="11" cy="11" r="8"></circle>
@@ -613,7 +613,7 @@
 
           <div class="mt-3 h-px bg-gradient-to-r from-white/15 via-white/8 to-transparent"></div>
 
-          <div class="mt-3 max-h-[52vh] overflow-y-auto pr-1">
+          <div class="mt-3 min-h-0 flex-1 overflow-y-auto pr-1">
             {#if searchBusy}
               <div class="text-sm text-white/55 px-2 py-3">Lade Todos…</div>
             {/if}
