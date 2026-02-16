@@ -1136,11 +1136,13 @@
           {#if createSelectionActive && createSelectionDayKey === k}
             <div
               class={`absolute left-0 right-0 pointer-events-none border-y ${tone === 'dark' ? 'bg-black/10 border-black/25' : 'bg-cyan-400/18 border-cyan-300/40'}`}
-              style={`top: ${createSelectionTopPx()}px; height: ${createSelectionHeightPx()}px;`}
+              style={`top: ${csTopPx}px; height: ${csHeightPx}px;`}
             >
               <div class={`absolute -top-10 left-1 rounded-md px-2 py-1 ${tone === 'dark' ? 'bg-white/92 text-zinc-900 border border-black/15' : 'bg-black/55 text-white border border-white/20'}`}>
-                <div class="text-[12px] font-semibold leading-tight whitespace-nowrap">{createSelectionTimeLabel()}</div>
-                <div class={`mt-0.5 text-[10px] leading-tight whitespace-nowrap ${tone === 'dark' ? 'text-zinc-700/90' : 'text-white/80'}`}>{createSelectionDurationLabel()}</div>
+                <div class="text-[12px] font-semibold leading-tight whitespace-nowrap">{csTimeLabel}</div>
+                {#if csDurationLabel}
+                  <div class={`mt-0.5 text-[10px] leading-tight whitespace-nowrap ${tone === 'dark' ? 'text-zinc-700/90' : 'text-white/80'}`}>{csDurationLabel}</div>
+                {/if}
               </div>
             </div>
           {/if}
