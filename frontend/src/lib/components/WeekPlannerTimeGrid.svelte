@@ -354,7 +354,9 @@
     const from = Math.min(createSelectionStartMin, createSelectionCurrentMin);
     const to = Math.max(createSelectionStartMin, createSelectionCurrentMin);
     if (to <= from) return hhmmFromMinutes(from);
-    return `${hhmmFromMinutes(from)} – ${hhmmFromMinutes(to)}`;
+    const dur = to - from;
+    const durLabel = dur >= 60 ? `${Math.floor(dur / 60)}h${dur % 60 > 0 ? ` ${dur % 60}min` : ''}` : `${dur}min`;
+    return `${hhmmFromMinutes(from)} – ${hhmmFromMinutes(to)}  (${durLabel})`;
   }
 
   function beginCreateSelection(day: Date, ev: PointerEvent) {
