@@ -109,6 +109,12 @@
     return Math.round(mins / step) * step;
   }
 
+  function hhmmFromMinutes(mins: number): string {
+    const h = Math.floor(mins / 60);
+    const m = mins % 60;
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+  }
+
   function dateAtGridClick(day: Date, ev: MouseEvent): Date {
     const target = ev.currentTarget as HTMLElement | null;
     if (!target) return new Date(day);
