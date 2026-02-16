@@ -311,6 +311,24 @@
   let dragFloatEl: HTMLDivElement | null = null;
   let dragFlutterEnergy = 0;
 
+  // Hover indicator state
+  let hoverDayKey: number | null = null;
+  let hoverMin: number = 0;
+
+  function handleColumnHover(day: Date, ev: MouseEvent) {
+    if (createSelectionActive) return;
+    const target = ev.currentTarget as HTMLElement | null;
+    if (!target) return;
+    const overEvent = (ev.target as HTMLElement | null)?.closest('[data-event-tile="1"]');
+    if (overEvent) { hoverDayKey = null; return; }
+    hoverDayKey = dateKey(day);
+    hoverMin = minutesAtGridPointer(target, ev.clientY);
+  }
+
+  function clearColumnHover() {
+    hoverDayKey = null;
+  }
+
   // Drag-to-create selection state
   let createSelectionActive = false;
   let createSelectionMoved = false;
@@ -346,6 +364,7 @@
     if (clickedInsideEvent) return;
 
     const mins = minutesAtGridPointer(target, ev.clientY);
+    hoverDayKey = null;
     createSelectionActive = true;
     createSelectionMoved = false;
     createSelectionDayKey = dateKey(day);
@@ -1060,6 +1079,8 @@
           on:pointermove={moveCreateSelection}
           on:pointerup={endCreateSelection}
           on:pointercancel={cancelCreateSelection}
+          on:mousemove={(ev) => handleColumnHover(day, ev)}
+          on:mouseleave={clearColumnHover}
           on:keydown={(e) => {
             if (e.key === 'Enter' || e.key === ' ') {
               e.preventDefault();
@@ -1091,6 +1112,18 @@
             </div>
           {/if}
 
+          <!-- Hover time indicator -->
+          {#if !createSelectionActive && hoverDayKey === k}
+            {@const hoverTop = (hoverMin - config.startHour * 60) * config.pxPerMinute}
+            <div class="absolute left-0 right-0 z-30 pointer-events-none" style={`top: ${hoverTop}px;`}>
+              <div class={`absolute left-0 right-0 h-px ${tone === 'dark' ? 'bg-cyan-400/40' : 'bg-cyan-500/50'}`}></div>
+              <div class={`absolute -top-2.5 left-1 rounded px-1.5 py-0.5 text-[10px] ${tone === 'dark' ? 'bg-black/60 text-cyan-300/90 border border-cyan-400/25' : 'bg-black/45 text-white border border-white/20'}`}>
+                {hhmmFromMinutes(hoverMin)}
+              </div>
+            </div>
+          {/if}
+
+          <!-- Drag-to-create selection overlay -->
           {#if createSelectionActive && createSelectionDayKey === k}
             <div
               class={`absolute left-0 right-0 pointer-events-none border-y ${tone === 'dark' ? 'bg-black/10 border-black/25' : 'bg-cyan-400/18 border-cyan-300/40'}`}
