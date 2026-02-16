@@ -339,32 +339,31 @@
   let createSelectionStartClientX = 0;
   let createSelectionStartClientY = 0;
 
-  function createSelectionTopPx(): number {
+  $: csTopPx = (() => {
     const from = Math.min(createSelectionStartMin, createSelectionCurrentMin);
     return (from - config.startHour * 60) * config.pxPerMinute;
-  }
+  })();
 
-  function createSelectionHeightPx(): number {
+  $: csHeightPx = (() => {
     const to = Math.max(createSelectionStartMin, createSelectionCurrentMin);
     const from = Math.min(createSelectionStartMin, createSelectionCurrentMin);
     return Math.max(2, (to - from) * config.pxPerMinute);
-  }
+  })();
 
-  function createSelectionTimeLabel(): string {
+  $: csTimeLabel = (() => {
     const from = Math.min(createSelectionStartMin, createSelectionCurrentMin);
     const to = Math.max(createSelectionStartMin, createSelectionCurrentMin);
     if (to <= from) return hhmmFromMinutes(from);
-    return `${hhmmFromMinutes(from)} – ${hhmmFromMinutes(to)}`;
-  }
+    return `${hhmmFromMinutes(from)} \u2013 ${hhmmFromMinutes(to)}`;
+  })();
 
-  function createSelectionDurationLabel(): string {
+  $: csDurationLabel = (() => {
     const from = Math.min(createSelectionStartMin, createSelectionCurrentMin);
     const to = Math.max(createSelectionStartMin, createSelectionCurrentMin);
     const dur = Math.max(0, to - from);
-    if (dur <= 0) return 'Dauer: 0 min';
-    const durLabel = dur >= 60 ? `${Math.floor(dur / 60)}h${dur % 60 > 0 ? ` ${dur % 60}min` : ''}` : `${dur}min`;
-    return `Dauer: ${durLabel}`;
-  }
+    if (dur <= 0) return '';
+    return dur >= 60 ? `Dauer: ${Math.floor(dur / 60)}h${dur % 60 > 0 ? ` ${dur % 60}min` : ''}` : `Dauer: ${dur}min`;
+  })();
 
   function beginCreateSelection(day: Date, ev: PointerEvent) {
     const target = ev.currentTarget as HTMLElement | null;
