@@ -3,6 +3,7 @@
 
   export let authed: boolean;
   export let isAdmin: boolean;
+    export let isSuperAdmin: boolean;
 
   export let users: UserDto[];
 
@@ -57,10 +58,12 @@
         </div>
 
         <div class="flex items-center gap-4">
-          <label class="flex items-center gap-2 text-sm text-white/70">
-            <input type="checkbox" class="rounded bg-white/10 border-0" bind:checked={newUserIsAdmin} />
-            Admin
-          </label>
+          {#if isSuperAdmin}
+            <label class="flex items-center gap-2 text-sm text-white/70">
+              <input type="checkbox" class="rounded bg-white/10 border-0" bind:checked={newUserIsAdmin} />
+              Admin
+            </label>
+          {/if}
           <button class="h-9 px-4 rounded-lg bg-white/20 hover:bg-white/25 text-sm font-medium" on:click={doCreateUser}>
             Einladung senden
           </button>

@@ -469,6 +469,7 @@ export type MeDto = {
   email: string;
   name: string;
   isAdmin: boolean;
+  isSuperAdmin?: boolean;
   role: 'admin' | 'member' | string;
   calendarId: number | null;
   emailVerified?: boolean;

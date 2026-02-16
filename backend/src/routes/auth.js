@@ -6,6 +6,7 @@ const { login } = require('../services/authService');
 const { createAuthToken, consumeAuthToken } = require('../services/authTokenService');
 const { consumeCalendarInvite } = require('../services/calendarInviteService');
 const { sendMail, isEnabled: isMailEnabled } = require('../services/mailService');
+const { isSuperAdminEmail } = require('../services/superAdminService');
 const bcrypt = require('bcryptjs');
 const { getPool } = require('../db');
 
@@ -47,6 +48,7 @@ authRouter.get('/me', requireAuth, attachUserContext, async (req, res) => {
     email: req.ctx.email,
     name: req.ctx.name,
     isAdmin: Boolean(req.ctx.isAdmin),
+    isSuperAdmin: isSuperAdminEmail(req.ctx.email),
     role: req.ctx.role,
     calendarId: req.ctx.calendarId,
     emailVerified,

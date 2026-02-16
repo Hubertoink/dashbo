@@ -102,6 +102,7 @@
   let authError: string | null = null;
   let authed = false;
   let isAdmin = false;
+  let isSuperAdmin = false;
   let me: MeDto | null = null;
 
   // Return URL from query params (for mobile navigation from planner)
@@ -1016,9 +1017,11 @@
       try {
         me = await fetchMe();
         isAdmin = !!me.isAdmin;
+        isSuperAdmin = !!me.isSuperAdmin;
       } catch {
         // Fallback to login response if /auth/me isn't reachable yet
         isAdmin = !!res.user?.isAdmin;
+        isSuperAdmin = false;
       }
 
       await refreshSettings();
@@ -1031,6 +1034,7 @@
       authError = 'Login fehlgeschlagen';
       authed = false;
       isAdmin = false;
+      isSuperAdmin = false;
       me = null;
     }
   }
@@ -1043,6 +1047,7 @@
       try {
         me = await fetchMe();
         isAdmin = !!me.isAdmin;
+        isSuperAdmin = !!me.isSuperAdmin;
       } catch {
         // ignore
       }
@@ -1057,6 +1062,7 @@
     setToken(null);
     authed = false;
     isAdmin = false;
+    isSuperAdmin = false;
     me = null;
     users = [];
     persons = [];
@@ -1299,7 +1305,8 @@
       return;
     }
     try {
-      const res = await inviteUser({ email, name, isAdmin: newUserIsAdmin });
+      const requestedAdminInvite = isSuperAdmin ? newUserIsAdmin : false;
+      const res = await inviteUser({ email, name, isAdmin: requestedAdminInvite });
       newUserEmail = '';
       newUserName = '';
       newUserIsAdmin = false;
@@ -1315,6 +1322,7 @@
       if (msg.includes('missing_public_app_url')) userError = 'PUBLIC_APP_URL fehlt (wird für Einladungslinks benötigt).';
       else if (msg.includes('email_in_use')) userError = 'Diese E-Mail wird bereits in einem anderen Kalender genutzt.';
       else if (msg.includes('already_active')) userError = 'Dieser Benutzer existiert bereits und hat schon ein Passwort gesetzt.';
+      else if (msg.includes('admin_invite_forbidden')) userError = 'Nur der Mainadmin darf weitere Admins einladen.';
       else if (msg.includes('invalid_body')) userError = 'Bitte E-Mail und Name korrekt ausfüllen.';
       else userError = msg || 'Einladung konnte nicht gesendet werden.';
     }
@@ -1434,6 +1442,7 @@
         me = await fetchMe();
         authed = true;
         isAdmin = !!me.isAdmin;
+        isSuperAdmin = !!me.isSuperAdmin;
 
         await refreshSettings();
         await refreshTags();
@@ -1444,6 +1453,7 @@
       } catch {
         authed = false;
         isAdmin = false;
+        isSuperAdmin = false;
         me = null;
         users = [];
         persons = [];
@@ -1451,6 +1461,7 @@
     } else {
       authed = false;
       isAdmin = false;
+      isSuperAdmin = false;
       me = null;
     }
   });
@@ -1802,6 +1813,7 @@
       <UsersSection
         {authed}
         {isAdmin}
+        {isSuperAdmin}
         {users}
         bind:newUserEmail
         bind:newUserName
