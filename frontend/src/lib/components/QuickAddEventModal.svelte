@@ -547,7 +547,7 @@
         <!-- Person Chips -->
         {#if persons.length > 0}
           <div>
-            <div class="text-xs text-white/50 mb-2">Personen</div>
+            <div class="text-xs text-white/50 mb-2">Personen (optional)</div>
             <div class="flex flex-wrap gap-2">
               {#each persons as p (p.id)}
                 {@const selected = personIds.includes(p.id)}

@@ -145,9 +145,94 @@ body {
   background-color: rgba(0, 0, 0, 0.08) !important;
 }
 
-/* ── text-white/* utility overrides → dark muted ── */
+/* ── text-white/* and text-white utility overrides → dark muted ── */
 .modal-tone-dark [class*="text-white/"] {
   color: rgba(0, 0, 0, 0.5) !important;
+}
+
+.modal-tone-dark [class~="text-white"]:not([class*="bg-emerald-6"]):not([class*="bg-emerald-5"]):not([class*="bg-rose-6"]):not([class*="bg-rose-5"]) {
+  color: #52525b !important;
+}
+
+/* ── Protect solid-bg buttons (submit / delete): keep white text ── */
+.modal-tone-dark [class*="bg-emerald-6"],
+.modal-tone-dark [class*="bg-emerald-5"],
+.modal-tone-dark [class*="bg-rose-6"],
+.modal-tone-dark [class*="bg-rose-5"] {
+  color: white !important;
+}
+
+/* ── Light-shade colored text (100/200 levels) → darker for beige bg ── */
+.modal-tone-dark [class*="text-emerald-1"],
+.modal-tone-dark [class*="text-emerald-2"] {
+  color: #059669 !important;
+}
+
+.modal-tone-dark [class*="text-violet-1"],
+.modal-tone-dark [class*="text-violet-2"] {
+  color: #7c3aed !important;
+}
+
+.modal-tone-dark [class*="text-fuchsia-2"] {
+  color: #c026d3 !important;
+}
+
+.modal-tone-dark [class*="text-cyan-2"] {
+  color: #0891b2 !important;
+}
+
+.modal-tone-dark [class*="text-rose-2"],
+.modal-tone-dark [class*="text-rose-1"] {
+  color: #e11d48 !important;
+}
+
+.modal-tone-dark [class*="text-amber-2"] {
+  color: #d97706 !important;
+}
+
+.modal-tone-dark [class*="text-sky-2"] {
+  color: #0284c7 !important;
+}
+
+.modal-tone-dark [class*="text-lime-2"] {
+  color: #65a30d !important;
+}
+
+/* ── Colored border light shades → stronger for beige bg ── */
+.modal-tone-dark [class*="border-emerald-3"] {
+  border-color: rgba(5, 150, 105, 0.5) !important;
+}
+
+.modal-tone-dark [class*="border-violet-3"] {
+  border-color: rgba(124, 58, 237, 0.5) !important;
+}
+
+.modal-tone-dark [class*="border-fuchsia-4"] {
+  border-color: rgba(192, 38, 211, 0.45) !important;
+}
+
+.modal-tone-dark [class*="border-cyan-4"] {
+  border-color: rgba(8, 145, 178, 0.45) !important;
+}
+
+.modal-tone-dark [class*="border-rose-4"] {
+  border-color: rgba(225, 29, 72, 0.45) !important;
+}
+
+.modal-tone-dark [class*="border-amber-4"] {
+  border-color: rgba(217, 119, 6, 0.45) !important;
+}
+
+.modal-tone-dark [class*="border-sky-4"] {
+  border-color: rgba(2, 132, 199, 0.45) !important;
+}
+
+.modal-tone-dark [class*="border-lime-4"] {
+  border-color: rgba(101, 163, 13, 0.45) !important;
+}
+
+.modal-tone-dark [class*="border-violet-4"] {
+  border-color: rgba(124, 58, 237, 0.45) !important;
 }
 
 /* ── dark bg containers inside modal (dropdowns, nested panels) ── */
