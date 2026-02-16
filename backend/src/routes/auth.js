@@ -6,6 +6,7 @@ const { login } = require('../services/authService');
 const { createAuthToken, consumeAuthToken } = require('../services/authTokenService');
 const { consumeCalendarInvite } = require('../services/calendarInviteService');
 const { sendMail, isEnabled: isMailEnabled } = require('../services/mailService');
+const { passwordResetEmail, emailVerificationEmail } = require('../services/mailTemplateService');
 const { isSuperAdminEmail } = require('../services/superAdminService');
 const bcrypt = require('bcryptjs');
 const { getPool } = require('../db');
@@ -76,14 +77,8 @@ authRouter.post('/request-password-reset', async (req, res) => {
     if (!publicUrl) return res.json({ ok: true });
     const link = `${publicUrl}/reset-password?token=${encodeURIComponent(token)}`;
 
-    await sendMail({
-      to: String(u.rows[0].email),
-      subject: 'Passwort zurücksetzen',
-      text:
-        `Du hast ein neues Passwort für Dashbo angefordert.\n\n` +
-        `Link zum Zurücksetzen: ${link}\n\n` +
-        `Wenn du das nicht warst, kannst du diese Mail ignorieren.`,
-    });
+    const mail = passwordResetEmail({ link });
+    await sendMail({ to: String(u.rows[0].email), ...mail });
   } catch (e) {
     console.error('[auth] request-password-reset failed', e);
   }
@@ -121,14 +116,8 @@ authRouter.post('/request-email-verification', requireAuth, attachUserContext, a
   const link = `${publicUrl}/verify-email?token=${encodeURIComponent(token)}`;
 
   try {
-    await sendMail({
-      to: email,
-      subject: 'E-Mail bestätigen',
-      text:
-        `Bitte bestätige deine E-Mail-Adresse für Dashbo.\n\n` +
-        `Link: ${link}\n\n` +
-        `Wenn du das nicht warst, kannst du diese Mail ignorieren.`,
-    });
+    const verifyMail = emailVerificationEmail({ link });
+    await sendMail({ to: email, ...verifyMail });
   } catch (e) {
     console.error('[auth] request-email-verification failed', e);
   }

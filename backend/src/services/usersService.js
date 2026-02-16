@@ -4,6 +4,7 @@ const { isSuperAdminEmail } = require('./superAdminService');
 
 const { createAuthToken } = require('./authTokenService');
 const { sendMail, isEnabled: isMailEnabled } = require('./mailService');
+const { inviteEmail } = require('./mailTemplateService');
 
 function toUserDto(row) {
   return {
@@ -114,14 +115,8 @@ async function inviteUser({ email, name, isAdmin, calendarId, actorEmail } = {})
   let mailSent = false;
   if (isMailEnabled()) {
     try {
-      await sendMail({
-        to: normalizedEmail,
-        subject: 'Einladung zu Dashbo',
-        text:
-          `Du wurdest zu einem Dashbo Kalender eingeladen.\n\n` +
-          `Link zum Annehmen der Einladung: ${link}\n\n` +
-          `Wenn du das nicht warst, kannst du diese Mail ignorieren.`,
-      });
+      const mail = inviteEmail({ link });
+      await sendMail({ to: normalizedEmail, ...mail });
       mailSent = true;
     } catch (e) {
       console.error('[users] invite mail failed', e);
