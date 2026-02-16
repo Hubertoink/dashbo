@@ -46,6 +46,7 @@ settingsRouter.get('/', requireAuth, attachUserContext, async (_req, res) => {
   const scribbleStandbySecondsRaw = await getUserSetting({ userId, key: 'scribble.standbySeconds' });
   const scribblePaperLookRaw = await getUserSetting({ userId, key: 'scribble.standbyPaperLook' });
   const newsFeedsRaw = await getUserSetting({ userId, key: 'news.feeds' });
+  const newsLinkTargetRaw = await getUserSetting({ userId, key: 'news.linkTarget' });
   const clockStyleRaw = await getUserSetting({ userId, key: 'clock.style' });
   const images = listImages({ userId });
 
@@ -181,6 +182,12 @@ settingsRouter.get('/', requireAuth, attachUserContext, async (_req, res) => {
     }
   }
 
+  const newsLinkTarget = (() => {
+    const v = String(newsLinkTargetRaw ?? '').trim().toLowerCase();
+    if (v === 'external') return 'external';
+    return 'same';
+  })();
+
   const refreshEnv = process.env.DASHBO_DATA_REFRESH_MS || process.env.DATA_REFRESH_MS || '';
   const dataRefreshMs = refreshEnv && Number.isFinite(Number(refreshEnv)) ? Number(refreshEnv) : null;
 
@@ -217,6 +224,7 @@ settingsRouter.get('/', requireAuth, attachUserContext, async (_req, res) => {
     todoListNames,
     todoDefaultConnectionId,
     newsFeeds,
+    newsLinkTarget,
     dataRefreshMs,
     clockStyle,
   });
@@ -549,6 +557,18 @@ settingsRouter.post('/news/feeds', requireAuth, async (req, res) => {
   const userId = Number(req.auth?.sub);
   const unique = Array.from(new Set(parsed.data.feeds)).slice(0, 10);
   await setUserSetting({ userId, key: 'news.feeds', value: JSON.stringify(unique.length ? unique : ['zeit']) });
+  return res.json({ ok: true });
+});
+
+settingsRouter.post('/news/link-target', requireAuth, async (req, res) => {
+  const schema = z.object({ target: z.enum(['same', 'external']) });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: 'invalid_body', details: parsed.error.flatten() });
+  }
+
+  const userId = Number(req.auth?.sub);
+  await setUserSetting({ userId, key: 'news.linkTarget', value: parsed.data.target });
   return res.json({ ok: true });
 });
 

@@ -7,6 +7,7 @@
   export let expanded = false;
   export let compact = false;
   export let tone: 'light' | 'dark' = 'light';
+  export let linkTarget: import('$lib/api').NewsLinkTarget = 'same';
   export let onToggleExpand: (() => void) | null = null;
 
   let items: NewsItemDto[] = [];
@@ -178,7 +179,8 @@
               <a
                 class={`block text-sm leading-snug min-h-[2.5rem] line-clamp-2 underline-offset-2 hover:underline whitespace-normal break-words ${tone === 'dark' ? 'text-zinc-800/90 hover:text-zinc-900' : 'text-white/85 hover:text-white'}`}
                 href={it.url}
-                rel="noopener"
+                target={linkTarget === 'external' ? '_blank' : undefined}
+                rel={linkTarget === 'external' ? 'noopener noreferrer' : undefined}
               >
                 {#if source === 'mixed'}
                   {@const lbl = itemSourceLabel(it)}

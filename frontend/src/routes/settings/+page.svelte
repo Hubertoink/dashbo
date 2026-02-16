@@ -37,6 +37,7 @@
     setScribbleStandbySeconds,
     setScribblePaperLook,
     setNewsFeeds,
+    setNewsLinkTarget,
     setClockStyle,
     uploadBackgroundWithProgress,
     setBackgroundRotateEnabled,
@@ -163,9 +164,13 @@
   let scribblePaperLookError: string | null = null;
 
   type NewsFeedId = import('$lib/api').NewsFeedId;
+  type NewsLinkTarget = import('$lib/api').NewsLinkTarget;
   let newsFeeds: NewsFeedId[] = ['zeit'];
   let newsFeedsSaving = false;
   let newsFeedsError: string | null = null;
+  let newsLinkTarget: NewsLinkTarget = 'same';
+  let newsLinkTargetSaving = false;
+  let newsLinkTargetError: string | null = null;
 
   let clockStyle: ClockStyle = 'modern';
   let clockStyleSaving = false;
@@ -764,6 +769,7 @@
 
     const feeds = Array.isArray(settings?.newsFeeds) ? settings!.newsFeeds! : [];
     newsFeeds = (feeds.length ? feeds : ['zeit']) as NewsFeedId[];
+    newsLinkTarget = (settings?.newsLinkTarget === 'external' ? 'external' : 'same') as NewsLinkTarget;
 
     clockStyle = normalizeClockStyle((settings as any)?.clockStyle);
 
@@ -856,6 +862,20 @@
       newsFeedsError = 'Speichern fehlgeschlagen.';
     } finally {
       newsFeedsSaving = false;
+    }
+  }
+
+  async function saveNewsLinkTargetHandler() {
+    newsLinkTargetError = null;
+    newsLinkTargetSaving = true;
+    try {
+      await setNewsLinkTarget(newsLinkTarget);
+      await refreshSettings();
+      showToast('Link-Öffnung gespeichert');
+    } catch {
+      newsLinkTargetError = 'Speichern fehlgeschlagen.';
+    } finally {
+      newsLinkTargetSaving = false;
     }
   }
 
@@ -1707,6 +1727,10 @@
       {newsFeedsSaving}
       {newsFeedsError}
       saveNewsFeeds={saveNewsFeedsHandler}
+      bind:newsLinkTarget
+      {newsLinkTargetSaving}
+      {newsLinkTargetError}
+      saveNewsLinkTarget={saveNewsLinkTargetHandler}
       bind:clockStyle
       {clockStyleSaving}
       {clockStyleError}

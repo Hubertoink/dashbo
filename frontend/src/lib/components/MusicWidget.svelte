@@ -486,6 +486,12 @@
     }
   }
 
+  async function adjustVolumeForSelected(delta: number) {
+    const current = Number.isFinite(Number(heosVolumeLevel)) ? Number(heosVolumeLevel) : 0;
+    const next = Math.max(0, Math.min(100, Math.round(current + delta)));
+    await setVolumeForSelected(next);
+  }
+
   function persistSelectedPid(pid: string, nameOverride?: string) {
     try {
       if (typeof localStorage === 'undefined') return;
@@ -974,6 +980,27 @@
                   void setVolumeForSelected(v);
                 }}
               />
+            </div>
+
+            <div class="mt-3 flex items-center justify-center gap-2">
+              <button
+                type="button"
+                class="h-8 min-w-8 px-3 rounded-lg border border-white/10 bg-white/8 hover:bg-white/12 text-white/80 text-sm font-semibold transition disabled:opacity-50"
+                on:click={() => void adjustVolumeForSelected(-5)}
+                disabled={heosVolumeBusy}
+                aria-label="Lautstärke verringern"
+              >
+                −
+              </button>
+              <button
+                type="button"
+                class="h-8 min-w-8 px-3 rounded-lg border border-white/10 bg-white/8 hover:bg-white/12 text-white/80 text-sm font-semibold transition disabled:opacity-50"
+                on:click={() => void adjustVolumeForSelected(5)}
+                disabled={heosVolumeBusy}
+                aria-label="Lautstärke erhöhen"
+              >
+                +
+              </button>
             </div>
           </div>
         {/if}

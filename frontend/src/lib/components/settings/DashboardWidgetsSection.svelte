@@ -71,6 +71,10 @@
   export let newsFeedsSaving: boolean;
   export let newsFeedsError: string | null;
   export let saveNewsFeeds: () => void | Promise<void>;
+  export let newsLinkTarget: import('$lib/api').NewsLinkTarget;
+  export let newsLinkTargetSaving: boolean;
+  export let newsLinkTargetError: string | null;
+  export let saveNewsLinkTarget: () => void | Promise<void>;
 
   export let clockStyle: ClockStyle;
   export let clockStyleSaving: boolean;
@@ -720,6 +724,52 @@
       {#if newsFeedsError}
         <div class="text-red-400 text-xs">{newsFeedsError}</div>
       {/if}
+
+      <div class="pt-1">
+        <div class="text-sm text-white/80">Links öffnen</div>
+        <div class="mt-2 grid sm:grid-cols-2 gap-2 text-sm text-white/80">
+          <label class="flex items-center gap-2">
+            <input
+              type="radio"
+              class="bg-white/10 border-0"
+              name="news-link-target"
+              checked={newsLinkTarget === 'same'}
+              disabled={!authed}
+              on:change={() => (newsLinkTarget = 'same')}
+            />
+            Im aktuellen Tab
+          </label>
+          <label class="flex items-center gap-2">
+            <input
+              type="radio"
+              class="bg-white/10 border-0"
+              name="news-link-target"
+              checked={newsLinkTarget === 'external'}
+              disabled={!authed}
+              on:change={() => (newsLinkTarget = 'external')}
+            />
+            In neuem Tab
+          </label>
+        </div>
+
+        <div class="mt-2 flex items-center gap-2">
+          <button
+            class="h-8 px-3 rounded-lg bg-white/20 hover:bg-white/25 text-xs font-medium disabled:opacity-50"
+            on:click={saveNewsLinkTarget}
+            disabled={!authed || newsLinkTargetSaving}
+          >
+            Speichern
+          </button>
+
+          {#if settings?.newsLinkTarget}
+            <div class="text-xs text-white/50">Aktuell: {settings.newsLinkTarget === 'external' ? 'Neuer Tab' : 'Aktueller Tab'}</div>
+          {/if}
+        </div>
+
+        {#if newsLinkTargetError}
+          <div class="text-red-400 text-xs mt-1">{newsLinkTargetError}</div>
+        {/if}
+      </div>
 
       <div class="text-xs text-white/40">Zeigt aktuelle Schlagzeilen aus den ausgewählten RSS-Feeds in der Sidebar.</div>
     </div>

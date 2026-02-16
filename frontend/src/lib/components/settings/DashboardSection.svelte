@@ -75,6 +75,10 @@
   export let newsFeedsSaving: boolean;
   export let newsFeedsError: string | null;
   export let saveNewsFeeds: () => void | Promise<void>;
+  export let newsLinkTarget: import('$lib/api').NewsLinkTarget;
+  export let newsLinkTargetSaving: boolean;
+  export let newsLinkTargetError: string | null;
+  export let saveNewsLinkTarget: () => void | Promise<void>;
 
   export let clockStyle: import('$lib/clockStyle').ClockStyle;
   export let clockStyleSaving: boolean;
@@ -223,6 +227,10 @@
           {newsFeedsSaving}
           {newsFeedsError}
           {saveNewsFeeds}
+          bind:newsLinkTarget
+          {newsLinkTargetSaving}
+          {newsLinkTargetError}
+          {saveNewsLinkTarget}
           bind:clockStyle
           {clockStyleSaving}
           {clockStyleError}

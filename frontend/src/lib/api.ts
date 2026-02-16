@@ -83,6 +83,7 @@ export type TodosResponseDto = {
 };
 
 export type NewsFeedId = 'zeit' | 'guardian' | 'newyorker' | 'sz';
+export type NewsLinkTarget = 'same' | 'external';
 
 export type NewsItemDto = {
   source?: NewsFeedId;
@@ -590,6 +591,7 @@ export type SettingsDto = {
   todoListNames?: string[];
   todoDefaultConnectionId?: number | null;
   newsFeeds?: NewsFeedId[];
+  newsLinkTarget?: NewsLinkTarget;
   dataRefreshMs?: number | null;
   clockStyle?: ClockStyle;
 };
@@ -734,6 +736,10 @@ export async function setTodoListNames(listNames: string[]): Promise<{ ok: true 
 
 export async function setNewsFeeds(feeds: NewsFeedId[]): Promise<{ ok: true }> {
   return api<{ ok: true }>('/settings/news/feeds', { method: 'POST', body: JSON.stringify({ feeds }) });
+}
+
+export async function setNewsLinkTarget(target: NewsLinkTarget): Promise<{ ok: true }> {
+  return api<{ ok: true }>('/settings/news/link-target', { method: 'POST', body: JSON.stringify({ target }) });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
