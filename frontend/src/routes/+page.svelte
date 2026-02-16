@@ -1343,7 +1343,7 @@
 
           {#if musicWidgetEnabled}
             <div class="mt-2 pb-4 text-white" transition:slide={{ duration: 300 }}>
-              <MusicWidget />
+              <MusicWidget {tone} />
             </div>
           {/if}
         {/if}

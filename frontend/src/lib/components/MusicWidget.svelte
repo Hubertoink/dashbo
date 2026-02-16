@@ -16,6 +16,8 @@
     normalizeEdgeBaseUrl
   } from '$lib/edge';
 
+  export let tone: 'light' | 'dark' = 'light';
+
   type HeosPlayerDto = { pid: number; name: string; model?: string };
   type HeosGroupPlayerDto = { name: string; pid: number; role?: 'leader' | 'member' | string };
   type HeosGroupDto = { name: string; gid: number | string; players: HeosGroupPlayerDto[] };
@@ -722,7 +724,7 @@
     <!-- Backdrop -->
     <button
       type="button"
-      class="absolute inset-0 bg-black/60 backdrop-blur-sm"
+      class={`absolute inset-0 backdrop-blur-sm ${tone === 'dark' ? 'bg-black/35' : 'bg-black/60'}`}
       aria-label="Schließen"
       on:click={closeSpeakerModal}
       transition:fade={{ duration: 250 }}
@@ -730,7 +732,7 @@
 
     <!-- Panel -->
     <div
-      class="heos-speaker-panel relative w-[420px] max-w-[90vw] h-full border-r border-white/10 bg-zinc-950/[.97] backdrop-blur-xl overflow-hidden flex flex-col"
+      class={`heos-speaker-panel relative w-[420px] max-w-[90vw] h-full backdrop-blur-xl overflow-hidden flex flex-col ${tone === 'dark' ? 'heos-tone-dark border-r border-black/10 bg-white/95 text-zinc-900' : 'heos-tone-light border-r border-white/10 bg-zinc-950/[.97] text-white'}`}
       transition:fly={{ x: -420, duration: 380, easing: cubicOut }}
     >
       <!-- Header -->
@@ -781,7 +783,7 @@
       </div>
 
       <!-- Divider -->
-      <div class="mx-6 h-px bg-gradient-to-r from-white/10 via-white/5 to-transparent"></div>
+      <div class={`mx-6 h-px bg-gradient-to-r ${tone === 'dark' ? 'from-black/10 via-black/5 to-transparent' : 'from-white/10 via-white/5 to-transparent'}`}></div>
 
       <!-- Status info -->
       <div class="shrink-0 px-6 pt-3 pb-1">
@@ -797,7 +799,7 @@
       </div>
 
       <!-- Content -->
-      <div class="flex-1 overflow-y-auto px-6 py-4 scroll-smooth" style="scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.15) transparent;">
+      <div class="flex-1 overflow-y-auto px-6 py-4 scroll-smooth" style={`scrollbar-width: thin; scrollbar-color: ${tone === 'dark' ? 'rgba(0,0,0,0.15)' : 'rgba(255,255,255,0.15)'} transparent;`}>
         <div>
           {#if speakersBusy || groupsBusy}
             <div class="text-xs text-white/60">Lade…</div>
@@ -1010,54 +1012,75 @@
 {/if}
 
 <style>
-  /* Reset dashboard tone overrides — HEOS panel always keeps its dark bg + white text */
-  :global(.dashboard-tone-dark) .heos-speaker-panel :global(.text-white) {
-    color: rgb(255 255 255) !important;
+  /* Light background (tone=dark): white panel with dark text */
+  .heos-tone-dark :global(.text-white) {
+    color: rgb(24 24 27) !important;
   }
-  :global(.dashboard-tone-dark) .heos-speaker-panel :global(.text-white\/80) {
-    color: rgba(255, 255, 255, 0.8) !important;
+  .heos-tone-dark :global(.text-white\/80) {
+    color: rgba(24, 24, 27, 0.8) !important;
   }
-  :global(.dashboard-tone-dark) .heos-speaker-panel :global(.text-white\/70) {
-    color: rgba(255, 255, 255, 0.7) !important;
+  .heos-tone-dark :global(.text-white\/60) {
+    color: rgba(24, 24, 27, 0.62) !important;
   }
-  :global(.dashboard-tone-dark) .heos-speaker-panel :global(.text-white\/60) {
-    color: rgba(255, 255, 255, 0.6) !important;
+  .heos-tone-dark :global(.text-white\/50) {
+    color: rgba(24, 24, 27, 0.54) !important;
   }
-  :global(.dashboard-tone-dark) .heos-speaker-panel :global(.text-white\/50) {
-    color: rgba(255, 255, 255, 0.5) !important;
+  .heos-tone-dark :global(.text-white\/45) {
+    color: rgba(24, 24, 27, 0.5) !important;
   }
-  :global(.dashboard-tone-dark) .heos-speaker-panel :global(.text-white\/45) {
-    color: rgba(255, 255, 255, 0.45) !important;
+  .heos-tone-dark :global(.text-white\/40) {
+    color: rgba(24, 24, 27, 0.45) !important;
   }
-  :global(.dashboard-tone-dark) .heos-speaker-panel :global(.text-white\/40) {
-    color: rgba(255, 255, 255, 0.4) !important;
+  .heos-tone-dark :global(.text-white\/35) {
+    color: rgba(24, 24, 27, 0.42) !important;
   }
-  :global(.dashboard-tone-dark) .heos-speaker-panel :global(.text-white\/35) {
-    color: rgba(255, 255, 255, 0.35) !important;
+  .heos-tone-dark :global(.text-white\/30) {
+    color: rgba(24, 24, 27, 0.34) !important;
   }
-  :global(.dashboard-tone-dark) .heos-speaker-panel :global(.bg-white\/5) {
-    background-color: rgba(255, 255, 255, 0.05) !important;
+  .heos-tone-dark :global(.border-white\/10) {
+    border-color: rgba(24, 24, 27, 0.16) !important;
   }
-  :global(.dashboard-tone-dark) .heos-speaker-panel :global(.bg-white\/8) {
-    background-color: rgba(255, 255, 255, 0.08) !important;
+  .heos-tone-dark :global(.border-white\/8) {
+    border-color: rgba(24, 24, 27, 0.13) !important;
   }
-  :global(.dashboard-tone-dark) .heos-speaker-panel :global(.bg-white\/10) {
-    background-color: rgba(255, 255, 255, 0.1) !important;
+  .heos-tone-dark :global(.border-white\/5) {
+    border-color: rgba(24, 24, 27, 0.08) !important;
   }
-  :global(.dashboard-tone-dark) .heos-speaker-panel :global(.border-white\/10) {
-    border-color: rgba(255, 255, 255, 0.1) !important;
+  .heos-tone-dark :global(.border-white\/30) {
+    border-color: rgba(24, 24, 27, 0.2) !important;
   }
-  :global(.dashboard-tone-dark) .heos-speaker-panel :global(.border-white\/5) {
-    border-color: rgba(255, 255, 255, 0.05) !important;
+  .heos-tone-dark :global(.bg-white\/5) {
+    background-color: rgba(24, 24, 27, 0.05) !important;
   }
-  :global(.dashboard-tone-dark) .heos-speaker-panel :global(.border-white\/30) {
-    border-color: rgba(255, 255, 255, 0.3) !important;
+  .heos-tone-dark :global(.bg-white\/8) {
+    background-color: rgba(24, 24, 27, 0.08) !important;
   }
-  :global(.dashboard-tone-dark) .heos-speaker-panel {
-    color: rgb(255 255 255) !important;
+  .heos-tone-dark :global(.bg-white\/10) {
+    background-color: rgba(24, 24, 27, 0.1) !important;
   }
-  :global(.dashboard-tone-dark) .heos-speaker-panel :global(.text-shadow) {
-    text-shadow: 0 2px 16px rgba(0, 0, 0, 0.55) !important;
+  .heos-tone-dark :global(.bg-white\/15) {
+    background-color: rgba(24, 24, 27, 0.15) !important;
+  }
+  .heos-tone-dark :global(.bg-white\/\[\.03\]) {
+    background-color: rgba(24, 24, 27, 0.04) !important;
+  }
+  .heos-tone-dark :global(.text-cyan-300) {
+    color: rgb(8, 145, 178) !important;
+  }
+  .heos-tone-dark :global(.text-cyan-400) {
+    color: rgb(6, 182, 212) !important;
+  }
+  .heos-tone-dark :global(.text-red-300) {
+    color: rgb(220, 38, 38) !important;
+  }
+  .heos-tone-dark :global(.bg-cyan-400\/15) {
+    background-color: rgba(6, 182, 212, 0.12) !important;
+  }
+  .heos-tone-dark :global(.bg-cyan-400\/10) {
+    background-color: rgba(6, 182, 212, 0.08) !important;
+  }
+  .heos-tone-dark :global(.bg-cyan-600) {
+    background-color: rgb(8, 145, 178) !important;
   }
 
   @keyframes speakerCardIn {
@@ -1069,6 +1092,21 @@
       opacity: 1;
       transform: translateX(0);
     }
+  }
+
+  .heos-tone-dark .heos-range {
+    background: linear-gradient(to right, rgba(0,0,0,0.08), rgba(8,145,178,0.35)) !important;
+  }
+  .heos-tone-dark .heos-range::-webkit-slider-thumb {
+    background: rgb(8, 145, 178) !important;
+    box-shadow: 0 0 6px rgba(8,145,178,0.3) !important;
+  }
+  .heos-tone-dark .heos-range::-webkit-slider-thumb:hover {
+    box-shadow: 0 0 10px rgba(8,145,178,0.5) !important;
+  }
+  .heos-tone-dark .heos-range::-moz-range-thumb {
+    background: rgb(8, 145, 178) !important;
+    box-shadow: 0 0 6px rgba(8,145,178,0.3) !important;
   }
 
   .heos-range {
