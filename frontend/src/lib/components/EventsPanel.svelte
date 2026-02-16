@@ -599,7 +599,7 @@
       <div class="max-w-4xl w-full flex flex-col items-stretch min-h-0" on:click|stopPropagation>
         <!-- Results above search bar -->
         {#if searchBusy || searchError || searchTokens.length > 0}
-          <div class={`mb-2 rounded-2xl border backdrop-blur-xl shadow-2xl min-h-0 overflow-y-auto ${tone === 'dark' ? 'border-black/15 bg-white/86 shadow-black/15' : 'border-white/20 bg-zinc-950/90 shadow-black/50'}`}>
+          <div class={`mb-2 rounded-2xl border backdrop-blur-2xl shadow-2xl min-h-0 overflow-y-auto ${tone === 'dark' ? 'border-black/25 bg-white/96 shadow-black/25' : 'border-white/25 bg-zinc-950/92 shadow-black/60'}`}>
             <div class="p-3 md:p-4">
               {#if searchBusy}
                 <div class={`text-sm px-2 py-2 ${tone === 'dark' ? 'text-zinc-700/85' : 'text-white/55'}`}>Lade Todos…</div>
@@ -616,7 +616,7 @@
                   {#each searchResults as item (item.key)}
                     <button
                       type="button"
-                      class={`w-full text-left rounded-xl px-3 py-2.5 transition ${tone === 'dark' ? 'hover:bg-black/6 active:bg-black/10' : 'hover:bg-white/8 active:bg-white/12'}`}
+                      class={`w-full text-left rounded-xl px-3 py-2.5 transition ${tone === 'dark' ? 'hover:bg-black/10 active:bg-black/14' : 'hover:bg-white/10 active:bg-white/14'}`}
                       on:click={() => onSelectSearchResult(item)}
                     >
                       <div class="flex items-start gap-3">
@@ -624,7 +624,7 @@
                         <div class="min-w-0 flex-1">
                           <div class="flex items-center gap-2 min-w-0">
                             <div class={`font-semibold truncate ${tone === 'dark' ? 'text-zinc-900' : 'text-white'}`}>{item.title}</div>
-                            <span class={`text-[10px] uppercase tracking-wide rounded-full px-2 py-0.5 border shrink-0 ${tone === 'dark' ? 'border-black/15 text-zinc-700/80' : 'border-white/15 text-white/55'}`}>
+                            <span class={`text-[10px] uppercase tracking-wide rounded-full px-2 py-0.5 border shrink-0 ${tone === 'dark' ? 'border-black/25 text-zinc-700/85' : 'border-white/20 text-white/65'}`}>
                               {item.kind === 'event' ? 'Termin' : 'Todo'}
                             </span>
                           </div>
@@ -643,7 +643,7 @@
         {/if}
 
         <!-- Search input bar (always at bottom) -->
-        <div class={`rounded-2xl border backdrop-blur-xl shadow-2xl px-4 py-3 flex items-center gap-3 ${tone === 'dark' ? 'border-black/15 bg-white/86 shadow-black/15' : 'border-white/20 bg-zinc-950/90 shadow-black/50'}`}>
+        <div class={`rounded-2xl border backdrop-blur-2xl shadow-2xl px-4 py-3 flex items-center gap-3 ${tone === 'dark' ? 'border-black/25 bg-white/96 shadow-black/25' : 'border-white/25 bg-zinc-950/92 shadow-black/60'}`}>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class={`shrink-0 ${tone === 'dark' ? 'text-zinc-700/75' : 'text-white/55'}`}>
             <circle cx="11" cy="11" r="8"></circle>
             <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
@@ -658,7 +658,7 @@
           />
           <button
             type="button"
-            class={`h-9 w-9 rounded-lg grid place-items-center transition ${tone === 'dark' ? 'bg-black/7 hover:bg-black/12 text-zinc-700/75 hover:text-zinc-900' : 'bg-white/8 hover:bg-white/14 text-white/60 hover:text-white/90'}`}
+            class={`h-9 w-9 rounded-lg grid place-items-center transition ${tone === 'dark' ? 'bg-black/10 hover:bg-black/16 text-zinc-700/80 hover:text-zinc-900' : 'bg-white/10 hover:bg-white/16 text-white/65 hover:text-white/90'}`}
             aria-label="Suche schließen"
             on:click={closeSearch}
           >

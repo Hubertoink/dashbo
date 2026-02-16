@@ -64,7 +64,7 @@
 
       <div class="flex items-center justify-between mt-2">
         <a class="text-white/70 hover:text-white text-sm" href="/forgot-password">Passwort vergessen?</a>
-        <a class="text-white/70 hover:text-white text-sm" href="/register">Registrieren</a>
+        <span class="text-white/50 text-sm">Registrierung nur per Einladung</span>
       </div>
     </div>
   </div>

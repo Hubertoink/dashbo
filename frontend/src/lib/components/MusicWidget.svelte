@@ -542,7 +542,7 @@
 </script>
 
 <!-- Kompaktes Widget mit Cover als Teil des Rahmens -->
-<div class="relative rounded-lg bg-white/5 overflow-hidden h-[88px] text-white">
+<div class="relative rounded-lg border border-white/12 bg-black/34 backdrop-blur-md overflow-hidden h-[88px] text-white">
   <!-- Cover als Hintergrund-Teil links (1/3 Breite) -->
   <div class="absolute inset-y-0 left-0 w-1/3">
     {#if now?.coverUrl}

@@ -2,7 +2,7 @@ const express = require('express');
 const { z } = require('zod');
 
 const { requireAuth, attachUserContext } = require('../middleware/auth');
-const { login, signToken } = require('../services/authService');
+const { login } = require('../services/authService');
 const { createAuthToken, consumeAuthToken } = require('../services/authTokenService');
 const { consumeCalendarInvite } = require('../services/calendarInviteService');
 const { sendMail, isEnabled: isMailEnabled } = require('../services/mailService');
@@ -29,56 +29,7 @@ authRouter.post('/login', async (req, res) => {
 });
 
 authRouter.post('/register', async (req, res) => {
-  const schema = z.object({
-    email: z.string().email().max(200),
-    name: z.string().min(1).max(200),
-    password: z.string().min(6).max(200),
-  });
-  const parsed = schema.safeParse(req.body);
-  if (!parsed.success) return res.status(400).json({ error: 'invalid_body' });
-
-  const pool = getPool();
-  const email = String(parsed.data.email).trim().toLowerCase();
-  const name = String(parsed.data.name).trim();
-  const passwordHash = await bcrypt.hash(String(parsed.data.password), 10);
-
-  try {
-    await pool.query('BEGIN');
-    const cal = await pool.query('INSERT INTO calendars (name) VALUES ($1) RETURNING id;', [name]);
-    const calendarId = Number(cal.rows[0].id);
-
-    const u = await pool.query(
-      `
-      INSERT INTO users (email, name, password_hash, is_admin, role, calendar_id)
-      VALUES ($1, $2, $3, TRUE, 'admin', $4)
-      RETURNING *;
-      `,
-      [email, name, passwordHash, calendarId]
-    );
-
-    await pool.query('COMMIT');
-    const user = u.rows[0];
-    const token = signToken(user);
-    return res.status(201).json({
-      token,
-      user: {
-        id: Number(user.id),
-        email: user.email,
-        name: user.name,
-        isAdmin: Boolean(user.is_admin),
-        createdAt: user.created_at,
-        updatedAt: user.updated_at,
-      },
-    });
-  } catch (e) {
-    try {
-      await pool.query('ROLLBACK');
-    } catch {
-      // ignore
-    }
-    // Likely duplicate email
-    return res.status(409).json({ error: 'email_in_use' });
-  }
+  return res.status(403).json({ error: 'registration_disabled' });
 });
 
 // GET /auth/me - Return the authenticated user's identity/context
