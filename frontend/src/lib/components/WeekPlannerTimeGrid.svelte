@@ -24,6 +24,7 @@
   export let suggestions: EventSuggestionDto[] = [];
   export let backgroundUrl: string = '';
   export let onAddEvent: (d: Date) => void;
+  export let onAddEventRange: (start: Date, end: Date) => void = () => {};
   export let onAddAllDayEvent: (d: Date) => void = () => {};
   export let onEditEvent: (e: EventDto) => void;
   export let onEventDeleted: () => void = () => {};
@@ -120,6 +121,23 @@
     const maxStart = config.endHour * 60 - Math.max(1, Math.floor(config.snapMinutes || 1));
     const mins = clamp(snapped, minStart, maxStart);
 
+    const d = new Date(day);
+    d.setHours(0, 0, 0, 0);
+    d.setMinutes(Math.floor(mins));
+    return d;
+  }
+
+  function minutesAtGridPointer(target: HTMLElement, clientY: number): number {
+    const rect = target.getBoundingClientRect();
+    const y = clamp(clientY - rect.top, 0, gridHeightPx);
+    const rawMins = config.startHour * 60 + y / config.pxPerMinute;
+    const snapped = snapMinutes(rawMins);
+    const minStart = config.startHour * 60;
+    const maxStart = config.endHour * 60 - Math.max(1, Math.floor(config.snapMinutes || 1));
+    return clamp(snapped, minStart, maxStart);
+  }
+
+  function dateFromDayAndMinutes(day: Date, mins: number): Date {
     const d = new Date(day);
     d.setHours(0, 0, 0, 0);
     d.setMinutes(Math.floor(mins));
@@ -286,6 +304,107 @@
   let dragRaf: number | null = null;
   let dragFloatEl: HTMLDivElement | null = null;
   let dragFlutterEnergy = 0;
+
+  // Drag-to-create selection state
+  let createSelectionActive = false;
+  let createSelectionMoved = false;
+  let createSelectionDayKey: number | null = null;
+  let createSelectionDay: Date | null = null;
+  let createSelectionStartMin = 0;
+  let createSelectionCurrentMin = 0;
+  let createSelectionStartClientX = 0;
+  let createSelectionStartClientY = 0;
+
+  function createSelectionTopPx(): number {
+    const from = Math.min(createSelectionStartMin, createSelectionCurrentMin);
+    return (from - config.startHour * 60) * config.pxPerMinute;
+  }
+
+  function createSelectionHeightPx(): number {
+    const to = Math.max(createSelectionStartMin, createSelectionCurrentMin);
+    const from = Math.min(createSelectionStartMin, createSelectionCurrentMin);
+    return Math.max(2, (to - from) * config.pxPerMinute);
+  }
+
+  function createSelectionTimeLabel(): string {
+    const from = Math.min(createSelectionStartMin, createSelectionCurrentMin);
+    const to = Math.max(createSelectionStartMin, createSelectionCurrentMin);
+    if (to <= from) return hhmmFromMinutes(from);
+    return `${hhmmFromMinutes(from)} – ${hhmmFromMinutes(to)}`;
+  }
+
+  function beginCreateSelection(day: Date, ev: PointerEvent) {
+    const target = ev.currentTarget as HTMLElement | null;
+    if (!target) return;
+    const clickedInsideEvent = (ev.target as HTMLElement | null)?.closest('[data-event-tile="1"]');
+    if (clickedInsideEvent) return;
+
+    const mins = minutesAtGridPointer(target, ev.clientY);
+    createSelectionActive = true;
+    createSelectionMoved = false;
+    createSelectionDayKey = dateKey(day);
+    createSelectionDay = new Date(day);
+    createSelectionStartMin = mins;
+    createSelectionCurrentMin = mins;
+    createSelectionStartClientX = ev.clientX;
+    createSelectionStartClientY = ev.clientY;
+
+    target.setPointerCapture?.(ev.pointerId);
+    ev.preventDefault();
+  }
+
+  function moveCreateSelection(ev: PointerEvent) {
+    if (!createSelectionActive) return;
+    const target = ev.currentTarget as HTMLElement | null;
+    if (!target) return;
+    createSelectionCurrentMin = minutesAtGridPointer(target, ev.clientY);
+
+    const dx = Math.abs(ev.clientX - createSelectionStartClientX);
+    const dy = Math.abs(ev.clientY - createSelectionStartClientY);
+    if (dx > 4 || dy > 4) createSelectionMoved = true;
+  }
+
+  function endCreateSelection(ev: PointerEvent) {
+    if (!createSelectionActive) return;
+    const target = ev.currentTarget as HTMLElement | null;
+    target?.releasePointerCapture?.(ev.pointerId);
+
+    const day = createSelectionDay;
+    const startMin = createSelectionStartMin;
+    const currentMin = createSelectionCurrentMin;
+    const moved = createSelectionMoved;
+
+    createSelectionActive = false;
+    createSelectionMoved = false;
+    createSelectionDayKey = null;
+    createSelectionDay = null;
+
+    if (!day) return;
+
+    if (!moved) {
+      onAddEvent(dateFromDayAndMinutes(day, startMin));
+      return;
+    }
+
+    const minStep = Math.max(1, Math.floor(config.snapMinutes || 1));
+    const fromMin = Math.min(startMin, currentMin);
+    const toMinRaw = Math.max(startMin, currentMin);
+    const toMin = Math.max(fromMin + minStep, toMinRaw);
+
+    const start = dateFromDayAndMinutes(day, fromMin);
+    const end = dateFromDayAndMinutes(day, Math.min(config.endHour * 60, toMin));
+    onAddEventRange(start, end);
+  }
+
+  function cancelCreateSelection(ev: PointerEvent) {
+    if (!createSelectionActive) return;
+    const target = ev.currentTarget as HTMLElement | null;
+    target?.releasePointerCapture?.(ev.pointerId);
+    createSelectionActive = false;
+    createSelectionMoved = false;
+    createSelectionDayKey = null;
+    createSelectionDay = null;
+  }
 
   function startDragLoop() {
     if (dragRaf != null) return;
@@ -931,7 +1050,10 @@
           data-day-key={k}
           role="button"
           tabindex="0"
-          on:click={(ev) => onAddEvent(dateAtGridClick(day, ev))}
+          on:pointerdown={(ev) => beginCreateSelection(day, ev)}
+          on:pointermove={moveCreateSelection}
+          on:pointerup={endCreateSelection}
+          on:pointercancel={cancelCreateSelection}
           on:keydown={(e) => {
             if (e.key === 'Enter' || e.key === ' ') {
               e.preventDefault();
@@ -963,6 +1085,17 @@
             </div>
           {/if}
 
+          {#if createSelectionActive && createSelectionDayKey === k}
+            <div
+              class={`absolute left-0 right-0 pointer-events-none border-y ${tone === 'dark' ? 'bg-black/10 border-black/25' : 'bg-cyan-400/18 border-cyan-300/40'}`}
+              style={`top: ${createSelectionTopPx()}px; height: ${createSelectionHeightPx()}px;`}
+            >
+              <div class={`absolute -top-5 left-1 rounded px-1.5 py-0.5 text-[10px] ${tone === 'dark' ? 'bg-white/85 text-zinc-900 border border-black/15' : 'bg-black/45 text-white border border-white/20'}`}>
+                {createSelectionTimeLabel()}
+              </div>
+            </div>
+          {/if}
+
           <!-- Drag ghost preview intentionally hidden (floating tile only) -->
 
           {#each segs as seg (seg.event.occurrenceId ?? `${seg.event.id}:${seg.event.startAt}:${k}:${seg.startMin}`)}
@@ -978,6 +1111,7 @@
               <div class="relative h-full">
                 <!-- svelte-ignore a11y_no_static_element_interactions a11y_click_events_have_key_events -->
                 <div
+                  data-event-tile="1"
                   class={`w-full h-full text-left rounded-xl px-2 py-1 border text-xs leading-tight overflow-hidden cursor-grab select-none touch-none ${eventTileBgClass(color)} ${seg.isContinuation ? 'border-dashed opacity-90' : ''} ${isCompact ? '' : 'pr-9'} ${dragSaving && dragEvent?.id === e.id ? 'animate-pulse' : ''}`}
                   style={eventTileStyle(color)}
                   role="button"

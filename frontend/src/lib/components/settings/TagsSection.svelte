@@ -33,6 +33,9 @@
     { name: 'Wichtig', color: 'amber' },
     { name: 'Geburtstag', color: 'fuchsia' }
   ];
+
+  $: existingTagNames = new Set((tags ?? []).map((t) => String(t?.name || '').trim().toLowerCase()).filter(Boolean));
+  $: remainingSuggestedTags = suggestedTags.filter((s) => !existingTagNames.has(String(s.name || '').trim().toLowerCase()));
 </script>
 
 <!-- Tags -->
@@ -91,11 +94,11 @@
     <div class="text-red-400 text-xs mb-2">{tagError}</div>
   {/if}
 
-  {#if tags.length === 0}
+  {#if remainingSuggestedTags.length > 0}
     <div class="mb-3 rounded-lg border border-white/10 bg-white/5 p-3">
       <div class="text-xs text-white/60 mb-2">Schnellstart: Vorschläge</div>
       <div class="flex flex-wrap gap-2">
-        {#each suggestedTags as s}
+        {#each remainingSuggestedTags as s}
           <button
             type="button"
             class="h-8 px-3 rounded-lg bg-white/10 hover:bg-white/15 border border-white/10 text-xs text-white/85 inline-flex items-center gap-2 disabled:opacity-50"

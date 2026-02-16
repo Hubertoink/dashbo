@@ -61,6 +61,17 @@
     quickAddOpen = true;
   }
 
+  function openQuickAddRange(start: Date, end: Date) {
+    quickAddDate = start;
+    quickAddPrefillTitle = null;
+    quickAddPrefillStartTime = hhmmFromMinutes(bucket15(minutesSinceMidnight(start)));
+    quickAddPrefillEndTime = hhmmFromMinutes(bucket15(minutesSinceMidnight(end)));
+    quickAddPrefillAllDay = false;
+    quickAddPrefillPersonIds = null;
+    quickAddPrefillTagId = null;
+    quickAddOpen = true;
+  }
+
   function openQuickAddAllDay(day: Date) {
     quickAddDate = day;
     quickAddPrefillTitle = null;
@@ -889,6 +900,7 @@
         onAddTodo={openTodoCreate}
         onTodoDrop={handleTodoDrop}
         onAddEvent={(d) => openQuickAdd(d)}
+        onAddEventRange={(start, end) => openQuickAddRange(start, end)}
         onAddAllDayEvent={(d) => openQuickAddAllDay(d)}
         onEditEvent={onEditEvent}
         onEventDeleted={handleEventDeleted}
