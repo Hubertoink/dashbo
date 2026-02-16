@@ -599,10 +599,10 @@
       <div class="max-w-4xl w-full flex flex-col items-stretch min-h-0" on:click|stopPropagation>
         <!-- Results above search bar -->
         {#if searchBusy || searchError || searchTokens.length > 0}
-          <div class={`mb-2 rounded-2xl border backdrop-blur-2xl shadow-2xl min-h-0 overflow-y-auto ${tone === 'dark' ? 'border-black/25 bg-white/96 shadow-black/25' : 'border-white/25 bg-zinc-950/92 shadow-black/60'}`}>
+          <div class={`mb-2 rounded-2xl border shadow-2xl min-h-0 overflow-y-auto ${tone === 'dark' ? 'border-zinc-300 bg-white shadow-zinc-400/40' : 'border-white/25 bg-zinc-950/92 backdrop-blur-2xl shadow-black/60'}`}>
             <div class="p-3 md:p-4">
               {#if searchBusy}
-                <div class={`text-sm px-2 py-2 ${tone === 'dark' ? 'text-zinc-700/85' : 'text-white/55'}`}>Lade Todos…</div>
+                <div class={`text-sm px-2 py-2 ${tone === 'dark' ? 'text-zinc-500' : 'text-white/55'}`}>Lade Todos…</div>
               {/if}
 
               {#if searchError}
@@ -610,13 +610,13 @@
               {/if}
 
               {#if searchTokens.length > 0 && searchResults.length === 0 && !searchBusy}
-                <div class={`text-sm px-2 py-2 ${tone === 'dark' ? 'text-zinc-700/75' : 'text-white/45'}`}>Keine Treffer für „{searchQuery.trim()}".</div>
+                <div class={`text-sm px-2 py-2 ${tone === 'dark' ? 'text-zinc-500' : 'text-white/45'}`}>Keine Treffer für „{searchQuery.trim()}".</div>
               {:else if searchResults.length > 0}
                 <div class="space-y-1">
                   {#each searchResults as item (item.key)}
                     <button
                       type="button"
-                      class={`w-full text-left rounded-xl px-3 py-2.5 transition ${tone === 'dark' ? 'hover:bg-black/10 active:bg-black/14' : 'hover:bg-white/10 active:bg-white/14'}`}
+                      class={`w-full text-left rounded-xl px-3 py-2.5 transition ${tone === 'dark' ? 'hover:bg-zinc-100 active:bg-zinc-200' : 'hover:bg-white/10 active:bg-white/14'}`}
                       on:click={() => onSelectSearchResult(item)}
                     >
                       <div class="flex items-start gap-3">
@@ -624,14 +624,14 @@
                         <div class="min-w-0 flex-1">
                           <div class="flex items-center gap-2 min-w-0">
                             <div class={`font-semibold truncate ${tone === 'dark' ? 'text-zinc-900' : 'text-white'}`}>{item.title}</div>
-                            <span class={`text-[10px] uppercase tracking-wide rounded-full px-2 py-0.5 border shrink-0 ${tone === 'dark' ? 'border-black/25 text-zinc-700/85' : 'border-white/20 text-white/65'}`}>
+                            <span class={`text-[10px] uppercase tracking-wide rounded-full px-2 py-0.5 border shrink-0 ${tone === 'dark' ? 'border-zinc-300 text-zinc-500' : 'border-white/20 text-white/65'}`}>
                               {item.kind === 'event' ? 'Termin' : 'Todo'}
                             </span>
                           </div>
                           {#if item.subtitle}
-                            <div class={`text-xs mt-0.5 line-clamp-1 ${tone === 'dark' ? 'text-zinc-700/80' : 'text-white/55'}`}>{item.subtitle}</div>
+                            <div class={`text-xs mt-0.5 line-clamp-1 ${tone === 'dark' ? 'text-zinc-500' : 'text-white/55'}`}>{item.subtitle}</div>
                           {/if}
-                          <div class={`text-[11px] mt-0.5 ${tone === 'dark' ? 'text-zinc-700/65' : 'text-white/40'}`}>{item.meta}</div>
+                          <div class={`text-[11px] mt-0.5 ${tone === 'dark' ? 'text-zinc-400' : 'text-white/40'}`}>{item.meta}</div>
                         </div>
                       </div>
                     </button>
@@ -643,8 +643,8 @@
         {/if}
 
         <!-- Search input bar (always at bottom) -->
-        <div class={`rounded-2xl border backdrop-blur-2xl shadow-2xl px-4 py-3 flex items-center gap-3 ${tone === 'dark' ? 'border-black/25 bg-white/96 shadow-black/25' : 'border-white/25 bg-zinc-950/92 shadow-black/60'}`}>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class={`shrink-0 ${tone === 'dark' ? 'text-zinc-700/75' : 'text-white/55'}`}>
+        <div class={`rounded-2xl border shadow-2xl px-4 py-3 flex items-center gap-3 ${tone === 'dark' ? 'border-zinc-300 bg-white shadow-zinc-400/40' : 'border-white/25 bg-zinc-950/92 backdrop-blur-2xl shadow-black/60'}`}>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class={`shrink-0 ${tone === 'dark' ? 'text-zinc-400' : 'text-white/55'}`}>
             <circle cx="11" cy="11" r="8"></circle>
             <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
           </svg>
@@ -652,13 +652,13 @@
             bind:this={searchInputEl}
             bind:value={searchQuery}
             type="text"
-            class={`w-full bg-transparent outline-none text-lg md:text-xl ${tone === 'dark' ? 'text-zinc-900 placeholder:text-zinc-700/55' : 'text-white placeholder:text-white/35'}`}
+            class={`w-full bg-transparent outline-none text-lg md:text-xl ${tone === 'dark' ? 'text-zinc-900 placeholder:text-zinc-400' : 'text-white placeholder:text-white/35'}`}
             placeholder="Termine und Todos durchsuchen…"
             aria-label="Suche nach Terminen und Todos"
           />
           <button
             type="button"
-            class={`h-9 w-9 rounded-lg grid place-items-center transition ${tone === 'dark' ? 'bg-black/10 hover:bg-black/16 text-zinc-700/80 hover:text-zinc-900' : 'bg-white/10 hover:bg-white/16 text-white/65 hover:text-white/90'}`}
+            class={`h-9 w-9 rounded-lg grid place-items-center transition ${tone === 'dark' ? 'bg-zinc-100 hover:bg-zinc-200 text-zinc-500 hover:text-zinc-800' : 'bg-white/10 hover:bg-white/16 text-white/65 hover:text-white/90'}`}
             aria-label="Suche schließen"
             on:click={closeSearch}
           >
