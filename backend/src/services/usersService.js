@@ -1,5 +1,6 @@
 const bcrypt = require('bcryptjs');
 const { getPool } = require('../db');
+const { isSuperAdminEmail } = require('./superAdminService');
 
 const { createAuthToken } = require('./authTokenService');
 const { sendMail, isEnabled: isMailEnabled } = require('./mailService');
@@ -32,7 +33,7 @@ async function listUsers({ calendarId } = {}) {
   return result.rows.map(toUserDto);
 }
 
-async function inviteUser({ email, name, isAdmin, calendarId } = {}) {
+async function inviteUser({ email, name, isAdmin, calendarId, actorEmail } = {}) {
   const pool = getPool();
   const publicUrl = String(process.env.PUBLIC_APP_URL || '').replace(/\/$/, '');
   if (!publicUrl) {
@@ -42,17 +43,42 @@ async function inviteUser({ email, name, isAdmin, calendarId } = {}) {
   const normalizedEmail = String(email).trim().toLowerCase();
   const displayName = String(name).trim();
   const effectiveIsAdmin = Boolean(isAdmin);
+  const actorCanInviteAdmins = isSuperAdminEmail(actorEmail);
+  if (effectiveIsAdmin && !actorCanInviteAdmins) {
+    return { ok: false, reason: 'admin_invite_forbidden' };
+  }
   const role = effectiveIsAdmin ? 'admin' : 'member';
 
   const existing = await pool.query(
-    'SELECT id, calendar_id, password_hash FROM users WHERE lower(email) = lower($1) LIMIT 1;',
+    'SELECT id, calendar_id, password_hash, is_admin FROM users WHERE lower(email) = lower($1) LIMIT 1;',
     [normalizedEmail]
   );
+
+  let effectiveCalendarId = calendarId ?? null;
+  if (effectiveIsAdmin) {
+    const ex = existing.rowCount > 0 ? existing.rows[0] : null;
+    const reusablePendingAdminCalendarId =
+      ex &&
+      !ex.password_hash &&
+      Boolean(ex.is_admin) &&
+      Number.isFinite(Number(ex.calendar_id)) &&
+      Number(ex.calendar_id) > 0
+        ? Number(ex.calendar_id)
+        : null;
+
+    if (reusablePendingAdminCalendarId) {
+      effectiveCalendarId = reusablePendingAdminCalendarId;
+    } else {
+      const calName = `${displayName} Familie`;
+      const cal = await pool.query('INSERT INTO calendars (name) VALUES ($1) RETURNING id;', [calName]);
+      effectiveCalendarId = Number(cal.rows[0].id);
+    }
+  }
 
   let userRow;
   if (existing.rowCount > 0) {
     const ex = existing.rows[0];
-    if (calendarId != null && Number(ex.calendar_id) !== Number(calendarId)) {
+    if (!effectiveIsAdmin && calendarId != null && Number(ex.calendar_id) !== Number(calendarId)) {
       return { ok: false, reason: 'email_in_use' };
     }
     if (ex.password_hash) {
@@ -62,11 +88,11 @@ async function inviteUser({ email, name, isAdmin, calendarId } = {}) {
     const updated = await pool.query(
       `
       UPDATE users
-      SET name = $1, is_admin = $2, role = $3, updated_at = NOW()
-      WHERE id = $4
+      SET name = $1, is_admin = $2, role = $3, calendar_id = $4, updated_at = NOW()
+      WHERE id = $5
       RETURNING id, email, name, is_admin, role, calendar_id, password_hash, created_at, updated_at;
       `,
-      [displayName, effectiveIsAdmin, role, Number(ex.id)]
+      [displayName, effectiveIsAdmin, role, effectiveCalendarId, Number(ex.id)]
     );
     userRow = updated.rows[0];
   } else {
@@ -76,7 +102,7 @@ async function inviteUser({ email, name, isAdmin, calendarId } = {}) {
       VALUES ($1, $2, NULL, $3, $4, $5)
       RETURNING id, email, name, is_admin, role, calendar_id, password_hash, created_at, updated_at;
       `,
-      [normalizedEmail, displayName, effectiveIsAdmin, role, calendarId]
+      [normalizedEmail, displayName, effectiveIsAdmin, role, effectiveCalendarId]
     );
     userRow = inserted.rows[0];
   }
@@ -108,16 +134,17 @@ async function inviteUser({ email, name, isAdmin, calendarId } = {}) {
 async function createUser({ email, name, password, isAdmin, calendarId }) {
   const pool = getPool();
   const passwordHash = await bcrypt.hash(String(password), 10);
-
-  // Backwards compatibility: if no calendarId is provided, create one per user.
-  let effectiveCalendarId = calendarId ?? null;
-  if (!effectiveCalendarId) {
-    const cal = await pool.query('INSERT INTO calendars (name) VALUES ($1) RETURNING id;', [String(name)]);
-    effectiveCalendarId = Number(cal.rows[0].id);
-  }
-
   const effectiveIsAdmin = Boolean(isAdmin);
   const role = effectiveIsAdmin ? 'admin' : 'member';
+
+  // Admins always get their own calendar (family tenant).
+  // Non-admins are created in the provided calendar, or in a personal calendar if no calendarId is provided.
+  let effectiveCalendarId = calendarId ?? null;
+  if (effectiveIsAdmin || !effectiveCalendarId) {
+    const calName = effectiveIsAdmin ? `${String(name)} Familie` : String(name);
+    const cal = await pool.query('INSERT INTO calendars (name) VALUES ($1) RETURNING id;', [calName]);
+    effectiveCalendarId = Number(cal.rows[0].id);
+  }
 
   const result = await pool.query(
     `

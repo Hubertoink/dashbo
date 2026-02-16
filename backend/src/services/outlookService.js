@@ -610,6 +610,29 @@ async function listOutlookEventsBetween({ userId, from, to }) {
   return all;
 }
 
+async function listOutlookEventsBetweenForCalendarAdmins({ calendarId, from, to, fallbackUserId }) {
+  const pool = getPool();
+  const rows = await pool.query(
+    `
+    SELECT id
+    FROM users
+    WHERE calendar_id = $1 AND is_admin = TRUE
+    ORDER BY id ASC;
+    `,
+    [calendarId]
+  );
+
+  const userIds = [...new Set(rows.rows.map((r) => Number(r.id)).filter((id) => Number.isFinite(id) && id > 0))];
+  if (userIds.length === 0 && Number.isFinite(Number(fallbackUserId)) && Number(fallbackUserId) > 0) {
+    userIds.push(Number(fallbackUserId));
+  }
+
+  const buckets = await Promise.all(userIds.map((uid) => listOutlookEventsBetween({ userId: uid, from, to })));
+  const merged = buckets.flat();
+  merged.sort((a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime());
+  return merged;
+}
+
 module.exports = {
   createOutlookAuthUrl,
   completeOutlookCallback,
@@ -619,6 +642,7 @@ module.exports = {
   setOutlookConnectionColor,
   disconnectOutlookConnection,
   listOutlookEventsBetween,
+  listOutlookEventsBetweenForCalendarAdmins,
   getOutlookConfig,
   getValidAccessToken,
   getValidAccessTokenForConnection,

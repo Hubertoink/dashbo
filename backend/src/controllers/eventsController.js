@@ -8,7 +8,7 @@ const {
   removeEvent,
 } = require('../services/eventsService');
 
-const { listOutlookEventsBetween } = require('../services/outlookService');
+const { listOutlookEventsBetweenForCalendarAdmins } = require('../services/outlookService');
 
 const idSchema = z.coerce.number().int().positive();
 
@@ -31,7 +31,12 @@ async function listEvents(req, res) {
   try {
     const [rows, outlook] = await Promise.all([
       listEventsBetween({ calendarId, from, to }),
-      listOutlookEventsBetween({ userId, from: effectiveFrom, to: effectiveTo }),
+      listOutlookEventsBetweenForCalendarAdmins({
+        calendarId,
+        fallbackUserId: userId,
+        from: effectiveFrom,
+        to: effectiveTo,
+      }),
     ]);
 
     const merged = [...rows, ...outlook];

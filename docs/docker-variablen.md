@@ -44,6 +44,15 @@ Betroffene Dateien:
 - `BOOTSTRAP_ADMIN_NAME` (Default: `Admin`) – Anzeigename für Erst-Admin
   - Beispiel: `BOOTSTRAP_ADMIN_NAME=Huber`
 
+#### Mainadmin / Superadmin
+
+- `BOOTSTRAP_ADMIN_EMAIL` fungiert standardmäßig als Mainadmin (Superadmin)
+  - Nur dieser Account darf weitere Admins einladen
+  - Jede Admin-Einladung erstellt eine eigene Familienkalender-Umgebung
+- Optional kann die Superadmin-Liste explizit gesetzt werden:
+  - `SUPERADMIN_EMAIL` (ein einzelner Account)
+  - `SUPERADMIN_EMAILS` (mehrere Accounts, getrennt mit Komma/Semikolon/Whitespace)
+
 ### Wetter
 
 - `OWM_API_KEY` (Default: leer) – optionaler OpenWeatherMap-Key

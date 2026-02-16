@@ -6,6 +6,7 @@ const { listUsers, createUser, inviteUser, deleteUser, resetPassword } = require
 const { createAuthToken } = require('../services/authTokenService');
 const { getPool } = require('../db');
 const { createCalendarInvite } = require('../services/calendarInviteService');
+const { isSuperAdminEmail } = require('../services/superAdminService');
 
 const usersRouter = express.Router();
 
@@ -61,6 +62,10 @@ usersRouter.post('/', requireAuth, attachUserContext, requireAdmin, async (req, 
     return res.status(400).json({ error: 'invalid_body', details: parsed.error.flatten() });
   }
 
+  if (Boolean(parsed.data.isAdmin) && !isSuperAdminEmail(req.ctx?.email)) {
+    return res.status(403).json({ error: 'admin_creation_forbidden' });
+  }
+
   try {
     const created = await createUser({ ...parsed.data, calendarId });
     return res.status(201).json(created);
@@ -91,8 +96,9 @@ usersRouter.post('/invite', requireAuth, attachUserContext, requireAdmin, async 
   const parsed = schema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: 'invalid_body', details: parsed.error.flatten() });
 
-  const result = await inviteUser({ ...parsed.data, calendarId });
+  const result = await inviteUser({ ...parsed.data, calendarId, actorEmail: req.ctx?.email });
   if (!result.ok && result.reason === 'missing_public_app_url') return res.status(400).json({ error: 'missing_public_app_url' });
+  if (!result.ok && result.reason === 'admin_invite_forbidden') return res.status(403).json({ error: 'admin_invite_forbidden' });
   if (!result.ok && result.reason === 'email_in_use') return res.status(409).json({ error: 'email_in_use' });
   if (!result.ok && result.reason === 'already_active') return res.status(409).json({ error: 'already_active' });
   if (!result.ok) return res.status(400).json({ error: 'invite_failed' });

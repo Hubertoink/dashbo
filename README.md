@@ -56,6 +56,12 @@ Beim allerersten Start (solange noch **keine** User existieren) kann ein Admin a
 - In `.env` setzen: `BOOTSTRAP_ADMIN_EMAIL`, `BOOTSTRAP_ADMIN_PASSWORD` (optional `BOOTSTRAP_ADMIN_NAME`)
 - Dann Backend neu starten (oder nur Backend rebuilden): `docker compose up -d --build backend`
 
+Der Bootstrap-Admin (`BOOTSTRAP_ADMIN_EMAIL`) ist gleichzeitig der **Mainadmin/Superadmin**:
+
+- nur dieser darf weitere **Admins** einladen
+- jede Admin-Einladung erzeugt einen **eigenen Familienkalender**
+- eingeladene normale User bleiben im Kalender des einladenden Admins
+
 ## Konfiguration (ENV)
 
 Alle Compose‑relevanten Variablen sind in `.env.example` dokumentiert.
