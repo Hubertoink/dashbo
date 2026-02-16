@@ -14,6 +14,7 @@
   import { fade, fly, scale } from 'svelte/transition';
 
   export let open: boolean;
+  export let tone: 'light' | 'dark' = 'light';
   export let prefilledDate: Date;
   export let prefillTitle: string | null = null;
   export let prefillStartTime: string | null = null;
@@ -408,7 +409,7 @@
   <!-- Backdrop -->
   <!-- svelte-ignore a11y_click_events_have_key_events a11y_interactive_supports_focus -->
   <div
-    class="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center"
+    class={`fixed inset-0 z-50 backdrop-blur-sm flex items-end sm:items-center justify-center ${tone === 'dark' ? 'bg-black/35' : 'bg-black/60'}`}
     transition:fade={{ duration: 200 }}
     on:click|self={onClose}
     role="dialog"
@@ -417,7 +418,7 @@
   >
     <!-- Modal Panel -->
     <div
-      class="w-full sm:max-w-2xl lg:max-w-3xl bg-neutral-900/95 backdrop-blur-xl border-t sm:border border-white/10 sm:rounded-2xl overflow-hidden"
+      class={`w-full sm:max-w-2xl lg:max-w-3xl backdrop-blur-xl sm:rounded-2xl overflow-hidden ${tone === 'dark' ? 'modal-tone-dark border-t sm:border border-black/10' : 'bg-neutral-900/95 border-t sm:border border-white/10'}`}
       in:fly={{ y: 100, duration: 250, delay: 50 }}
       out:fly={{ y: 100, duration: 200 }}
     >

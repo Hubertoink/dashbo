@@ -588,7 +588,7 @@
   >
     <!-- Modal Panel -->
     <div
-      class="w-full h-full sm:h-auto sm:max-w-2xl lg:max-w-3xl sm:max-h-[92vh] sm:max-h-[92svh] sm:max-h-[92dvh] bg-neutral-900/95 backdrop-blur-xl sm:border border-white/10 sm:rounded-2xl overflow-hidden flex flex-col"
+      class={`w-full h-full sm:h-auto sm:max-w-2xl lg:max-w-3xl sm:max-h-[92vh] sm:max-h-[92svh] sm:max-h-[92dvh] backdrop-blur-xl sm:rounded-2xl overflow-hidden flex flex-col ${tone === 'dark' ? 'modal-tone-dark sm:border border-black/10' : 'bg-neutral-900/95 sm:border border-white/10'}`}
       in:fly={{ y: 100, duration: 250, delay: 50 }}
       out:fly={{ y: 100, duration: 200 }}
     >

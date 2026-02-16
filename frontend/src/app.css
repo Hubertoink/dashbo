@@ -91,3 +91,76 @@ body {
   border: 1px solid rgba(255,255,255,0.15);
 }
 
+/* ═══════════════════════════════════════════════════════════
+   Modal tone adaptation — warm-beige theme for bright backgrounds.
+   Apply class "modal-tone-dark" on the modal panel element
+   when tone === 'dark' (= bright wallpaper).
+   ═══════════════════════════════════════════════════════════ */
+
+/* ── panel container ── */
+.modal-tone-dark {
+  background: rgba(250, 245, 238, 0.96) !important;
+  color: #3f3f46 !important;
+  border-color: rgba(0, 0, 0, 0.08) !important;
+}
+
+.modal-tone-dark h2 {
+  color: #27272a !important;
+}
+
+/* ── borders (remap white-alpha → black-alpha) ── */
+.modal-tone-dark [class*="border-white"] {
+  border-color: rgba(0, 0, 0, 0.08) !important;
+}
+
+/* ── form elements ── */
+.modal-tone-dark :is(input, textarea, select):not([type="checkbox"]):not([type="radio"]) {
+  background: rgba(0, 0, 0, 0.04) !important;
+  border-color: rgba(0, 0, 0, 0.08) !important;
+  color: #27272a !important;
+  color-scheme: light !important;
+}
+
+.modal-tone-dark :is(input, textarea)::placeholder {
+  color: rgba(0, 0, 0, 0.32) !important;
+}
+
+.modal-tone-dark option {
+  background: #f0ebe4 !important;
+  color: #27272a !important;
+}
+
+.modal-tone-dark input[type="checkbox"] {
+  background: rgba(0, 0, 0, 0.06) !important;
+  border-color: rgba(0, 0, 0, 0.18) !important;
+}
+
+/* ── bg-white/* utility overrides → subtle black alpha ── */
+.modal-tone-dark [class*="bg-white/"] {
+  background-color: rgba(0, 0, 0, 0.04) !important;
+}
+
+.modal-tone-dark button[class*="bg-white/"]:hover,
+.modal-tone-dark a[class*="bg-white/"]:hover {
+  background-color: rgba(0, 0, 0, 0.08) !important;
+}
+
+/* ── text-white/* utility overrides → dark muted ── */
+.modal-tone-dark [class*="text-white/"] {
+  color: rgba(0, 0, 0, 0.5) !important;
+}
+
+/* ── dark bg containers inside modal (dropdowns, nested panels) ── */
+.modal-tone-dark [class*="bg-neutral-8"],
+.modal-tone-dark [class*="bg-zinc-8"],
+.modal-tone-dark [class*="bg-neutral-9"],
+.modal-tone-dark [class*="bg-zinc-9"] {
+  background: rgba(245, 240, 234, 0.98) !important;
+  color: #27272a !important;
+}
+
+/* ── delete / confirmation overlays inside modal ── */
+.modal-tone-dark [class*="bg-black/7"] {
+  background: rgba(0, 0, 0, 0.25) !important;
+}
+

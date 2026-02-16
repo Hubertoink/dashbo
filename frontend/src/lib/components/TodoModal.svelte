@@ -3,6 +3,7 @@
   import { pushToast } from '$lib/stores/toast';
 
   export let open: boolean;
+  export let tone: 'light' | 'dark' = 'light';
   export let onClose: () => void;
   export let onSaved: () => void;
 
@@ -164,8 +165,8 @@
     class="fixed inset-0 z-50 flex items-center justify-center p-4"
     on:click={(e) => e.currentTarget === e.target && onClose()}
   >
-    <div class="absolute inset-0 bg-black/70"></div>
-    <div class="relative bg-zinc-900 rounded-2xl p-6 w-full max-w-sm border border-white/10">
+    <div class={`absolute inset-0 ${tone === 'dark' ? 'bg-black/35 backdrop-blur-sm' : 'bg-black/70'}`}></div>
+    <div class={`relative rounded-2xl p-6 w-full max-w-sm ${tone === 'dark' ? 'modal-tone-dark border border-black/10' : 'bg-zinc-900 border border-white/10'}`}>
       <div class="font-semibold text-lg mb-1">{mode === 'edit' ? 'ToDo bearbeiten' : 'ToDo erstellen'}</div>
 
       <div class="space-y-3 mt-4">

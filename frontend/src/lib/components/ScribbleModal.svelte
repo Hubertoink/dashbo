@@ -4,6 +4,7 @@
   import ScribbleCanvas from './ScribbleCanvas.svelte';
 
   export let open = false;
+  export let tone: 'light' | 'dark' = 'light';
   export let authorName = '';
 
   const dispatch = createEventDispatcher<{
@@ -89,11 +90,11 @@
 {#if open}
   <!-- svelte-ignore a11y_no_static_element_interactions a11y_click_events_have_key_events -->
   <div
-    class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm"
+    class={`fixed inset-0 z-50 flex items-center justify-center backdrop-blur-sm ${tone === 'dark' ? 'bg-black/35' : 'bg-black/80'}`}
     transition:fade={{ duration: 200 }}
   >
     <div
-      class="w-full max-w-xl mx-4 bg-black/90 border border-white/10 rounded-2xl shadow-2xl overflow-hidden"
+      class={`w-full max-w-xl mx-4 rounded-2xl shadow-2xl overflow-hidden ${tone === 'dark' ? 'modal-tone-dark border border-black/10' : 'bg-black/90 border border-white/10'}`}
       transition:fly={{ y: 50, duration: 300 }}
     >
       <!-- Header -->

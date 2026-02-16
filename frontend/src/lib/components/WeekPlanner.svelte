@@ -953,6 +953,7 @@
 <!-- Quick Add Event Modal -->
 <QuickAddEventModal
   open={quickAddOpen}
+  {tone}
   prefilledDate={quickAddDate}
   prefillTitle={quickAddPrefillTitle}
   prefillStartTime={quickAddPrefillStartTime}
@@ -968,6 +969,7 @@
 
 <TodoModal
   open={todoModalOpen}
+  {tone}
   onClose={closeTodoModal}
   onSaved={() => loadTodos()}
   mode="create"
