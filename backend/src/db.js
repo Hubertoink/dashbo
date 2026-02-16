@@ -823,22 +823,10 @@ async function initDb() {
     ON CONFLICT DO NOTHING;
   `);
 
-  await p.query(`
-    DO $$
-    BEGIN
-      IF NOT EXISTS (
-        SELECT 1 FROM pg_constraint WHERE conname = 'events_user_id_fkey'
-      ) THEN
-        ALTER TABLE events
-        ADD CONSTRAINT events_user_id_fkey
-        FOREIGN KEY (user_id)
-        REFERENCES users(id)
-        ON DELETE CASCADE;
-      END IF;
-    END $$;
-  `);
-
-  // Drop the user FK if present (avoid cascading calendar data on user deletion)
+  // Legacy cleanup: we no longer enforce events.user_id -> users.id because event
+  // ownership is calendar-based. Older databases can contain orphaned user_id values
+  // (e.g. deleted users), which would make a temporary FK migration fail.
+  // Ensure no legacy FK remains.
   await p.query('ALTER TABLE events DROP CONSTRAINT IF EXISTS events_user_id_fkey;');
 
   await p.query(`
