@@ -354,9 +354,16 @@
     const from = Math.min(createSelectionStartMin, createSelectionCurrentMin);
     const to = Math.max(createSelectionStartMin, createSelectionCurrentMin);
     if (to <= from) return hhmmFromMinutes(from);
-    const dur = to - from;
+    return `${hhmmFromMinutes(from)} – ${hhmmFromMinutes(to)}`;
+  }
+
+  function createSelectionDurationLabel(): string {
+    const from = Math.min(createSelectionStartMin, createSelectionCurrentMin);
+    const to = Math.max(createSelectionStartMin, createSelectionCurrentMin);
+    const dur = Math.max(0, to - from);
+    if (dur <= 0) return 'Dauer: 0 min';
     const durLabel = dur >= 60 ? `${Math.floor(dur / 60)}h${dur % 60 > 0 ? ` ${dur % 60}min` : ''}` : `${dur}min`;
-    return `${hhmmFromMinutes(from)} – ${hhmmFromMinutes(to)}  (${durLabel})`;
+    return `Dauer: ${durLabel}`;
   }
 
   function beginCreateSelection(day: Date, ev: PointerEvent) {
@@ -1131,8 +1138,9 @@
               class={`absolute left-0 right-0 pointer-events-none border-y ${tone === 'dark' ? 'bg-black/10 border-black/25' : 'bg-cyan-400/18 border-cyan-300/40'}`}
               style={`top: ${createSelectionTopPx()}px; height: ${createSelectionHeightPx()}px;`}
             >
-              <div class={`absolute -top-5 left-1 rounded px-1.5 py-0.5 text-[10px] ${tone === 'dark' ? 'bg-white/85 text-zinc-900 border border-black/15' : 'bg-black/45 text-white border border-white/20'}`}>
-                {createSelectionTimeLabel()}
+              <div class={`absolute -top-10 left-1 rounded-md px-2 py-1 ${tone === 'dark' ? 'bg-white/92 text-zinc-900 border border-black/15' : 'bg-black/55 text-white border border-white/20'}`}>
+                <div class="text-[12px] font-semibold leading-tight whitespace-nowrap">{createSelectionTimeLabel()}</div>
+                <div class={`mt-0.5 text-[10px] leading-tight whitespace-nowrap ${tone === 'dark' ? 'text-zinc-700/90' : 'text-white/80'}`}>{createSelectionDurationLabel()}</div>
               </div>
             </div>
           {/if}
