@@ -393,13 +393,13 @@
     const t = dashboardBgDimming / 100;
     if (tone === 'dark') {
       // Bright image → lighten overlay (white gradient)
-      const leftA = (0.12 + t * 0.30).toFixed(2);
-      const rightA = (0.20 + t * 0.45).toFixed(2);
+      const leftA = (0.10 + t * 0.25).toFixed(2);
+      const rightA = (0.15 + t * 0.35).toFixed(2);
       return `linear-gradient(to right, rgba(255,255,255,${leftA}), rgba(255,255,255,${rightA}))`;
     } else {
       // Dark image → darken overlay (black gradient)
-      const leftA = (0.15 + t * 0.35).toFixed(2);
-      const rightA = (0.28 + t * 0.45).toFixed(2);
+      const leftA = (0.12 + t * 0.28).toFixed(2);
+      const rightA = (0.18 + t * 0.35).toFixed(2);
       return `linear-gradient(to right, rgba(0,0,0,${leftA}), rgba(0,0,0,${rightA}))`;
     }
   })();

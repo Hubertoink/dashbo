@@ -30,7 +30,7 @@ body {
 
 /* Subtle, readable type on top of imagery */
 .text-shadow {
-  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.6), 0 0 2px rgba(0, 0, 0, 0.3);
+  text-shadow: 0 1px 10px rgba(0, 0, 0, 0.7), 0 0 3px rgba(0, 0, 0, 0.4);
 }
 
 /* For dark text on bright imagery */
@@ -62,18 +62,18 @@ body {
 
 /* Dashboard surfaces: default is transparent-only; blur is optional via setting. */
 .glass-dashboard-flat {
-  background: rgba(0, 0, 0, 0.22);
+  background: rgba(0, 0, 0, 0.10);
   backdrop-filter: none;
 }
 
 .glass-dashboard-blur {
-  background: rgba(0, 0, 0, 0.25);
-  backdrop-filter: blur(8px);
+  background: rgba(0, 0, 0, 0.12);
+  backdrop-filter: blur(14px);
 }
 
 /* Backward-compat alias (if referenced elsewhere). */
 .glass-dashboard {
-  background: rgba(0, 0, 0, 0.22);
+  background: rgba(0, 0, 0, 0.10);
   backdrop-filter: none;
 }
 
