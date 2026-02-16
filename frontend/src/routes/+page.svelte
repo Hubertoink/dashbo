@@ -1314,7 +1314,7 @@
         {:else if expandedWidget === 'news'}
           <!-- Expanded News takes all space between weather and clock -->
             <div class="mt-4 lg:mt-6 pb-6 lg:pb-8 text-white flex-1 flex flex-col min-h-0" transition:slide={{ duration: 300 }}>
-              <ZeitNewsWidget expanded={true} {tone} {newsLinkTarget} onToggleExpand={() => expandedWidget = null} />
+              <ZeitNewsWidget expanded={true} {tone} linkTarget={newsLinkTarget} onToggleExpand={() => expandedWidget = null} />
           </div>
         {:else if expandedWidget === 'scribble'}
           <!-- Expanded Scribble takes all space between weather and clock -->
@@ -1331,7 +1331,7 @@
 
           {#if newsEnabled}
             <div class="mt-2 {compactWidgets ? 'pb-3 lg:pb-4' : 'pb-6 lg:pb-8'} text-white" transition:slide={{ duration: 300 }}>
-              <ZeitNewsWidget compact={compactWidgets} {tone} {newsLinkTarget} onToggleExpand={() => expandedWidget = 'news'} />
+              <ZeitNewsWidget compact={compactWidgets} {tone} linkTarget={newsLinkTarget} onToggleExpand={() => expandedWidget = 'news'} />
             </div>
           {/if}
 

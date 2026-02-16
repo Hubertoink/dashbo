@@ -119,7 +119,7 @@
       : 'text-white'
     : tone === 'dark'
       ? 'rounded-lg backdrop-blur-md bg-white/58 border border-black/12 p-3 text-zinc-900'
-      : 'rounded-lg backdrop-blur-md bg-black/34 border border-white/12 p-3 text-white';
+      : 'rounded-lg backdrop-blur-md bg-black/34 border border-white/5 p-3 text-white';
   $: effectivePageSize = expanded ? 12 : compact ? 2 : PAGE_SIZE;
 
   onMount(() => {
