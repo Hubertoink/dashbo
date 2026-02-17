@@ -140,7 +140,7 @@
           height={280}
           strokeColor={selectedColor}
           {strokeWidth}
-          backgroundColor="transparent"
+          backgroundColor="#FFFFFF"
           on:change={handleChange}
         />
       </div>
@@ -159,7 +159,7 @@
               on:click={() => (selectedColor = color.value)}
               title={color.name}
               aria-label={color.name}
-            />
+            ></button>
           {/each}
         </div>
 

@@ -263,20 +263,6 @@
   <div class="mb-2 flex items-center justify-between">
     <div class="text-base font-semibold">To Do</div>
     <div class="flex items-center gap-1">
-      {#if showAddButton}
-        <button
-          type="button"
-          class="p-1 rounded hover:bg-white/10 transition-colors"
-          on:click|stopPropagation={openCreate}
-          title="ToDo hinzufügen"
-          aria-label="ToDo hinzufügen"
-        >
-          <svg class="w-4 h-4 text-white/70" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
-          </svg>
-        </button>
-      {/if}
-
       {#if onToggleExpand}
         <button
           type="button"
@@ -290,6 +276,20 @@
             {:else}
               <path stroke-linecap="round" stroke-linejoin="round" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5" />
             {/if}
+          </svg>
+        </button>
+      {/if}
+
+      {#if showAddButton}
+        <button
+          type="button"
+          class="p-1 rounded hover:bg-white/10 transition-colors"
+          on:click|stopPropagation={openCreate}
+          title="ToDo hinzufügen"
+          aria-label="ToDo hinzufügen"
+        >
+          <svg class="w-4 h-4 text-white/70" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
           </svg>
         </button>
       {/if}
