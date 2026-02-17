@@ -18,12 +18,20 @@ export default defineConfig({
         navigateFallback: '/'
       },
       manifest: {
+        id: '/',
         name: 'Dashbo',
         short_name: 'Dashbo',
+        description: 'Dashbo Familien-Dashboard mit Kalender, ToDos und Widgets',
+        lang: 'de',
         start_url: '/',
+        scope: '/',
         display: 'standalone',
+        display_override: ['standalone', 'minimal-ui', 'browser'],
+        orientation: 'portrait',
         background_color: '#000000',
         theme_color: '#000000',
+        categories: ['productivity', 'utilities'],
+        prefer_related_applications: false,
         icons: [
           {
             src: '/icon.svg',

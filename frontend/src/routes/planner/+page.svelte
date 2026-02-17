@@ -1083,6 +1083,15 @@
       return;
     }
 
+    try {
+      // Mobile default in week planner: start with 3-day view (3T).
+      if (window.matchMedia('(max-width: 767px)').matches) {
+        weekSpan = 3;
+      }
+    } catch {
+      // ignore viewport detection errors
+    }
+
     // One-time teaser animation for the mobile dock launcher
     try {
       const isMobile = window.matchMedia('(max-width: 767px)').matches;
