@@ -7,7 +7,7 @@ export default defineConfig({
     sveltekit(),
     SvelteKitPWA({
       registerType: 'autoUpdate',
-      includeAssets: ['background.jpg', 'icon.svg', 'maskable-icon.svg', 'favicon.ico'],
+      includeAssets: ['background.jpg', 'icon.svg', 'icon-192.png', 'icon-512.png', 'maskable-icon.svg', 'maskable-192.png', 'maskable-512.png', 'favicon.ico'],
       kit: {
         includeVersionFile: true
       },
@@ -34,13 +34,35 @@ export default defineConfig({
         prefer_related_applications: false,
         icons: [
           {
-            src: '/icon.svg',
+            src: '/icon-192.png',
+            sizes: '192x192',
+            type: 'image/png'
+          },
+          {
+            src: '/icon-512.png',
             sizes: '512x512',
+            type: 'image/png'
+          },
+          {
+            src: '/icon.svg',
+            sizes: 'any',
             type: 'image/svg+xml'
           },
           {
-            src: '/maskable-icon.svg',
+            src: '/maskable-192.png',
+            sizes: '192x192',
+            type: 'image/png',
+            purpose: 'maskable'
+          },
+          {
+            src: '/maskable-512.png',
             sizes: '512x512',
+            type: 'image/png',
+            purpose: 'maskable'
+          },
+          {
+            src: '/maskable-icon.svg',
+            sizes: 'any',
             type: 'image/svg+xml',
             purpose: 'maskable'
           }

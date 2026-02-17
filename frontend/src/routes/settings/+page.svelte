@@ -96,6 +96,11 @@
   import EdgeSetupModal from '$lib/components/settings/EdgeSetupModal.svelte';
   import DeleteBackgroundModal from '$lib/components/settings/DeleteBackgroundModal.svelte';
   import FolderConfirmModal from '$lib/components/settings/FolderConfirmModal.svelte';
+  import { getCanInstall, getIsInstalled, pwaPromptInstall, subscribe as pwaSubscribe } from '$lib/pwaInstall';
+
+  let pwaCanInstall = false;
+  let pwaIsInstalled = false;
+  let pwaInstalling = false;
 
   let email = '';
   let password = '';
@@ -1419,6 +1424,14 @@
   }
 
   onMount(async () => {
+    // PWA install state
+    pwaCanInstall = getCanInstall();
+    pwaIsInstalled = getIsInstalled();
+    const unsubPwa = pwaSubscribe(() => {
+      pwaCanInstall = getCanInstall();
+      pwaIsInstalled = getIsInstalled();
+    });
+
     loadEdgeConfig();
     const existing = getStoredToken();
     if (existing) {
@@ -1625,6 +1638,68 @@
       {logout}
       requestEmailVerification={doRequestEmailVerification}
     />
+
+    <!-- PWA Install Section -->
+    <section class="mb-8" id="section-install">
+      <h2 class="text-lg font-semibold text-white/90 mb-4">App installieren</h2>
+      <div class="bg-white/5 rounded-xl p-4">
+        {#if pwaIsInstalled}
+          <div class="flex items-center gap-3">
+            <svg class="w-6 h-6 text-emerald-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="10"/>
+            </svg>
+            <div>
+              <p class="text-sm text-white/80">Dashbo ist als App installiert.</p>
+              <p class="text-xs text-white/50 mt-0.5">Du nutzt die installierte Version — Vollbild, offline-fähig.</p>
+            </div>
+          </div>
+        {:else if pwaCanInstall}
+          <div class="flex items-center justify-between gap-4">
+            <div class="flex-1">
+              <p class="text-sm text-white/80">Dashbo als App auf deinem Gerät installieren — Vollbild, schnellerer Zugriff und offline-fähig.</p>
+            </div>
+            <button
+              class="shrink-0 px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 active:bg-white/25 text-sm font-medium text-white transition-colors disabled:opacity-50"
+              disabled={pwaInstalling}
+              on:click={async () => {
+                pwaInstalling = true;
+                try {
+                  const ok = await pwaPromptInstall();
+                  if (ok) showToast('Dashbo wurde installiert!');
+                } finally {
+                  pwaInstalling = false;
+                }
+              }}
+            >
+              {#if pwaInstalling}
+                Installiere…
+              {:else}
+                <span class="flex items-center gap-2">
+                  <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+                  </svg>
+                  Installieren
+                </span>
+              {/if}
+            </button>
+          </div>
+        {:else}
+          <div class="space-y-3">
+            <p class="text-sm text-white/80">Dashbo kann als App installiert werden — Vollbild, schnellerer Zugriff und offline-fähig.</p>
+            <div class="text-xs text-white/50 space-y-2">
+              <div class="flex items-start gap-2">
+                <span class="font-semibold text-white/60 shrink-0">Chrome / Edge:</span>
+                <span>Tippe auf das Menü (⋮) und wähle „Zum Startbildschirm hinzufügen" oder „App installieren".</span>
+              </div>
+              <div class="flex items-start gap-2">
+                <span class="font-semibold text-white/60 shrink-0">Safari (iOS):</span>
+                <span>Tippe auf das Teilen-Symbol und dann „Zum Home-Bildschirm".</span>
+              </div>
+            </div>
+          </div>
+        {/if}
+      </div>
+    </section>
 
     {#if showFirstRunWizard}
       <FirstRunSection
