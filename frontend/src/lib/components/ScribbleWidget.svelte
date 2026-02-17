@@ -233,8 +233,8 @@
         {#if onToggleExpand}
           <button
             type="button"
-            class="p-1 rounded hover:bg-white/10 text-white/40 hover:text-white/70 transition"
-            on:click={onToggleExpand}
+            class="p-1 rounded text-white/60 hover:text-white hover:bg-white/10 transition-colors"
+            on:click|stopPropagation={onToggleExpand}
             title={expanded ? 'Verkleinern' : 'Vergrößern'}
           >
             <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
@@ -249,8 +249,8 @@
         {#if showAddButton}
           <button
             type="button"
-            class="p-1 text-white/40 hover:text-emerald-400 transition"
-            on:click={openModal}
+            class="p-1 rounded text-white/60 hover:text-white hover:bg-white/10 transition-colors"
+            on:click|stopPropagation={openModal}
             title="Neue Notiz"
           >
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

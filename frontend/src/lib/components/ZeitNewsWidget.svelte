@@ -142,11 +142,15 @@
         {#if onToggleExpand}
           <button
             type="button"
-            class="p-1 rounded hover:bg-white/10 transition-colors"
+            class={`p-1 rounded transition-colors ${
+              tone === 'dark'
+                ? 'text-zinc-700/80 hover:text-zinc-900 hover:bg-black/10'
+                : 'text-white/60 hover:text-white hover:bg-white/10'
+            }`}
             on:click|stopPropagation={onToggleExpand}
             title={expanded ? 'Verkleinern' : 'Vergrößern'}
           >
-            <svg class={`w-4 h-4 ${tone === 'dark' ? 'text-zinc-700/80' : 'text-white/60'}`} fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
               {#if expanded}
                 <path stroke-linecap="round" stroke-linejoin="round" d="M4 14h6m0 0v6m0-6L3 21M20 10h-6m0 0V4m0 6l7-7" />
               {:else}

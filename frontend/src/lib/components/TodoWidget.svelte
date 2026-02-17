@@ -266,11 +266,11 @@
       {#if onToggleExpand}
         <button
           type="button"
-          class="p-1 rounded hover:bg-white/10 transition-colors"
+          class="p-1 rounded text-white/60 hover:text-white hover:bg-white/10 transition-colors"
           on:click|stopPropagation={onToggleExpand}
           title={expanded ? 'Verkleinern' : 'Vergrößern'}
         >
-          <svg class="w-4 h-4 text-white/60" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
             {#if expanded}
               <path stroke-linecap="round" stroke-linejoin="round" d="M4 14h6m0 0v6m0-6L3 21M20 10h-6m0 0V4m0 6l7-7" />
             {:else}
@@ -283,12 +283,12 @@
       {#if showAddButton}
         <button
           type="button"
-          class="p-1 rounded hover:bg-white/10 transition-colors"
+          class="p-1 rounded text-white/60 hover:text-white hover:bg-white/10 transition-colors"
           on:click|stopPropagation={openCreate}
           title="ToDo hinzufügen"
           aria-label="ToDo hinzufügen"
         >
-          <svg class="w-4 h-4 text-white/70" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
           </svg>
         </button>
