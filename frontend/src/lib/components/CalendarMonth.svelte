@@ -423,16 +423,17 @@
                   {#if singleDayEvents.length > 0}
                     {@const ev0 = singleDayEvents[0]}
                     {@const p0 = (ev0.persons && ev0.persons.length > 0 ? ev0.persons[0] : ev0.person) ?? null}
+                    {@const ev0TextClass = ev0.tag
+                      ? isTagColorKey(ev0.tag.color)
+                        ? textFg[ev0.tag.color]
+                        : isHexColor(ev0.tag.color) ? '' : 'text-white/80'
+                      : p0
+                        ? textFg[p0.color as TagColorKey] ?? 'text-white/80'
+                        : 'text-white/80'}
+                    {@const ev0TextStyle = ev0.tag && isHexColor(ev0.tag.color) ? `color: ${ev0.tag.color}` : ''}
                     <div
-                      class={`text-[10px] lg:text-sm font-semibold leading-tight line-clamp-2 whitespace-normal break-words ${
-                        ev0.tag
-                          ? isTagColorKey(ev0.tag.color)
-                            ? textFg[ev0.tag.color]
-                            : 'text-white/80'
-                          : p0
-                            ? textFg[p0.color as TagColorKey] ?? 'text-white/80'
-                            : 'text-white/80'
-                      }`}
+                      class={`text-[10px] lg:text-sm font-semibold leading-tight line-clamp-2 whitespace-normal break-words ${ev0TextClass}`}
+                      style={ev0TextStyle}
                     >
                       {ev0.title}
                     </div>
