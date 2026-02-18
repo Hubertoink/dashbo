@@ -408,7 +408,7 @@
 
               <button
                 type="button"
-                class={`relative h-full min-h-[58px] lg:min-h-[72px] rounded-xl lg:rounded-2xl text-left px-2 lg:px-3 py-1.5 lg:py-2 transition
+                class={`relative h-full min-h-[58px] lg:min-h-[72px] rounded-xl lg:rounded-2xl text-left px-2 lg:px-3 py-1.5 lg:py-2 transition flex flex-col justify-start overflow-hidden
                   ${inMonth ? 'text-white' : 'text-white/35'}
                   ${isSelected ? 'bg-white/15' : 'bg-white/0 hover:bg-white/10 active:bg-white/15'}
                   ${isToday ? 'ring-2 ring-inset ring-white/30' : ''}
