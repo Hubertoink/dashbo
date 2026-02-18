@@ -31,8 +31,16 @@
   import { daysForMonthGrid, formatGermanDayLabel, formatMonthTitle, startOfDay, endOfDay, sameDay } from '$lib/date';
 
   type ViewMode = 'agenda' | 'week' | 'month';
+  const PLANNER_DEFAULT_VIEW_KEY = 'dashbo-planner-default-view';
+  const plannerViewOptions: Array<{ value: ViewMode; label: string }> = [
+    { value: 'agenda', label: 'Agenda' },
+    { value: 'week', label: 'Woche' },
+    { value: 'month', label: 'Monat' }
+  ];
 
   let view: ViewMode = 'agenda';
+  let plannerDefaultView: ViewMode = 'agenda';
+  let plannerSettingsOpen = false;
 
   let selectedDate = new Date();
   let monthAnchor = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1);
@@ -470,6 +478,35 @@
     if (next === 'agenda') void refreshAgenda();
   }
 
+  function parsePlannerView(value: unknown): ViewMode | null {
+    if (value === 'agenda' || value === 'week' || value === 'month') return value;
+    return null;
+  }
+
+  function loadPlannerDefaultView(): ViewMode {
+    try {
+      const raw = localStorage.getItem(PLANNER_DEFAULT_VIEW_KEY);
+      return parsePlannerView(raw) ?? 'agenda';
+    } catch {
+      return 'agenda';
+    }
+  }
+
+  function savePlannerDefaultView(next: ViewMode) {
+    try {
+      localStorage.setItem(PLANNER_DEFAULT_VIEW_KEY, next);
+    } catch {
+      // ignore storage errors
+    }
+  }
+
+  function choosePlannerDefaultView(next: ViewMode) {
+    plannerDefaultView = next;
+    savePlannerDefaultView(next);
+    setView(next);
+    plannerSettingsOpen = false;
+  }
+
   function eventDayKeys(e: EventDto): string[] {
     const start = startOfLocalDay(new Date(e.startAt));
     const end = e.endAt ? startOfLocalDay(new Date(e.endAt)) : start;
@@ -691,6 +728,21 @@
     newDate = toDateInputValue(selectedDate);
     void refreshMonth();
   }
+
+  function jumpToCurrentMonth() {
+    const today = new Date();
+    monthAnchor = new Date(today.getFullYear(), today.getMonth(), 1);
+    selectedDate = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    newDate = toDateInputValue(selectedDate);
+    closePopovers();
+    void refreshMonth();
+    void refreshAgenda();
+    void refreshWeek();
+  }
+  $: isMonthAnchorCurrent = (() => {
+    const now = new Date();
+    return monthAnchor.getFullYear() === now.getFullYear() && monthAnchor.getMonth() === now.getMonth();
+  })();
 
   async function refreshAgenda() {
     agendaLoading = true;
@@ -1084,6 +1136,9 @@
     }
 
     try {
+      plannerDefaultView = loadPlannerDefaultView();
+      view = plannerDefaultView;
+
       // Mobile default in week planner: start with 3-day view (3T).
       if (window.matchMedia('(max-width: 767px)').matches) {
         weekSpan = 3;
@@ -1181,16 +1236,20 @@
     <div class="shrink-0 px-4 pt-4 pb-3 flex items-center justify-between gap-3">
       <div class="text-xl font-semibold tracking-wide">Dashbo</div>
       <div class="flex items-center gap-2">
-        <a
-          href="/settings?from=/planner"
+        <button
+          type="button"
           class="h-9 w-9 flex items-center justify-center rounded-lg text-sm font-medium transition-colors border border-white/10 hover:bg-white/15"
           title="Einstellungen"
+          on:click={() => {
+            plannerSettingsOpen = true;
+            closePopovers();
+          }}
         >
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
           </svg>
-        </a>
+        </button>
       </div>
     </div>
 
@@ -1647,7 +1706,18 @@
           >
             ‹
           </button>
-          <div class="text-sm font-medium tracking-wide">{monthTitle}</div>
+          <div class="flex items-center gap-2">
+            <div class="text-sm font-medium tracking-wide">{monthTitle}</div>
+            {#if !isMonthAnchorCurrent}
+              <button
+                type="button"
+                class="h-7 px-2.5 rounded-md bg-white/10 hover:bg-white/15 text-[11px] font-medium text-white/85"
+                on:click={jumpToCurrentMonth}
+              >
+                Heute
+              </button>
+            {/if}
+          </div>
           <button
             type="button"
             class="h-9 w-9 rounded-lg bg-white/10 hover:bg-white/15"
@@ -1862,20 +1932,83 @@
           </svg>
           <span class="text-xs font-medium">Monat</span>
         </button>
-        <a
-          href="/settings?from=/planner"
+        <button
+          type="button"
           class="flex flex-col items-center gap-1 py-2 px-2.5 rounded-2xl text-white/60 hover:text-white hover:bg-white/5 transition-all"
+          on:click={() => {
+            plannerSettingsOpen = true;
+            closePopovers();
+          }}
         >
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
           </svg>
           <span class="text-xs font-medium">Settings</span>
-        </a>
+        </button>
       </div>
     </div>
   </div>
 </div>
+
+{#if plannerSettingsOpen}
+  <div class="fixed inset-0 z-50">
+    <button
+      type="button"
+      class="absolute inset-0 bg-black/65"
+      aria-label="Einstellungen schließen"
+      on:click={() => (plannerSettingsOpen = false)}
+    ></button>
+    <div class="absolute inset-x-0 bottom-0 p-4 pb-[calc(1rem+env(safe-area-inset-bottom))]">
+      <div class="max-w-xl mx-auto glass border border-white/10 rounded-2xl p-4">
+        <div class="flex items-center justify-between gap-3">
+          <div class="text-base font-semibold">Mobile Einstellungen</div>
+          <button
+            type="button"
+            class="h-8 w-8 rounded-lg hover:bg-white/10 text-white/70 hover:text-white"
+            aria-label="Schließen"
+            on:click={() => (plannerSettingsOpen = false)}
+          >
+            <svg class="w-4 h-4 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        <div class="mt-4">
+          <div class="text-sm text-white/75 mb-2">Standardansicht beim Öffnen</div>
+          <div class="grid grid-cols-3 gap-2">
+            {#each plannerViewOptions as option (option.value)}
+              <button
+                type="button"
+                class={cx(
+                  'py-2 px-2 rounded-lg text-sm border transition',
+                  plannerDefaultView === option.value
+                    ? 'bg-white/15 text-white border-white/30'
+                    : 'bg-white/5 text-white/70 border-white/10 hover:bg-white/10 hover:text-white'
+                )}
+                on:click={() => choosePlannerDefaultView(option.value)}
+              >
+                {option.label}
+              </button>
+            {/each}
+          </div>
+        </div>
+
+        <div class="mt-4 pt-3 border-t border-white/10">
+          <a
+            href="/settings?from=/planner"
+            class="inline-flex items-center gap-2 text-sm text-white/75 hover:text-white transition"
+            on:click={() => (plannerSettingsOpen = false)}
+          >
+            Erweiterte Einstellungen öffnen
+            <span aria-hidden="true">→</span>
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+{/if}
 
 {#if openEvent}
   {@const openEventPersons = openEvent.persons && openEvent.persons.length > 0 ? openEvent.persons : openEvent.person ? [openEvent.person] : []}
