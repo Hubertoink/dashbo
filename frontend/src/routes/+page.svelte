@@ -1516,7 +1516,7 @@
                           <div class="flex items-start gap-4">
                             <div class="w-12 shrink-0 flex items-center justify-center pt-1">
                               {#if showMonthLabel}
-                                <span class="text-[11px] font-black uppercase tracking-[0.2em] text-white/30">{monthAbbr(e.startAt)}</span>
+                                <span class="text-[13px] font-black uppercase tracking-[0.2em] text-white/55">{monthAbbr(e.startAt)}</span>
                               {/if}
                             </div>
                             <div
@@ -1811,7 +1811,7 @@
                           <div class="flex items-start gap-4">
                             <div class="w-12 shrink-0 flex items-center justify-center pt-1">
                               {#if showMonthLabel}
-                                <span class="text-[11px] font-black uppercase tracking-[0.2em] text-white/30">{monthAbbr(e.startAt)}</span>
+                                <span class="text-[13px] font-black uppercase tracking-[0.2em] text-white/55">{monthAbbr(e.startAt)}</span>
                               {/if}
                             </div>
                             <div
