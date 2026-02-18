@@ -416,9 +416,10 @@
                 `}
                 on:click={() => onSelect(new Date(d))}
               >
-                <div class="absolute left-2 lg:left-3 top-1.5 lg:top-2 text-xl lg:text-3xl font-semibold leading-none">{d.getDate()}</div>
+                <!-- Day number -->
+                <div class="text-xl lg:text-3xl font-semibold leading-none">{d.getDate()}</div>
 
-                <!-- Pill badges at bottom of cell -->
+                <!-- Pill badges below date number, stacked vertically -->
                 {#if singleDayEvents.length > 0 || dayHolidays.length > 0 || daySuggestions.length > 0}
                   {@const MAX_PILLS = 3}
                   {@const allBadgeItems = [
@@ -435,38 +436,40 @@
                   ]}
                   {@const visibleBadges = allBadgeItems.slice(0, MAX_PILLS)}
                   {@const overflow = allBadgeItems.length - MAX_PILLS}
-                  <div class="absolute inset-x-1.5 lg:inset-x-2.5 bottom-1 lg:bottom-2 flex items-center gap-0.5 lg:gap-1 overflow-hidden">
+                  <div class="mt-0.5 lg:mt-1 flex flex-col gap-0.5 lg:gap-[3px] min-w-0 overflow-hidden">
                     {#each visibleBadges as badge, i}
                       {#if badge.type === 'holiday'}
-                        <div class="shrink-0 h-[14px] lg:h-[18px] rounded-full border border-white/50 bg-white/0 px-1 lg:px-1.5 flex items-center" title={badge.title}>
-                          <span class="text-[7px] lg:text-[9px] font-semibold text-white/60 truncate max-w-[3ch] lg:max-w-[4ch] leading-none">{badge.title}</span>
+                        <div class="h-[14px] lg:h-[18px] rounded-full border border-white/50 bg-white/0 px-1.5 lg:px-2 flex items-center self-start max-w-full" title={badge.title}>
+                          <span class="text-[8px] lg:text-[10px] font-semibold text-white/60 truncate leading-none">{badge.title}</span>
                         </div>
                       {:else if badge.type === 'suggestion'}
-                        <div class="shrink-0 h-[14px] lg:h-[18px] rounded-full border border-dashed border-violet-400/60 bg-violet-500/25 px-1 lg:px-1.5 flex items-center" title={badge.title}>
-                          <span class="text-[7px] lg:text-[9px] font-semibold text-violet-200/80 truncate max-w-[3ch] lg:max-w-[4ch] leading-none">{badge.title}</span>
+                        <div class="h-[14px] lg:h-[18px] rounded-full border border-dashed border-violet-400/60 bg-violet-500/25 px-1.5 lg:px-2 flex items-center self-start max-w-full" title={badge.title}>
+                          <span class="text-[8px] lg:text-[10px] font-semibold text-violet-200/80 truncate leading-none">{badge.title}</span>
                         </div>
                       {:else}
-                        {#if i === 0 && badge.type === 'event'}
-                          <!-- First event: pill with abbreviated title -->
+                        {#if i === 0}
+                          <!-- First event: full-width pill with truncated title -->
                           <div
-                            class={`shrink min-w-0 h-[14px] lg:h-[18px] rounded-full px-1 lg:px-1.5 flex items-center ${badge.colorClass}`}
+                            class={`h-[14px] lg:h-[18px] rounded-full px-1.5 lg:px-2 flex items-center self-start max-w-full ${badge.colorClass}`}
                             style={badge.colorStyle}
                             title={badge.title}
                           >
-                            <span class="text-[7px] lg:text-[9px] font-semibold text-white/90 truncate leading-none">{badge.title.length > 4 ? badge.title.slice(0, 4) + '…' : badge.title}</span>
+                            <span class="text-[8px] lg:text-[10px] font-semibold text-white/90 truncate leading-none">{badge.title}</span>
                           </div>
                         {:else}
-                          <!-- Additional events: small color dot -->
+                          <!-- Additional events: smaller pill -->
                           <div
-                            class={`shrink-0 h-2 w-2 lg:h-2.5 lg:w-2.5 rounded-full ${badge.colorClass.replace('/30', '/50').replace('/20', '/40')}`}
-                            style={badge.colorStyle ? badge.colorStyle.replace('44', '88') : ''}
+                            class={`h-[12px] lg:h-[16px] rounded-full px-1.5 lg:px-2 flex items-center self-start max-w-full ${badge.colorClass}`}
+                            style={badge.colorStyle}
                             title={badge.title}
-                          ></div>
+                          >
+                            <span class="text-[7px] lg:text-[9px] font-semibold text-white/75 truncate leading-none">{badge.title}</span>
+                          </div>
                         {/if}
                       {/if}
                     {/each}
                     {#if overflow > 0}
-                      <div class="shrink-0 h-[14px] lg:h-[18px] rounded-full bg-white/10 px-1 lg:px-1.5 flex items-center">
+                      <div class="h-[12px] lg:h-[16px] rounded-full bg-white/10 px-1.5 lg:px-2 flex items-center self-start">
                         <span class="text-[7px] lg:text-[9px] font-semibold text-white/50 leading-none">+{overflow}</span>
                       </div>
                     {/if}
