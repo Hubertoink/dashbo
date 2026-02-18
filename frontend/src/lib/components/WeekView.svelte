@@ -56,6 +56,17 @@
     lime: 'bg-lime-400'
   };
 
+  const pillBg: Record<TagColorKey, string> = {
+    fuchsia: 'bg-fuchsia-500/30',
+    cyan: 'bg-cyan-400/30',
+    emerald: 'bg-emerald-400/30',
+    amber: 'bg-amber-400/30',
+    rose: 'bg-rose-400/30',
+    violet: 'bg-violet-400/30',
+    sky: 'bg-sky-400/30',
+    lime: 'bg-lime-400/30'
+  };
+
   const textFg: Record<TagColorKey, string> = {
     fuchsia: 'text-fuchsia-300',
     cyan: 'text-cyan-300',
@@ -319,12 +330,9 @@
               <div class="text-white/30 text-sm text-center py-2">—</div>
             {:else}
               {#each dayHolidays as h (h.date + ':' + h.title)}
-                <div class="rounded-lg px-2 py-2 bg-white/5">
-                  <div class="flex gap-2 items-start">
-                    <div class="mt-1 h-2.5 w-2.5 rounded-full border border-white/60 shrink-0"></div>
-                    <div class="min-w-0 flex-1">
-                      <div class="text-xs font-semibold leading-tight line-clamp-2">{h.title}</div>
-                    </div>
+                <div class="rounded-lg px-1.5 py-1.5">
+                  <div class="h-[18px] rounded-full border border-white/50 bg-white/0 px-2 flex items-center max-w-full" title={h.title}>
+                    <span class="text-[10px] font-semibold text-white/60 truncate leading-none">{h.title}</span>
                   </div>
                 </div>
               {/each}
@@ -333,9 +341,13 @@
                 {@const isPrompt = editPromptFor === k}
                 {@const ps = e.persons && e.persons.length > 0 ? e.persons : e.person ? [e.person] : []}
                 {@const p0 = ps[0]}
+                {@const evPillBg = e.tag
+                  ? isHexColor(e.tag.color) ? '' : (pillBg[e.tag.color as TagColorKey] ?? 'bg-white/20')
+                  : p0 ? (pillBg[p0.color as TagColorKey] ?? 'bg-white/20') : 'bg-white/20'}
+                {@const evPillStyle = e.tag && isHexColor(e.tag.color) ? `background-color: ${e.tag.color}44` : ''}
                 <button
                   type="button"
-                  class="w-full text-left rounded-lg px-2 py-2 hover:bg-white/10 active:bg-white/15 transition relative overflow-hidden bg-white/5"
+                  class="w-full text-left rounded-lg px-1.5 py-1.5 hover:bg-white/10 active:bg-white/15 transition relative overflow-hidden"
                   on:click|stopPropagation={() => requestEdit(e)}
                 >
                   {#if isPrompt}
@@ -343,31 +355,25 @@
                       <span class="text-xs font-semibold">Bearbeiten?</span>
                     </div>
                   {/if}
-                  <div class="flex gap-2 items-start">
+                  <div class="flex flex-col gap-0.5">
+                    <!-- Title pill badge -->
                     <div
-                      class={`mt-1 h-2.5 w-2.5 rounded-full shrink-0 ${
-                        e.tag
-                          ? isHexColor(e.tag.color)
-                            ? 'bg-transparent'
-                            : dotBg[e.tag.color as TagColorKey] ?? 'bg-white/25'
-                          : p0
-                            ? dotBg[p0.color as TagColorKey] ?? 'bg-white/25'
-                            : 'bg-white/25'
-                      }`}
-                      style={e.tag && isHexColor(e.tag.color) ? `background-color: ${e.tag.color}` : ''}
-                    ></div>
-                    <div class="min-w-0 flex-1">
-                      <div class="text-xs font-semibold leading-tight line-clamp-2">{e.title}</div>
-                      <div class="text-[10px] text-white/60 leading-tight mt-0.5">
-                        {e.allDay ? 'Ganztägig' : fmtTimeRange(e.startAt, e.endAt)}
-                        {#if e.location}<span class="truncate"> · {e.location}</span>{/if}
-                      </div>
-                      {#if ps.length > 0}
-                        <div class="text-[10px] text-white/50 leading-tight mt-0.5 truncate">
-                          {#each ps as p, i (p.id)}{#if i > 0}, {/if}<span class={`${textFg[p.color as TagColorKey] ?? 'text-white/70'} font-medium`}>{p.name}</span>{/each}
-                        </div>
-                      {/if}
+                      class={`h-[18px] rounded-full px-2 flex items-center max-w-full ${evPillBg}`}
+                      style={evPillStyle}
+                      title={e.title}
+                    >
+                      <span class="text-[10px] font-semibold text-white/90 truncate leading-none">{e.title}</span>
                     </div>
+                    <!-- Details below pill -->
+                    <div class="px-1 text-[9px] text-white/50 leading-tight truncate">
+                      {e.allDay ? 'Ganztägig' : fmtTimeRange(e.startAt, e.endAt)}
+                      {#if e.location}<span> · {e.location}</span>{/if}
+                    </div>
+                    {#if ps.length > 0}
+                      <div class="px-1 text-[9px] text-white/45 leading-tight truncate">
+                        {#each ps as p, i (p.id)}{#if i > 0}, {/if}<span class={`${textFg[p.color as TagColorKey] ?? 'text-white/60'} font-medium`}>{p.name}</span>{/each}
+                      </div>
+                    {/if}
                   </div>
                 </button>
               {/each}
