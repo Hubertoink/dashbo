@@ -223,15 +223,14 @@
                 {it.title}
               </a>
             {/each}
-
-            {#if pageCount > 1 && !expanded}
-              <div class={`pt-1 text-[10px] tracking-widest uppercase ${tone === 'dark' ? 'text-zinc-700/65' : 'text-white/35'}`}>
-                {page + 1}/{pageCount}
-              </div>
-            {/if}
           </div>
         {/key}
       </div>
+      {#if pageCount > 1 && !expanded}
+        <div class={`pt-1 text-[10px] tracking-widest uppercase ${tone === 'dark' ? 'text-zinc-700/65' : 'text-white/35'}`}>
+          {page + 1}/{pageCount}
+        </div>
+      {/if}
     {:else}
       <div class={`text-sm ${tone === 'dark' ? 'text-zinc-700/75' : 'text-white/50'}`}>Keine Artikel verfügbar.</div>
     {/if}
