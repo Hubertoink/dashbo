@@ -1390,16 +1390,16 @@
         <div class="h-screen overflow-hidden">
           <div class="h-full flex" on:click|stopPropagation={exitStandby}>
             <div class="hidden md:flex w-[38%] min-w-[320px] flex-col p-8 h-full">
-              <!-- Top row: Todo + Weather side by side -->
+              <!-- Top row: Weather + Todo side by side -->
               <div class="flex gap-6">
+                <div class="w-36 shrink-0 text-white">
+                  <ForecastWidget compact={true} />
+                </div>
                 {#if todoEnabled}
                   <div class="flex-1 min-w-0 text-white">
                     <TodoWidget variant="plain" showAddButton={false} compact={true} />
                   </div>
                 {/if}
-                <div class="w-36 shrink-0 text-white">
-                  <ForecastWidget compact={true} />
-                </div>
               </div>
 
               {#if scribbleEnabled}
@@ -1675,18 +1675,18 @@
       {:else}
         <div class="h-screen overflow-hidden" in:fly={{ x: 120, duration: 220 }}>
           <div class="h-full flex">
-            <!-- Left: todo + weather (side by side) + scribble + clock -->
+            <!-- Left: weather + todo (side by side) + scribble + clock -->
             <div class="hidden md:flex w-[38%] min-w-[320px] flex-col p-8 h-full">
-              <!-- Top row: Todo + Weather side by side -->
+              <!-- Top row: Weather + Todo side by side -->
               <div class="flex gap-6">
+                <div class="w-36 shrink-0 text-white">
+                  <ForecastWidget compact={true} />
+                </div>
                 {#if todoEnabled}
                   <div class="flex-1 min-w-0 text-white">
                     <TodoWidget variant="plain" showAddButton={false} compact={true} />
                   </div>
                 {/if}
-                <div class="w-36 shrink-0 text-white">
-                  <ForecastWidget compact={true} />
-                </div>
               </div>
 
               {#if scribbleEnabled}
