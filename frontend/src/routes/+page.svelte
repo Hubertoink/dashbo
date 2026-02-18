@@ -636,6 +636,15 @@
     lime: 'text-lime-300'
   };
 
+  const MONTH_ABBR = ['JAN','FEB','MÄR','APR','MAI','JUN','JUL','AUG','SEP','OKT','NOV','DEZ'];
+  function monthKey(iso: string) {
+    const d = new Date(iso);
+    return d.getFullYear() * 100 + d.getMonth();
+  }
+  function monthAbbr(iso: string) {
+    return MONTH_ABBR[new Date(iso).getMonth()];
+  }
+
   function fmtUpcomingDate(iso: string) {
     const d = new Date(iso);
     return d.toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit' });
@@ -1495,15 +1504,21 @@
                   {@const page = standbyPages[standbyPageIndex] ?? []}
                   {#key standbyPageIndex}
                     <div class="space-y-5 absolute inset-0" in:fade={{ duration: 400, delay: 200 }} out:fade={{ duration: 300 }}>
-                      {#each page as e (e.occurrenceId ?? `${e.id}:${e.startAt}`)}
+                      {#each page as e, idx (e.occurrenceId ?? `${e.id}:${e.startAt}`)}
                         {@const ps = e.persons && e.persons.length > 0 ? e.persons : e.person ? [e.person] : []}
                         {@const p0 = ps[0]}
+                        {@const showMonthLabel = idx === 0 || monthKey(e.startAt) !== monthKey(page[idx - 1].startAt)}
                         <button
                           type="button"
                           class="w-full text-left py-4 border-b border-white/5 hover:bg-white/5 active:bg-white/8 transition -mx-4 px-4 rounded-xl"
                           on:click={() => openEditEventModal(e)}
                         >
                           <div class="flex items-start gap-4">
+                            <div class="w-12 shrink-0 flex items-center justify-center pt-1">
+                              {#if showMonthLabel}
+                                <span class="text-[11px] font-black uppercase tracking-[0.2em] text-white/30">{monthAbbr(e.startAt)}</span>
+                              {/if}
+                            </div>
                             <div
                               class={`mt-1.5 h-3 w-3 rounded-full shrink-0 ${
                                 e.tag
@@ -1784,15 +1799,21 @@
                   {@const page = standbyPages[standbyPageIndex] ?? []}
                   {#key standbyPageIndex}
                     <div class="space-y-5 absolute inset-0" in:fade={{ duration: 400, delay: 200 }} out:fade={{ duration: 300 }}>
-                      {#each page as e (e.occurrenceId ?? `${e.id}:${e.startAt}`)}
+                      {#each page as e, idx (e.occurrenceId ?? `${e.id}:${e.startAt}`)}
                         {@const ps = e.persons && e.persons.length > 0 ? e.persons : e.person ? [e.person] : []}
                         {@const p0 = ps[0]}
+                        {@const showMonthLabel = idx === 0 || monthKey(e.startAt) !== monthKey(page[idx - 1].startAt)}
                         <button
                           type="button"
                           class="w-full text-left py-4 border-b border-white/5 hover:bg-white/5 active:bg-white/8 transition -mx-4 px-4 rounded-xl"
                           on:click={() => openEditEventModal(e)}
                         >
                           <div class="flex items-start gap-4">
+                            <div class="w-12 shrink-0 flex items-center justify-center pt-1">
+                              {#if showMonthLabel}
+                                <span class="text-[11px] font-black uppercase tracking-[0.2em] text-white/30">{monthAbbr(e.startAt)}</span>
+                              {/if}
+                            </div>
                             <div
                               class={`mt-1.5 h-3 w-3 rounded-full shrink-0 ${
                                 e.tag
