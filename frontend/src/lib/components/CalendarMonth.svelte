@@ -61,15 +61,15 @@
     lime: 'bg-lime-400'
   };
 
-  const textFg: Record<TagColorKey, string> = {
-    fuchsia: 'text-fuchsia-300',
-    cyan: 'text-cyan-300',
-    emerald: 'text-emerald-300',
-    amber: 'text-amber-200',
-    rose: 'text-rose-300',
-    violet: 'text-violet-300',
-    sky: 'text-sky-300',
-    lime: 'text-lime-300'
+  const pillBg: Record<TagColorKey, string> = {
+    fuchsia: 'bg-fuchsia-500/30',
+    cyan: 'bg-cyan-400/30',
+    emerald: 'bg-emerald-400/30',
+    amber: 'bg-amber-400/30',
+    rose: 'bg-rose-400/30',
+    violet: 'bg-violet-400/30',
+    sky: 'bg-sky-400/30',
+    lime: 'bg-lime-400/30'
   };
 
   const hexRe = /^#[0-9a-fA-F]{6}$/;
@@ -405,7 +405,6 @@
               {@const singleDayEvents = dayEvents.filter((ev) => !isMultiDay(ev))}
               {@const dayHolidays = holidaysByDay.get(dateKey(d)) ?? []}
               {@const daySuggestions = suggestionsByDay.get(dateKey(d)) ?? []}
-              {@const maxEventDots = dayHolidays.length > 0 ? 2 : 3}
 
               <button
                 type="button"
@@ -419,54 +418,58 @@
               >
                 <div class="absolute left-2 lg:left-3 top-1.5 lg:top-2 text-xl lg:text-3xl font-semibold leading-none">{d.getDate()}</div>
 
-                <div class="pt-7 lg:pt-10 pr-5 lg:pr-8">
-                  {#if singleDayEvents.length > 0}
-                    {@const ev0 = singleDayEvents[0]}
-                    {@const p0 = (ev0.persons && ev0.persons.length > 0 ? ev0.persons[0] : ev0.person) ?? null}
-                    {@const ev0TextClass = ev0.tag
-                      ? isTagColorKey(ev0.tag.color)
-                        ? textFg[ev0.tag.color]
-                        : isHexColor(ev0.tag.color) ? '' : 'text-white/80'
-                      : p0
-                        ? textFg[p0.color as TagColorKey] ?? 'text-white/80'
-                        : 'text-white/80'}
-                    {@const ev0TextStyle = ev0.tag && isHexColor(ev0.tag.color) ? `color: ${ev0.tag.color}` : ''}
-                    <div
-                      class={`text-[10px] lg:text-sm font-semibold leading-tight line-clamp-2 whitespace-normal break-words ${ev0TextClass}`}
-                      style={ev0TextStyle}
-                    >
-                      {ev0.title}
-                    </div>
-                  {:else if dayHolidays.length > 0}
-                    <div class="text-[10px] lg:text-sm font-semibold leading-tight line-clamp-2 whitespace-normal break-words text-white/70">{dayHolidays[0]?.title}</div>
-                  {/if}
-                </div>
+                <!-- Pill badges at bottom of cell -->
                 {#if singleDayEvents.length > 0 || dayHolidays.length > 0 || daySuggestions.length > 0}
-                  <div class="absolute right-2 lg:right-4 bottom-2 lg:bottom-3 flex flex-col items-end gap-0.5 lg:gap-1">
-                    {#if dayHolidays.length > 0}
-                      <div class="h-2 w-2 lg:h-2.5 lg:w-2.5 rounded-full border border-white/60 bg-white/0"></div>
+                  {@const MAX_PILLS = 3}
+                  {@const allBadgeItems = [
+                    ...dayHolidays.map(h => ({ type: 'holiday' as const, title: h.title, colorClass: '', colorStyle: '' })),
+                    ...singleDayEvents.map(ev => {
+                      const p0 = (ev.persons && ev.persons.length > 0 ? ev.persons[0] : ev.person) ?? null;
+                      const bgClass = ev.tag
+                        ? isTagColorKey(ev.tag.color) ? pillBg[ev.tag.color] : isHexColor(ev.tag.color) ? '' : 'bg-white/20'
+                        : p0 ? pillBg[p0.color as TagColorKey] ?? 'bg-white/20' : 'bg-white/20';
+                      const bgStyle = ev.tag && isHexColor(ev.tag.color) ? `background-color: ${ev.tag.color}44` : '';
+                      return { type: 'event' as const, title: ev.title, colorClass: bgClass, colorStyle: bgStyle };
+                    }),
+                    ...daySuggestions.map(sg => ({ type: 'suggestion' as const, title: sg.title, colorClass: 'bg-violet-500/30', colorStyle: '' }))
+                  ]}
+                  {@const visibleBadges = allBadgeItems.slice(0, MAX_PILLS)}
+                  {@const overflow = allBadgeItems.length - MAX_PILLS}
+                  <div class="absolute inset-x-1.5 lg:inset-x-2.5 bottom-1 lg:bottom-2 flex items-center gap-0.5 lg:gap-1 overflow-hidden">
+                    {#each visibleBadges as badge, i}
+                      {#if badge.type === 'holiday'}
+                        <div class="shrink-0 h-[14px] lg:h-[18px] rounded-full border border-white/50 bg-white/0 px-1 lg:px-1.5 flex items-center" title={badge.title}>
+                          <span class="text-[7px] lg:text-[9px] font-semibold text-white/60 truncate max-w-[3ch] lg:max-w-[4ch] leading-none">{badge.title}</span>
+                        </div>
+                      {:else if badge.type === 'suggestion'}
+                        <div class="shrink-0 h-[14px] lg:h-[18px] rounded-full border border-dashed border-violet-400/60 bg-violet-500/25 px-1 lg:px-1.5 flex items-center" title={badge.title}>
+                          <span class="text-[7px] lg:text-[9px] font-semibold text-violet-200/80 truncate max-w-[3ch] lg:max-w-[4ch] leading-none">{badge.title}</span>
+                        </div>
+                      {:else}
+                        {#if i === 0 && badge.type === 'event'}
+                          <!-- First event: pill with abbreviated title -->
+                          <div
+                            class={`shrink min-w-0 h-[14px] lg:h-[18px] rounded-full px-1 lg:px-1.5 flex items-center ${badge.colorClass}`}
+                            style={badge.colorStyle}
+                            title={badge.title}
+                          >
+                            <span class="text-[7px] lg:text-[9px] font-semibold text-white/90 truncate leading-none">{badge.title.length > 4 ? badge.title.slice(0, 4) + '…' : badge.title}</span>
+                          </div>
+                        {:else}
+                          <!-- Additional events: small color dot -->
+                          <div
+                            class={`shrink-0 h-2 w-2 lg:h-2.5 lg:w-2.5 rounded-full ${badge.colorClass.replace('/30', '/50').replace('/20', '/40')}`}
+                            style={badge.colorStyle ? badge.colorStyle.replace('44', '88') : ''}
+                            title={badge.title}
+                          ></div>
+                        {/if}
+                      {/if}
+                    {/each}
+                    {#if overflow > 0}
+                      <div class="shrink-0 h-[14px] lg:h-[18px] rounded-full bg-white/10 px-1 lg:px-1.5 flex items-center">
+                        <span class="text-[7px] lg:text-[9px] font-semibold text-white/50 leading-none">+{overflow}</span>
+                      </div>
                     {/if}
-                    {#each singleDayEvents.slice(0, maxEventDots) as ev (ev.occurrenceId ?? `${ev.id}:${ev.startAt}`)}
-                      {@const p0 = (ev.persons && ev.persons.length > 0 ? ev.persons[0] : ev.person) ?? null}
-                      <div
-                        class={`h-2 w-2 lg:h-2.5 lg:w-2.5 rounded-full ${
-                          ev.tag
-                            ? isHexColor(ev.tag.color)
-                              ? 'bg-transparent'
-                              : dotBg[ev.tag.color as TagColorKey] ?? 'bg-white/25'
-                            : p0
-                              ? dotBg[p0.color as TagColorKey] ?? 'bg-white/25'
-                              : 'bg-white/25'
-                        }`}
-                        style={ev.tag && isHexColor(ev.tag.color) ? `background-color: ${ev.tag.color}` : ''}
-                      ></div>
-                    {/each}
-                    {#each daySuggestions.slice(0, 1) as sg (sg.suggestionKey)}
-                      <div
-                        class="h-2 w-2 lg:h-2.5 lg:w-2.5 rounded-full border border-dashed border-violet-400/60 bg-violet-500/30"
-                        title="Vorschlag: {sg.title}"
-                      ></div>
-                    {/each}
                   </div>
                 {/if}
               </button>

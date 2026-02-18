@@ -18,10 +18,13 @@
   let transitioning = false;
 
   const PAGE_SIZE = 3;
+  const PAGE_SIZE_TALL = 5;
   const MAX_ITEMS = 12;
   const PAGE_ROTATE_MS = 20_000;
   const TRANSITION_OUT_MS = 180;
   const TRANSITION_IN_MS = 220;
+
+  let isTallScreen = false;
 
   const NEWS_CACHE_KEY = 'dashbo_news_cache_v1';
   const NEWS_CACHE_TTL_MS = 5 * 60 * 1000;
@@ -120,18 +123,43 @@
     : tone === 'dark'
       ? 'rounded-lg backdrop-blur-md bg-white/58 border border-black/12 p-3 text-zinc-900'
       : 'rounded-lg backdrop-blur-md bg-black/34 border border-white/5 p-3 text-white';
-  $: effectivePageSize = expanded ? 12 : compact ? 2 : PAGE_SIZE;
+  $: effectivePageSize = expanded ? 12 : compact ? 2 : isTallScreen ? PAGE_SIZE_TALL : PAGE_SIZE;
 
   onMount(() => {
     loadFromCache();
     void load(false);
     const t = setInterval(() => void load(false), 10 * 60 * 1000);
+
+    // Detect tall screens for larger page size
+    const mql = window.matchMedia('(min-height: 1300px)');
+    isTallScreen = mql.matches;
+    const onHeightChange = (e: MediaQueryListEvent) => { isTallScreen = e.matches; };
+    mql.addEventListener('change', onHeightChange);
+
     return () => {
       clearInterval(t);
       stopPageRotation();
+      mql.removeEventListener('change', onHeightChange);
     };
   });
 </script>
+
+<style>
+  .news-height {
+    height: 10rem;
+  }
+  .news-height--compact {
+    height: 6rem;
+  }
+  @media (min-height: 1300px) {
+    .news-height:not(.news-height--compact) {
+      height: 16rem;
+    }
+    .news-height--compact {
+      height: 8rem;
+    }
+  }
+</style>
 
 {#if loading || items.length > 0}
   <div class="{containerClass} {expanded ? 'flex-1 flex flex-col' : ''}">
@@ -164,14 +192,14 @@
 
     {#if items.length > 0}
       {@const maxItems = compact ? 6 : MAX_ITEMS}
-      {@const pageSize = compact ? 2 : PAGE_SIZE}
+      {@const pageSize = compact ? 2 : (isTallScreen ? PAGE_SIZE_TALL : PAGE_SIZE)}
       {@const displayItems = expanded ? items : items.slice(0, maxItems)}
       {@const pageCount = expanded ? 1 : Math.ceil(Math.min(items.length, maxItems) / pageSize)}
       {@const start = expanded ? 0 : page * pageSize}
       {@const view = expanded ? displayItems : items.slice(start, start + pageSize)}
       <div
-        class="relative {expanded ? 'flex-1 overflow-y-auto' : 'overflow-hidden'}"
-        style="{expanded ? '' : compact ? 'height: 6rem;' : 'height: 10rem;'}"
+        class="relative {expanded ? 'flex-1 overflow-y-auto' : 'overflow-hidden news-height'}"
+        class:news-height--compact={compact && !expanded}
       >
         {#key expanded ? 'expanded' : page}
           <div
