@@ -38,9 +38,19 @@
     parseTodoLines,
     type PlannerTodoAccount
   } from '$lib/planner/todoHelpers';
+  import {
+    getPlannerInitialWeekSpan,
+    loadPlannerDefaultView,
+    normalizeDismissedSuggestions,
+    pickPlannerBackground,
+    savePlannerDefaultView as persistPlannerDefaultView,
+    shouldShowPlannerFabTeaser,
+    type PlannerViewMode
+  } from '$lib/planner/preferences';
 
-  type ViewMode = 'agenda' | 'week' | 'month';
+  type ViewMode = PlannerViewMode;
   const PLANNER_DEFAULT_VIEW_KEY = 'dashbo-planner-default-view';
+  const PLANNER_FAB_TEASER_KEY = 'dashbo-planner-fab-teaser-seen';
   const plannerViewOptions: Array<{ value: ViewMode; label: string }> = [
     { value: 'agenda', label: 'Agenda' },
     { value: 'week', label: 'Woche' },
@@ -441,16 +451,6 @@
     return `${d} · ${time}`;
   }
 
-  function pickBackgroundFromSettings(s: SettingsDto): string {
-    const uploaded = (s.images ?? []).map((img) => `/api/media/${img}`);
-    if (uploaded.length > 0) {
-      const preferred = s.background ? `/api/media/${s.background}` : null;
-      return preferred && uploaded.includes(preferred) ? preferred : uploaded[0] ?? '/background.jpg';
-    }
-    if (s.backgroundUrl) return `/api${s.backgroundUrl}`;
-    return '/background.jpg';
-  }
-
   function startOfLocalDay(d: Date): Date {
     const x = new Date(d);
     x.setHours(0, 0, 0, 0);
@@ -471,26 +471,8 @@
     if (next === 'agenda') void refreshAgenda();
   }
 
-  function parsePlannerView(value: unknown): ViewMode | null {
-    if (value === 'agenda' || value === 'week' || value === 'month') return value;
-    return null;
-  }
-
-  function loadPlannerDefaultView(): ViewMode {
-    try {
-      const raw = localStorage.getItem(PLANNER_DEFAULT_VIEW_KEY);
-      return parsePlannerView(raw) ?? 'agenda';
-    } catch {
-      return 'agenda';
-    }
-  }
-
   function savePlannerDefaultView(next: ViewMode) {
-    try {
-      localStorage.setItem(PLANNER_DEFAULT_VIEW_KEY, next);
-    } catch {
-      // ignore storage errors
-    }
+    persistPlannerDefaultView(window.localStorage, PLANNER_DEFAULT_VIEW_KEY, next);
   }
 
   function choosePlannerDefaultView(next: ViewMode) {
@@ -1122,35 +1104,21 @@
       }
 
       try {
-        plannerDefaultView = loadPlannerDefaultView();
+        plannerDefaultView = loadPlannerDefaultView(window.localStorage, PLANNER_DEFAULT_VIEW_KEY);
         view = plannerDefaultView;
-
-        // Mobile default in week planner: start with 3-day view (3T).
-        if (window.matchMedia('(max-width: 767px)').matches) {
-          weekSpan = 3;
-        }
+        weekSpan = getPlannerInitialWeekSpan(window.matchMedia);
       } catch {
         // ignore viewport detection errors
       }
 
-      // One-time teaser animation for the mobile dock launcher
-      try {
-        const isMobile = window.matchMedia('(max-width: 767px)').matches;
-        const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-        const key = 'dashbo-planner-fab-teaser-seen';
-        const seen = localStorage.getItem(key) === '1';
-        if (isMobile && !reduceMotion && !seen) {
-          localStorage.setItem(key, '1');
+      if (shouldShowPlannerFabTeaser(window.matchMedia, window.localStorage, PLANNER_FAB_TEASER_KEY)) {
+        window.setTimeout(() => {
+          if (anyModalOpen) return;
+          fabDockOpen = true;
           window.setTimeout(() => {
-            if (anyModalOpen) return;
-            fabDockOpen = true;
-            window.setTimeout(() => {
-              fabDockOpen = false;
-            }, 1200);
-          }, 600);
-        }
-      } catch {
-        // ignore teaser if storage/matchMedia unavailable
+            fabDockOpen = false;
+          }, 1200);
+        }, 600);
       }
 
       metaLoading = true;
@@ -1162,13 +1130,10 @@
           listPersons(),
           fetchOutlookStatus().catch(() => null)
         ]);
-        backgroundUrl = pickBackgroundFromSettings(s);
+        backgroundUrl = pickPlannerBackground(s);
         scribbleEnabled = s.scribbleEnabled !== false;
         todoEnabled = s.todoEnabled !== false;
-        {
-          const ds = (s as any)?.dismissedSuggestions;
-          dismissedSuggestions = Array.isArray(ds) ? (ds as string[]) : [];
-        }
+        dismissedSuggestions = normalizeDismissedSuggestions((s as any)?.dismissedSuggestions);
         tags = (t ?? []).slice().sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || a.name.localeCompare(b.name));
         persons = (p ?? []).slice().sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || a.name.localeCompare(b.name));
         outlookConnected = Boolean(outlookSt?.connected);

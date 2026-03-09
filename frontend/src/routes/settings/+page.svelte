@@ -1075,6 +1075,16 @@
     void goto('/login');
   }
 
+  function goToLogin() {
+    setToken(null);
+    authError = null;
+    try {
+      window.location.assign('/login?force=1');
+    } catch {
+      void goto('/login?force=1');
+    }
+  }
+
   function redirectToLogin() {
     authError = null;
     authed = false;
@@ -1625,6 +1635,7 @@
       {authError}
       {doLogin}
       {logout}
+      {goToLogin}
       requestEmailVerification={doRequestEmailVerification}
     />
 

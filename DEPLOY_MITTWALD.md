@@ -57,6 +57,14 @@ In Mittwald erstellst du Services/Container (UI oder API). Minimal brauchst du:
 
 Wichtig: Der Container-Name bestimmt die interne DNS. Unser nginx proxy’t auf `http://backend:3000/`, daher sollte der Backend-Container **backend** heißen.
 
+Wichtig fuer die interne Erreichbarkeit zwischen Containern auf Mittwald:
+- Der Hostname wird aus dem Service-Namen abgeleitet, z.B. `db` oder `backend`.
+- Zusaetzlich muss der Ziel-Port im Service unter `Ports` definiert sein, sonst kann ein anderer Container den Dienst trotz korrektem DNS nicht erreichen.
+- Fuer Dashbo bedeutet das konkret:
+	- `db` braucht `5432/tcp` im `Ports`-Tab
+	- `backend` braucht `3000/tcp` im `Ports`-Tab
+- Wenn `backend` im Log `connect ETIMEDOUT <ip>:5432` gegen `db` meldet, ist das typischerweise kein Passwortfehler, sondern ein fehlender oder defekter interner Port-Publish auf Mittwald.
+
 ### API (optional)
 Du kannst das auch per API machen:
 - Stack finden: `GET /v2/projects/{projectId}/stacks` (default stack heißt `default`)

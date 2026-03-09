@@ -12,6 +12,7 @@
 
   export let doLogin: () => void;
   export let logout: () => void;
+  export let goToLogin: () => void = () => {};
 
   export let requestEmailVerification: () => void | Promise<void> = () => {};
 
@@ -67,7 +68,7 @@
       {/if}
 
       <div class="mt-3 flex flex-wrap items-center justify-between gap-2">
-        <a class="text-white/70 hover:text-white text-sm" href="/login?force=1">Zum Login</a>
+        <button class="text-white/70 hover:text-white text-sm" type="button" on:click={goToLogin}>Zum Login</button>
         <a class="text-white/70 hover:text-white text-sm" href="/forgot-password">Passwort vergessen?</a>
       </div>
     </div>

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { tick } from 'svelte';
   import {
     createEvent,
     createTodo,
@@ -26,6 +27,9 @@
   export let todoEnabled = true;
   export let onClose: () => void;
   export let onCreated: () => void;
+
+  let titleInput: HTMLInputElement | null = null;
+  let wasOpen = false;
 
   let title = '';
   let location = '';
@@ -171,6 +175,18 @@
   $: if (open && !dataLoaded) {
     dataLoaded = true;
     void loadData();
+  }
+
+  async function focusTitleInput() {
+    await tick();
+    titleInput?.focus();
+  }
+
+  $: {
+    if (open && !wasOpen) {
+      void focusTitleInput();
+    }
+    wasOpen = open;
   }
 
   function normalizeHhMm(v: string | null): string | null {
@@ -445,11 +461,11 @@
         <!-- Title -->
         <div class="sm:col-span-2">
           <input
+            bind:this={titleInput}
             type="text"
             bind:value={title}
             placeholder="Was ist geplant?"
             class="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-lg placeholder:text-white/40 focus:outline-none focus:ring-2 focus:ring-white/30 transition"
-            autofocus
           />
         </div>
 

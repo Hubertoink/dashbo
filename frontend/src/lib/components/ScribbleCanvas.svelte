@@ -195,7 +195,7 @@
   on:touchmove={handleTouchMove}
   on:touchend={handleTouchEnd}
   on:touchcancel={handleTouchEnd}
-/>
+></canvas>
 
 <style>
   canvas {
