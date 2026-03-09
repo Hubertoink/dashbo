@@ -4,7 +4,7 @@
   import { formatGermanDayLabel } from '$lib/date';
   import { fade, scale } from 'svelte/transition';
 
-  export type EventSuggestionDto = {
+  type EventSuggestionDto = {
     suggestionKey: string;
     title: string;
     startAt: string;

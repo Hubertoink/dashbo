@@ -11,9 +11,15 @@
   let loading = false;
 
   $: nextPath = normalizeNextPath($page.url.searchParams.get('next'));
+  $: forceLogin = $page.url.searchParams.get('force') === '1';
 
   onMount(() => {
     void (async () => {
+      if (forceLogin) {
+        setToken(null);
+        return;
+      }
+
       if (await resolveStoredUser()) {
         await goto(nextPath);
       }

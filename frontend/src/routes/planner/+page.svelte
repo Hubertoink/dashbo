@@ -29,6 +29,15 @@
   } from '$lib/api';
   import { getLoginRedirectPath, resolveStoredUser } from '$lib/auth';
   import { daysForMonthGrid, formatGermanDayLabel, formatMonthTitle, startOfDay, endOfDay, sameDay } from '$lib/date';
+  import {
+    applyTodoMetaDefaults,
+    buildPlannerTodoAccounts,
+    DASHBO_TODO_CONNECTION_ID,
+    getInitialTodoCreateState,
+    normalizeTodoMeta,
+    parseTodoLines,
+    type PlannerTodoAccount
+  } from '$lib/planner/todoHelpers';
 
   type ViewMode = 'agenda' | 'week' | 'month';
   const PLANNER_DEFAULT_VIEW_KEY = 'dashbo-planner-default-view';
@@ -166,29 +175,15 @@
   let todoCreateListName = '';
   let todoCreateConnectionId: number | null = null;
 
-  const DASHBO_TODO_CONNECTION_ID = -1;
-  const DASHBO_TODO_ACCOUNT = { id: DASHBO_TODO_CONNECTION_ID, label: 'Dashbo', email: null, color: 'emerald' } as const;
-
-  type TodoAccount = { id: number; label: string; email: string | null; color?: string };
-
-  $: todoAccounts = [
-    DASHBO_TODO_ACCOUNT,
-    ...(outlookConnections ?? []).map((c) => ({ id: c.id, label: outlookConnectionLabel(c), email: c.email || null, color: c.color }))
-  ] satisfies TodoAccount[];
+  $: todoAccounts = buildPlannerTodoAccounts(outlookConnections) satisfies PlannerTodoAccount[];
 
   $: selectedTodoAccount =
     todoSelectedConnectionId != null ? todoAccounts.find((c) => c.id === todoSelectedConnectionId) ?? null : null;
 
-  function outlookConnectionLabel(c: OutlookConnectionDto | null | undefined): string {
-    if (!c) return '';
-    const name = c.displayName || c.email || `Outlook ${c.id}`;
-    if (c.email && c.displayName && c.displayName !== c.email) return `${c.displayName} (${c.email})`;
-    return name;
-  }
-
   function openTodoCreateModal() {
-    todoCreateListName = (todoListNames.length > 0 ? todoListNames[0] : todoListName) || '';
-    todoCreateConnectionId = todoAccounts.length > 0 ? todoAccounts[0]!.id : DASHBO_TODO_CONNECTION_ID;
+    const initialState = getInitialTodoCreateState({ todoListNames, todoListName, todoAccounts });
+    todoCreateListName = initialState.listName;
+    todoCreateConnectionId = initialState.connectionId;
     todoCreateOpen = true;
   }
 
@@ -196,8 +191,9 @@
     if (!todoEnabled) return;
     try {
       const todoMeta = await fetchTodos();
-      todoListName = todoMeta?.listName || 'Dashbo';
-      todoListNames = Array.isArray(todoMeta?.listNames) ? todoMeta.listNames : [];
+      const normalized = normalizeTodoMeta(todoMeta);
+      todoListName = normalized.todoListName;
+      todoListNames = normalized.todoListNames;
     } catch {
       // ignore
     }
@@ -209,12 +205,9 @@
       outlookConnections = [];
     }
 
-    if (todoSelectedConnectionId == null) {
-      todoSelectedConnectionId = DASHBO_TODO_CONNECTION_ID;
-    }
-    if (!todoSelectedListName) {
-      todoSelectedListName = (todoListNames.length > 0 ? todoListNames[0] : todoListName) || '';
-    }
+    const defaults = applyTodoMetaDefaults({ todoListNames, todoListName, todoSelectedConnectionId, todoSelectedListName });
+    todoSelectedConnectionId = defaults.todoSelectedConnectionId;
+    todoSelectedListName = defaults.todoSelectedListName;
   }
 
   // Recurring Suggestions
@@ -934,14 +927,6 @@
     // Remove from suggestions
     suggestionsAll = suggestionsAll.filter((x) => x.signature !== s.signature);
     suggestions = suggestions.filter((x) => x.signature !== s.signature);
-  }
-
-  // Helper to parse ToDo lines from textarea
-  function parseTodoLines(text: string): string[] {
-    return text
-      .split(/\r?\n/)
-      .map((l) => l.trim())
-      .filter((l) => l.length > 0);
   }
 
   // Create ISO at local noon to avoid timezone offsets

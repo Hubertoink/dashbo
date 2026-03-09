@@ -67,7 +67,7 @@
       {/if}
 
       <div class="mt-3 flex flex-wrap items-center justify-between gap-2">
-        <a class="text-white/70 hover:text-white text-sm" href="/login">Zum Login</a>
+        <a class="text-white/70 hover:text-white text-sm" href="/login?force=1">Zum Login</a>
         <a class="text-white/70 hover:text-white text-sm" href="/forgot-password">Passwort vergessen?</a>
       </div>
     </div>
