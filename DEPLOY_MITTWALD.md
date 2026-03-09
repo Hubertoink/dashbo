@@ -43,6 +43,12 @@ Mittwald sollte ENV Variablen/Secrets pro Projekt/Service unterstützen. Nutze a
 
 Wichtig: dieselbe Redirect URL auch in der Azure App Registration eintragen.
 
+**Wichtig fuer die DB auf Mittwald**
+- Das Backend kann DB-Zugangsdaten robuster ueber `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` lesen.
+- Das ist der sichere Weg, wenn Passwoerter Sonderzeichen wie `@`, `:`, `/` oder `%` enthalten.
+- Eine manuell zusammengesetzte `DATABASE_URL` kann dann syntaktisch gueltig aussehen, aber trotzdem falsch geparst werden.
+- Im Compose-Setup dieses Repos werden die `DB_*`-Werte jetzt automatisch an das Backend durchgereicht.
+
 ## 4) Container starten
 In Mittwald erstellst du Services/Container (UI oder API). Minimal brauchst du:
 - `frontend` (nginx) → Port `80/tcp`
@@ -58,6 +64,8 @@ Du kannst das auch per API machen:
 - Image-Update: `POST /v2/stacks/{stackId}/services/{serviceId}/actions/pull` (für `:latest`) + ggf. `.../actions/recreate`
 
 Domains werden per Ingress mit einem Service-Port verbunden (siehe Mittwald Doku: `POST /v2/ingresses`).
+
+Wichtig: Ein einfacher Container-Neustart zieht bei einem mutable Tag wie `ghcr.io/...:latest` kein neues Image. Nach einem Push nach GHCR brauchst du in Mittwald ein `pull` plus `recreate`, sonst läuft weiter das alte Image.
 
 ## 5) Persistenz (Volumes)
 In `docker-compose.yml` werden Volumes genutzt:

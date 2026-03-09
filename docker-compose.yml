@@ -36,6 +36,11 @@ services:
     build:
       context: ./backend
     environment:
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_NAME: ${POSTGRES_DB:-dashbo}
+      DB_USER: ${POSTGRES_USER:-dashbo}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-dashbo}
       PORT: ${BACKEND_PORT:-3000}
       CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:8080}
       JWT_SECRET: ${JWT_SECRET:-dashbo-dev-secret-change-me}
@@ -45,6 +50,8 @@ services:
       SUPERADMIN_EMAIL: ${SUPERADMIN_EMAIL:-}
       SUPERADMIN_EMAILS: ${SUPERADMIN_EMAILS:-}
       MAIN_ADMIN_EMAIL: ${MAIN_ADMIN_EMAIL:-}
+      # Keep DATABASE_URL as a fallback, but prefer DB_* parts so passwords with
+      # special characters are URL-encoded safely on hosts like Mittwald.
       DATABASE_URL: postgres://${POSTGRES_USER:-dashbo}:${POSTGRES_PASSWORD:-dashbo}@db:5432/${POSTGRES_DB:-dashbo}
       OWM_API_KEY: ${OWM_API_KEY}
       OWM_LAT: ${OWM_LAT:-49.4875}

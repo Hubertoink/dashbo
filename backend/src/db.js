@@ -8,6 +8,19 @@ let lastSchemaCheckAt = 0;
 let lastSchemaOk = false;
 const SCHEMA_CHECK_TTL_MS = 5000;
 
+function formatDbError(err) {
+  if (!err) return 'unknown error';
+
+  const parts = [];
+  if (err.code) parts.push(`code=${err.code}`);
+  if (err.errno && err.errno !== err.code) parts.push(`errno=${err.errno}`);
+  if (err.address) parts.push(`address=${err.address}`);
+  if (err.port) parts.push(`port=${err.port}`);
+  if (err.message) parts.push(`message=${err.message}`);
+
+  return parts.length ? parts.join(' ') : String(err);
+}
+
 function buildDatabaseUrlFromParts() {
   const host = process.env.DB_HOST;
   const port = process.env.DB_PORT;
@@ -89,12 +102,17 @@ async function initDb() {
     } catch (err) {
       lastErr = err;
       const delay = Math.min(1000 * attempt, 5000);
-      console.warn(`[dashbo-backend] DB not ready (attempt ${attempt}/${maxAttempts}), retrying in ${delay}ms`);
+      console.warn(
+        `[dashbo-backend] DB not ready (attempt ${attempt}/${maxAttempts}), retrying in ${delay}ms: ${formatDbError(err)}`
+      );
       await sleep(delay);
     }
   }
 
-  if (lastErr) throw lastErr;
+  if (lastErr) {
+    console.error(`[dashbo-backend] DB connection failed after ${maxAttempts} attempts: ${formatDbError(lastErr)}`);
+    throw lastErr;
+  }
 
   await p.query(`
     CREATE TABLE IF NOT EXISTS events (

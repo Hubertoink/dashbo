@@ -31,6 +31,9 @@ Betroffene Dateien:
 
 ### Backend / API
 
+- `DB_HOST` / `DB_PORT` / `DB_NAME` / `DB_USER` / `DB_PASSWORD` – werden im Compose-Stack intern aus den Postgres-Werten an das Backend weitergegeben
+  - Zweck: Das Backend baut daraus bei Bedarf selbst eine sauber URL-kodierte Verbindung auf
+  - Wichtig fuer Hosting-Umgebungen wie Mittwald, wenn das Passwort Sonderzeichen wie `@`, `:` oder `/` enthaelt
 - `BACKEND_PORT` (Default: `3000`) – Host-Port und Backend-`PORT`
   - Beispiel: `BACKEND_PORT=3001`
 - `CORS_ORIGIN` (Default: `http://localhost:8080`) – erlaubte Frontend-Origin
