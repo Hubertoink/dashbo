@@ -335,6 +335,14 @@
     allDay = false;
   }
 
+  $: if (open && !eventToEdit && allDay && startDateStr && !endDateStr) {
+    endDateStr = startDateStr;
+  }
+
+  $: if (open && !eventToEdit && !allDay && endDateStr === startDateStr) {
+    endDateStr = '';
+  }
+
   function toIsoFromDateStr(dateStr: string, hhmm: string) {
     const [y, mo, da] = dateStr.split('-').map((x) => Number(x));
     const [h, m] = hhmm.split(':').map((x) => Number(x));
@@ -676,8 +684,8 @@
           </div>
         </div>
 
-        <!-- Date Row (for multi-day events or editing) -->
-        {#if eventToEdit || endDateStr}
+        <!-- Date Row (for all-day multi-day events or editing) -->
+        {#if eventToEdit || allDay || endDateStr}
           <div class="sm:col-span-2">
             <div class="text-xs text-white/50 mb-2">Datum</div>
             <div class="flex items-center gap-2">
