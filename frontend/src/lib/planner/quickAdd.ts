@@ -4,6 +4,7 @@ export type PlannerQuickAddFormState = {
   title: string;
   location: string;
   date: string;
+  endDate: string;
   allDay: boolean;
   startTime: string;
   endTime: string;
@@ -89,6 +90,7 @@ export function createPlannerQuickAddDefaults(targetDate: Date, now: Date = new 
     title: '',
     location: '',
     date: toDateInputValue(targetDate),
+    endDate: '',
     allDay: false,
     startTime: roundToNextHalfHourTime(now),
     endTime: '',
@@ -111,11 +113,19 @@ export function buildPlannerEventCreateInput(
   const selectedDate = parseDateInputValue(form.date);
   if (!selectedDate) return { error: 'Ungültiges Datum.' };
 
+  const selectedEndDate = form.endDate ? parseDateInputValue(form.endDate) : null;
+  if (form.endDate && !selectedEndDate) return { error: 'Ungültiges Enddatum.' };
+  if (selectedEndDate && selectedEndDate.getTime() < selectedDate.getTime()) {
+    return { error: 'Enddatum muss am oder nach dem Start liegen.' };
+  }
+
   let startAt: Date;
   let endAt: Date | null = null;
 
   if (form.allDay) {
     startAt = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate(), 0, 0, 0, 0);
+    const endDate = selectedEndDate ?? selectedDate;
+    endAt = new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate(), 23, 59, 59, 999);
   } else {
     const startTime = parseQuarterHourTime(form.startTime);
     if (!startTime) return { error: 'Startzeit fehlt.' };

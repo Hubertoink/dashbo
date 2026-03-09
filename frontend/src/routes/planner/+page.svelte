@@ -107,6 +107,7 @@
   let newTitle = '';
   let newLocation = '';
   let newDate = toDateInputValue(selectedDate);
+  let newEndDate = '';
   let newAllDay = false;
   let newStartTime = '';
   let newEndTime = '';
@@ -389,7 +390,16 @@
   function formatEventDateLine(e: EventDto): string {
     const start = new Date(e.startAt);
     const d = start.toLocaleDateString('de-DE', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' });
-    if (e.allDay) return d;
+    if (e.allDay) {
+      if (e.endAt) {
+        const end = new Date(e.endAt);
+        const sameRange = sameDay(start, end);
+        if (!sameRange) {
+          return `${d} – ${end.toLocaleDateString('de-DE', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })}`;
+        }
+      }
+      return d;
+    }
 
     const time = `${formatTime(start)}${e.endAt ? ` – ${formatTime(new Date(e.endAt))}` : ''}`;
     return `${d} · ${time}`;
@@ -508,6 +518,12 @@
     return `${start.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })} – ${end.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })}`;
   })();
 
+  type WeekAllDaySegment = {
+    event: EventDto;
+    start: number;
+    span: number;
+  };
+
   let weekEventsByDay = new Map<string, EventDto[]>();
   $: {
     // Use weekVisibleDays to support both 7-day and 3-day views correctly
@@ -531,6 +547,66 @@
     weekEventsByDay = m;
   }
 
+  let weekAllDayRows: WeekAllDaySegment[][] = [];
+  $: {
+    const visibleStart = weekVisibleDays[0];
+    const visibleEnd = weekVisibleDays[weekVisibleDays.length - 1];
+    const segments: WeekAllDaySegment[] = [];
+    const seen = new Set<string>();
+
+    for (const event of weekEvents) {
+      if (!event.allDay) continue;
+
+      const key = eventKey(event);
+      if (seen.has(key)) continue;
+      seen.add(key);
+
+      const eventStart = startOfLocalDay(new Date(event.startAt));
+      const eventEnd = startOfLocalDay(event.endAt ? new Date(event.endAt) : new Date(event.startAt));
+
+      if (eventEnd < visibleStart || eventStart > visibleEnd) continue;
+
+      let startIndex = 0;
+      while (startIndex < weekVisibleDays.length && weekVisibleDays[startIndex]!.getTime() < eventStart.getTime()) {
+        startIndex += 1;
+      }
+
+      let endIndex = weekVisibleDays.length - 1;
+      while (endIndex >= 0 && weekVisibleDays[endIndex]!.getTime() > eventEnd.getTime()) {
+        endIndex -= 1;
+      }
+
+      if (startIndex > endIndex) continue;
+      segments.push({ event, start: startIndex, span: endIndex - startIndex + 1 });
+    }
+
+    segments.sort((a, b) => {
+      if (a.start !== b.start) return a.start - b.start;
+      if (a.span !== b.span) return b.span - a.span;
+      return new Date(a.event.startAt).getTime() - new Date(b.event.startAt).getTime();
+    });
+
+    const rows: WeekAllDaySegment[][] = [];
+    for (const segment of segments) {
+      let placed = false;
+      for (const row of rows) {
+        const overlaps = row.some((entry) => {
+          const entryEnd = entry.start + entry.span - 1;
+          const segmentEnd = segment.start + segment.span - 1;
+          return segment.start <= entryEnd && entry.start <= segmentEnd;
+        });
+        if (!overlaps) {
+          row.push(segment);
+          placed = true;
+          break;
+        }
+      }
+      if (!placed) rows.push([segment]);
+    }
+
+    weekAllDayRows = rows;
+  }
+
   async function refreshWeek() {
     weekLoading = true;
     weekError = null;
@@ -548,6 +624,7 @@
     const defaults = createPlannerQuickAddDefaults(targetDate, new Date());
     newTitle = defaults.title;
     newLocation = defaults.location;
+    newEndDate = defaults.endDate;
     newAllDay = defaults.allDay;
     newStartTime = defaults.startTime;
     newEndTime = defaults.endTime;
@@ -686,6 +763,7 @@
     // Prefill the quick add form with suggestion data
     newTitle = s.title;
     newDate = toDateInputValue(s.date);
+    newEndDate = '';
     newAllDay = s.allDay;
     newStartTime = s.startTime ?? '';
     newEndTime = s.endTime ?? '';
@@ -751,6 +829,7 @@
       title: newTitle,
       location: newLocation,
       date: newDate,
+      endDate: newEndDate,
       allDay: newAllDay,
       startTime: newStartTime,
       endTime: newEndTime,
@@ -794,6 +873,7 @@
       const defaults = createPlannerQuickAddDefaults(builtEvent.selectedDate, new Date());
       newTitle = defaults.title;
       newLocation = defaults.location;
+      newEndDate = defaults.endDate;
       newAllDay = defaults.allDay;
       newStartTime = defaults.startTime;
       newEndTime = defaults.endTime;
@@ -846,6 +926,7 @@
       title: newTitle,
       location: newLocation,
       date: newDate,
+      endDate: newEndDate,
       allDay: newAllDay,
       startTime: newStartTime,
       endTime: newEndTime,
@@ -1305,6 +1386,29 @@
             <div class="shrink-0 text-white/50 text-xs mb-2">Aktualisiere…</div>
           {/if}
 
+          {#if weekAllDayRows.length > 0}
+            <div class="shrink-0 mb-2 px-1">
+              <div class="text-[10px] uppercase tracking-wide text-white/45 mb-1">Ganztägig</div>
+              <div class={cx('grid gap-1.5', weekSpan === 7 ? 'grid-cols-7' : 'grid-cols-3')}>
+                {#each weekAllDayRows as row, rowIndex}
+                  {#each row as segment (eventKey(segment.event))}
+                    {@const dot = eventDot(segment.event)}
+                    <button
+                      type="button"
+                      class="min-w-0 h-8 rounded-lg px-2 text-left text-[10px] font-medium bg-white/8 hover:bg-white/12 transition flex items-center gap-1.5"
+                      style={`grid-column: ${segment.start + 1} / span ${segment.span}; grid-row: ${rowIndex + 1};`}
+                      on:click={() => (openEvent = segment.event)}
+                      title={segment.event.title}
+                    >
+                      <div class={`h-2 w-2 rounded-full shrink-0 ${dot.cls}`} style={dot.style}></div>
+                      <span class="truncate">{segment.event.title}</span>
+                    </button>
+                  {/each}
+                {/each}
+              </div>
+            </div>
+          {/if}
+
           <!-- Full-height week grid -->
           <div
             class={cx(
@@ -1317,7 +1421,7 @@
               {@const k = dateKeyLocal(d)}
               {@const isToday = sameDay(d, new Date())}
               {@const isSelected = sameDay(d, selectedDate)}
-              {@const items = weekEventsByDay.get(k) ?? []}
+              {@const items = (weekEventsByDay.get(k) ?? []).filter((event) => !event.allDay)}
               <div
                 class={cx(
                   'h-full flex flex-col rounded-xl border border-white/10 bg-black/30 backdrop-blur-sm overflow-hidden transition',
@@ -1887,6 +1991,17 @@
             Ganztägig
           </label>
         </div>
+
+        {#if newAllDay}
+          <div class="relative">
+            <span class="absolute left-4 top-1 text-[10px] text-white/50 uppercase tracking-wide">Bis</span>
+            <input
+              class="h-12 w-full px-4 pt-4 rounded-xl bg-white/10 border-0 text-sm"
+              type="date"
+              bind:value={newEndDate}
+            />
+          </div>
+        {/if}
 
         {#if !newAllDay}
           <div class="grid grid-cols-2 gap-3">
