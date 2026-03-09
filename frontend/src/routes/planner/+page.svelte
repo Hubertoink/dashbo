@@ -13,17 +13,9 @@
     createScribble,
     createTodo,
     dismissRecurringSuggestion,
-    fetchEvents,
-    fetchOutlookStatus,
-    fetchSettings,
-    fetchTodos,
-    listOutlookConnections,
-    listPersons,
-    listTags,
     type EventDto,
     type OutlookConnectionDto,
     type PersonDto,
-    type SettingsDto,
     type TagColorKey,
     type TagDto
   } from '$lib/api';
@@ -41,12 +33,35 @@
   import {
     getPlannerInitialWeekSpan,
     loadPlannerDefaultView,
-    normalizeDismissedSuggestions,
-    pickPlannerBackground,
     savePlannerDefaultView as persistPlannerDefaultView,
     shouldShowPlannerFabTeaser,
     type PlannerViewMode
   } from '$lib/planner/preferences';
+  import {
+    buildPlannerEventCreateInput,
+    buildPlannerTodoCreateInputs,
+    canSubmitPlannerQuickAdd,
+    createPlannerQuickAddDefaults,
+    parseQuarterHourTime,
+    roundToNextHalfHourTime,
+    toDateInputValue,
+    type PlannerRecurrence
+  } from '$lib/planner/quickAdd';
+  import {
+    fetchPlannerAgendaEvents,
+    fetchPlannerMeta,
+    fetchPlannerMonthEvents,
+    fetchPlannerSuggestionEvents,
+    fetchPlannerTodoMeta,
+    fetchPlannerWeekEvents
+  } from '$lib/planner/data';
+  import {
+    generatePlannerSuggestions,
+    getPlannerEventPersons,
+    removePlannerSuggestion,
+    takePlannerSuggestionPreview,
+    type PlannerSuggestionDto
+  } from '$lib/planner/suggestions';
 
   type ViewMode = PlannerViewMode;
   const PLANNER_DEFAULT_VIEW_KEY = 'dashbo-planner-default-view';
@@ -95,7 +110,7 @@
   let newAllDay = false;
   let newStartTime = '';
   let newEndTime = '';
-  let newRecurrence: 'weekly' | 'monthly' | null = null;
+  let newRecurrence: PlannerRecurrence = null;
   let newTagIdStr = '';
   let newPersonIds: number[] = [];
 
@@ -199,38 +214,14 @@
 
   async function refreshTodoMeta() {
     if (!todoEnabled) return;
-    try {
-      const todoMeta = await fetchTodos();
-      const normalized = normalizeTodoMeta(todoMeta);
-      todoListName = normalized.todoListName;
-      todoListNames = normalized.todoListNames;
-    } catch {
-      // ignore
-    }
-
-    try {
-      const conns = await listOutlookConnections();
-      outlookConnections = Array.isArray(conns) ? conns : [];
-    } catch {
-      outlookConnections = [];
-    }
-
-    const defaults = applyTodoMetaDefaults({ todoListNames, todoListName, todoSelectedConnectionId, todoSelectedListName });
-    todoSelectedConnectionId = defaults.todoSelectedConnectionId;
-    todoSelectedListName = defaults.todoSelectedListName;
+    const next = await fetchPlannerTodoMeta({ todoSelectedConnectionId, todoSelectedListName });
+    todoListName = next.todoListName;
+    todoListNames = next.todoListNames;
+    outlookConnections = next.outlookConnections;
+    todoSelectedConnectionId = next.todoSelectedConnectionId;
+    todoSelectedListName = next.todoSelectedListName;
   }
 
-  // Recurring Suggestions
-  interface PlannerSuggestionDto {
-    title: string;
-    date: Date;
-    startTime: string | null;
-    endTime: string | null;
-    allDay: boolean;
-    tagId: number | null;
-    personIds: number[];
-    signature: string;
-  }
   let suggestionsAll: PlannerSuggestionDto[] = [];
   let suggestions: PlannerSuggestionDto[] = [];
   let dismissedSuggestions: string[] = [];
@@ -350,53 +341,6 @@
     const x = new Date(d);
     x.setDate(x.getDate() + delta);
     return x;
-  }
-
-  function toDateInputValue(d: Date): string {
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    return `${y}-${m}-${day}`;
-  }
-
-  function parseDateInputValue(v: string): Date | null {
-    if (!v) return null;
-    const m = /^([0-9]{4})-([0-9]{2})-([0-9]{2})$/.exec(v);
-    if (!m) return null;
-    const y = Number(m[1]);
-    const mo = Number(m[2]) - 1;
-    const day = Number(m[3]);
-    const d = new Date(y, mo, day);
-    if (!Number.isFinite(d.getTime())) return null;
-    return d;
-  }
-
-  function parseTime(v: string): { h: number; m: number } | null {
-    if (!v) return null;
-    const m = /^([0-9]{2}):([0-9]{2})$/.exec(v);
-    if (!m) return null;
-    const h = Number(m[1]);
-    const min = Number(m[2]);
-    if (!Number.isFinite(h) || !Number.isFinite(min) || h < 0 || h > 23 || min < 0 || min > 59) return null;
-    if (min % 15 !== 0) return null;
-    return { h, m: min };
-  }
-
-  function toLocalDateTime(date: Date, time: { h: number; m: number }): Date {
-    return new Date(date.getFullYear(), date.getMonth(), date.getDate(), time.h, time.m, 0, 0);
-  }
-
-  function roundToNextHalfHourTime(now: Date): string {
-    const d = new Date(now);
-    d.setSeconds(0, 0);
-    const m = d.getMinutes();
-    const next = m === 0 || m === 30 ? m : m < 30 ? 30 : 60;
-    if (next === 60) {
-      d.setHours(d.getHours() + 1, 0, 0, 0);
-    } else {
-      d.setMinutes(next, 0, 0);
-    }
-    return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
   }
 
   function formatDayTitle(d: Date): string {
@@ -591,21 +535,7 @@
     weekLoading = true;
     weekError = null;
     try {
-      // Calculate range directly from selectedDate to avoid race condition with reactive variables
-      let from: Date;
-      let to: Date;
-      if (weekSpan === 3) {
-        // 3-day view: selectedDate - 1 to selectedDate + 1
-        from = startOfDay(addDays(selectedDate, -1));
-        to = endOfDay(addDays(selectedDate, 1));
-      } else {
-        // 7-day view: Monday to Sunday of the week containing selectedDate
-        const ws = mondayStart(selectedDate);
-        from = startOfDay(ws);
-        to = endOfDay(addDays(ws, 6));
-      }
-      const items = await fetchEvents(from, to);
-      weekEvents = items;
+      weekEvents = await fetchPlannerWeekEvents(selectedDate, weekSpan);
     } catch (err) {
       weekError = err instanceof Error ? err.message : 'Fehler beim Laden.';
       weekEvents = [];
@@ -615,13 +545,15 @@
   }
 
   function resetQuickAddDefaults(targetDate: Date) {
-    newTitle = '';
-    newLocation = '';
-    newAllDay = false;
-    newStartTime = roundToNextHalfHourTime(new Date());
-    newEndTime = '';
-    newTagIdStr = '';
-    newPersonIds = [];
+    const defaults = createPlannerQuickAddDefaults(targetDate, new Date());
+    newTitle = defaults.title;
+    newLocation = defaults.location;
+    newAllDay = defaults.allDay;
+    newStartTime = defaults.startTime;
+    newEndTime = defaults.endTime;
+    newRecurrence = defaults.recurrence;
+    newTagIdStr = defaults.tagId != null ? String(defaults.tagId) : '';
+    newPersonIds = defaults.personIds;
     todoText = '';
     todoSectionOpen = false;
     createError = null;
@@ -659,11 +591,7 @@
     }
   }
 
-  function eventPersons(e: EventDto): Array<{ id: number; name: string; color: string }> {
-    if (e.persons && e.persons.length > 0) return e.persons as any;
-    if (e.person) return [e.person as any];
-    return [];
-  }
+  const eventPersons = getPlannerEventPersons;
 
   function eventDot(e: EventDto): { cls: string; style: string } {
     const tagColor = e.tag?.color;
@@ -723,23 +651,16 @@
     agendaLoading = true;
     agendaError = null;
     try {
-      const from = startOfDay(selectedDate);
-      const to = endOfDay(addDays(selectedDate, 7));
-      const items = await fetchEvents(from, to);
-      agendaEvents = items
-        .slice()
-        .sort((a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime());
+      agendaEvents = await fetchPlannerAgendaEvents(selectedDate);
       // Generate suggestions based on a wider window (needs past events to detect patterns)
       try {
-        const today = startOfLocalDay(new Date());
-        const suggestFrom = startOfDay(addDays(today, -56));
-        // Include enough future events so the pattern can be inferred from already scheduled occurrences.
-        const suggestTo = endOfDay(addDays(today, 60));
-        const suggestEvents = await fetchEvents(suggestFrom, suggestTo);
+        const suggestEvents = await fetchPlannerSuggestionEvents();
         suggestionSourceEvents = suggestEvents;
-        generateSuggestions(suggestEvents);
+        suggestionsAll = generatePlannerSuggestions(suggestEvents, dismissedSuggestions);
+        suggestions = takePlannerSuggestionPreview(suggestionsAll);
       } catch {
         suggestionSourceEvents = [];
+        suggestionsAll = [];
         suggestions = [];
       }
     } catch (err) {
@@ -750,143 +671,10 @@
     }
   }
 
-  // --- Suggestion generation (weekly recurring pattern detection) ---
-  function generateSuggestions(events: EventDto[]) {
-    const now = new Date();
-    const todayStart = startOfLocalDay(now);
-    const normalizeTitle = (t: string) => String(t || '').trim().toLowerCase().replace(/\s+/g, ' ');
-    const weekdayMon0 = (d: Date) => (d.getDay() + 6) % 7;
-    const dateKey = (d: Date) => `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
-    const bucket15 = (mins: number) => Math.round(mins / 15) * 15;
-    const minutesSinceMidnight = (d: Date) => d.getHours() * 60 + d.getMinutes();
-    const hhmmFromMinutes = (mins: number) => {
-      const h = Math.floor(mins / 60);
-      const m = mins % 60;
-      return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
-    };
-
-    const dismissedSet = new Set(dismissedSuggestions);
-
-    // Filter out sources/records that create noisy suggestions.
-    const candidates = (events ?? []).filter((e) => {
-      if (e.source === 'outlook') return false;
-      if (e.allDay) return false;
-      if (e.recurrence) return false;
-      if (!e.title || !String(e.title).trim()) return false;
-      return true;
-    });
-
-    // Aggregate weekly patterns (12-week lookback) using 15-min buckets.
-    // Also allow learning from already scheduled near-future events so month view can show upcoming suggestions.
-    const lookbackFrom = addDays(todayStart, -12 * 7);
-    const patternTo = addDays(todayStart, 60 + 1);
-    const weeklyAgg = new Map<
-      string,
-      { dates: Date[]; sample: EventDto; weekday: number; startBucket: number; titleNorm: string }
-    >();
-
-    for (const e of candidates) {
-      const start = new Date(e.startAt);
-      if (Number.isNaN(start.getTime())) continue;
-      if (start < lookbackFrom || start >= patternTo) continue;
-
-      const wd = weekdayMon0(start);
-      const startMin = bucket15(minutesSinceMidnight(start));
-      const titleNorm = normalizeTitle(e.title);
-      if (!titleNorm) continue;
-
-      const sig = `weekly|${wd}|${startMin}|${titleNorm}`;
-      const existing = weeklyAgg.get(sig);
-      if (existing) {
-        existing.dates.push(start);
-        const existingSampleStart = new Date(existing.sample.startAt).getTime();
-        const currentMs = start.getTime();
-        if (!Number.isNaN(existingSampleStart) && currentMs > existingSampleStart) {
-          existing.sample = e;
-        }
-      } else {
-        weeklyAgg.set(sig, { dates: [start], sample: e, weekday: wd, startBucket: startMin, titleNorm });
-      }
-    }
-
-    // Generate suggestions for the next ~2 months (month grid should show them too).
-    const upcomingDays: Date[] = [];
-    for (let i = 0; i <= 60; i++) upcomingDays.push(addDays(todayStart, i));
-
-    const result: PlannerSuggestionDto[] = [];
-    const addedKeys = new Set<string>();
-
-    for (const [sig, agg] of weeklyAgg) {
-      for (const day of upcomingDays) {
-        const dayStart = startOfLocalDay(day);
-        if (dayStart < todayStart) continue;
-        if (weekdayMon0(dayStart) !== agg.weekday) continue;
-
-        const datesBefore = agg.dates.filter((d) => d.getTime() < dayStart.getTime());
-        if (datesBefore.length < 3) continue;
-        const weeksBefore = new Set(
-          datesBefore.map((d) => {
-            const weekStart = new Date(d.getFullYear(), d.getMonth(), d.getDate() - weekdayMon0(d));
-            return dateKey(weekStart);
-          })
-        );
-        if (weeksBefore.size < 3) continue;
-
-        const dayDateKey = dateKey(dayStart);
-        const suggKey = `${sig}|${dayDateKey}`;
-        if (addedKeys.has(suggKey)) continue;
-        if (dismissedSet.has(suggKey)) continue;
-
-        // Check if event already exists on that day.
-        const hasExisting = (events ?? []).some((ev) => {
-          const evStart = new Date(ev.startAt);
-          return dateKey(evStart) === dayDateKey && normalizeTitle(ev.title) === agg.titleNorm;
-        });
-        if (hasExisting) continue;
-
-        addedKeys.add(suggKey);
-
-        let endTime: string | null = null;
-        try {
-          const sampleStart = new Date(agg.sample.startAt);
-          const sampleEnd = agg.sample.endAt ? new Date(agg.sample.endAt) : null;
-          if (sampleEnd && !Number.isNaN(sampleStart.getTime()) && !Number.isNaN(sampleEnd.getTime())) {
-            const deltaMs = sampleEnd.getTime() - sampleStart.getTime();
-            const minMs = 15 * 60 * 1000;
-            const maxMs = 12 * 60 * 60 * 1000;
-            if (deltaMs >= minMs && deltaMs <= maxMs) {
-              const durMins = Math.round(deltaMs / (60 * 1000));
-              const endMins = agg.startBucket + durMins;
-              if (endMins > 0 && endMins < 24 * 60) endTime = hhmmFromMinutes(endMins);
-            }
-          }
-        } catch {
-          // ignore
-        }
-
-        const ps = eventPersons(agg.sample);
-        result.push({
-          title: agg.sample.title,
-          date: new Date(dayStart),
-          allDay: false,
-          startTime: hhmmFromMinutes(agg.startBucket),
-          endTime,
-          tagId: agg.sample.tag?.id ?? null,
-          personIds: ps.map((p) => p.id),
-          signature: suggKey
-        });
-      }
-    }
-
-    result.sort((a, b) => a.date.getTime() - b.date.getTime());
-    suggestionsAll = result;
-    suggestions = result.slice(0, 5);
-  }
-
   async function dismissSuggestion(s: PlannerSuggestionDto) {
     dismissedSuggestions = [...dismissedSuggestions, s.signature];
-    suggestionsAll = suggestionsAll.filter((x) => x.signature !== s.signature);
-    suggestions = suggestions.filter((x) => x.signature !== s.signature);
+    suggestionsAll = removePlannerSuggestion(suggestionsAll, s.signature);
+    suggestions = takePlannerSuggestionPreview(suggestionsAll);
     try {
       await dismissRecurringSuggestion(s.signature);
     } catch {
@@ -906,27 +694,15 @@
     newPersonIds = s.personIds.slice();
     todoSectionOpen = false;
     quickAddOpen = true;
-    // Remove from suggestions
-    suggestionsAll = suggestionsAll.filter((x) => x.signature !== s.signature);
-    suggestions = suggestions.filter((x) => x.signature !== s.signature);
-  }
-
-  // Create ISO at local noon to avoid timezone offsets
-  function isoNoonLocal(d: Date): string {
-    const x = new Date(d);
-    x.setHours(12, 0, 0, 0);
-    return x.toISOString();
+    suggestionsAll = removePlannerSuggestion(suggestionsAll, s.signature);
+    suggestions = takePlannerSuggestionPreview(suggestionsAll);
   }
 
   async function refreshMonth() {
     monthLoading = true;
     monthError = null;
     try {
-      const days = daysForMonthGrid(monthAnchor);
-      const from = startOfDay(days[0] ?? monthAnchor);
-      const to = endOfDay(days[days.length - 1] ?? monthAnchor);
-      const items = await fetchEvents(from, to);
-      monthEvents = items;
+      monthEvents = await fetchPlannerMonthEvents(monthAnchor);
     } catch (err) {
       monthError = err instanceof Error ? err.message : 'Fehler beim Laden.';
       monthEvents = [];
@@ -971,74 +747,43 @@
 
   async function doCreate() {
     createError = null;
-    const title = newTitle.trim();
-    if (!title) {
-      createError = 'Titel fehlt.';
+    const builtEvent = buildPlannerEventCreateInput({
+      title: newTitle,
+      location: newLocation,
+      date: newDate,
+      allDay: newAllDay,
+      startTime: newStartTime,
+      endTime: newEndTime,
+      recurrence: newRecurrence,
+      tagId: newTagId,
+      personIds: newPersonIds
+    });
+
+    if ('error' in builtEvent) {
+      createError = builtEvent.error;
       return;
-    }
-
-    const d = parseDateInputValue(newDate);
-    if (!d) {
-      createError = 'Ungültiges Datum.';
-      return;
-    }
-
-    let startAt: Date;
-    let endAt: Date | null = null;
-
-    if (newAllDay) {
-      startAt = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0);
-    } else {
-      const startTime = parseTime(newStartTime);
-      if (!startTime) {
-        createError = 'Startzeit fehlt.';
-        return;
-      }
-      startAt = toLocalDateTime(d, startTime);
-
-      const endTime = parseTime(newEndTime);
-      if (endTime) {
-        endAt = toLocalDateTime(d, endTime);
-        if (endAt.getTime() <= startAt.getTime()) {
-          createError = 'Ende muss nach Start liegen.';
-          return;
-        }
-      }
     }
 
     creating = true;
     try {
-      await createEvent({
-        title,
-        location: newLocation.trim() || null,
-        startAt: startAt.toISOString(),
-        endAt: endAt ? endAt.toISOString() : null,
-        allDay: newAllDay,
-        recurrence: newRecurrence,
-        tagId: newTagId != null && Number.isFinite(newTagId) && newTagId > 0 ? newTagId : null,
-        personIds: newPersonIds.length > 0 ? newPersonIds : null
-      });
+      await createEvent(builtEvent.payload);
 
       // Create ToDos if enabled (Dashbo-local or Outlook)
-      const todoLines = todoEnabled ? parseTodoLines(todoText) : [];
-      if (todoLines.length > 0) {
+      const todoInputs = buildPlannerTodoCreateInputs({
+        enabled: todoEnabled,
+        todoText,
+        selectedDate: builtEvent.selectedDate,
+        todoSelectedListName,
+        todoListNames,
+        todoListName,
+        todoSelectedConnectionId,
+        parseTodoLines
+      });
+      if (todoInputs.length > 0) {
         todoSaving = true;
         todoError = null;
-        const dueAt = isoNoonLocal(d);
-        const listName = todoSelectedListName || (todoListNames.length > 0 ? todoListNames[0] : todoListName) || '';
-        const connectionId = todoSelectedConnectionId;
         try {
-          await Promise.all(
-            todoLines.map((t) =>
-              createTodo({
-                ...(connectionId != null ? { connectionId } : {}),
-                ...(listName ? { listName } : {}),
-                title: t,
-                description: null,
-                dueAt
-              })
-            )
-          );
+          await Promise.all(todoInputs.map((input) => createTodo(input)));
         } catch (e: any) {
           todoError = e?.message || 'Fehler beim Speichern der ToDos';
         } finally {
@@ -1046,19 +791,22 @@
         }
       }
 
-      newTitle = '';
-      newLocation = '';
-      if (!newAllDay) newEndTime = '';
-      newRecurrence = null;
-      newTagIdStr = '';
-      newPersonIds = [];
+      const defaults = createPlannerQuickAddDefaults(builtEvent.selectedDate, new Date());
+      newTitle = defaults.title;
+      newLocation = defaults.location;
+      newAllDay = defaults.allDay;
+      newStartTime = defaults.startTime;
+      newEndTime = defaults.endTime;
+      newRecurrence = defaults.recurrence;
+      newTagIdStr = defaults.tagId != null ? String(defaults.tagId) : '';
+      newPersonIds = defaults.personIds;
       todoText = '';
       todoError = null;
       closePopovers();
 
       // Keep the agenda anchored to the event day
-      selectedDate = d;
-      monthAnchor = new Date(d.getFullYear(), d.getMonth(), 1);
+      selectedDate = builtEvent.selectedDate;
+      monthAnchor = new Date(builtEvent.selectedDate.getFullYear(), builtEvent.selectedDate.getMonth(), 1);
 
       await Promise.all([refreshAgenda(), refreshMonth()]);
       quickAddOpen = false; // Close modal on success
@@ -1093,7 +841,21 @@
   }
 
   $: swipeProgress = Math.min(1, swipeCurrentX / SWIPE_THRESHOLD);
-  $: canSubmit = newTitle.trim().length > 0 && (newAllDay || parseTime(newStartTime) !== null) && !creating && !todoSaving;
+  $: canSubmit = canSubmitPlannerQuickAdd(
+    {
+      title: newTitle,
+      location: newLocation,
+      date: newDate,
+      allDay: newAllDay,
+      startTime: newStartTime,
+      endTime: newEndTime,
+      recurrence: newRecurrence,
+      tagId: newTagId,
+      personIds: newPersonIds
+    },
+    creating,
+    todoSaving
+  );
   $: anyModalOpen = quickAddOpen || scribbleModalOpen || editOpen || openEvent !== null || todoCreateOpen;
 
   onMount(() => {
@@ -1124,19 +886,14 @@
       metaLoading = true;
       metaError = null;
       try {
-        const [s, t, p, outlookSt] = await Promise.all([
-          fetchSettings(),
-          listTags(),
-          listPersons(),
-          fetchOutlookStatus().catch(() => null)
-        ]);
-        backgroundUrl = pickPlannerBackground(s);
-        scribbleEnabled = s.scribbleEnabled !== false;
-        todoEnabled = s.todoEnabled !== false;
-        dismissedSuggestions = normalizeDismissedSuggestions((s as any)?.dismissedSuggestions);
-        tags = (t ?? []).slice().sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || a.name.localeCompare(b.name));
-        persons = (p ?? []).slice().sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || a.name.localeCompare(b.name));
-        outlookConnected = Boolean(outlookSt?.connected);
+        const meta = await fetchPlannerMeta();
+        backgroundUrl = meta.backgroundUrl;
+        scribbleEnabled = meta.scribbleEnabled;
+        todoEnabled = meta.todoEnabled;
+        dismissedSuggestions = meta.dismissedSuggestions;
+        tags = meta.tags;
+        persons = meta.persons;
+        outlookConnected = meta.outlookConnected;
 
         if (todoEnabled) {
           await refreshTodoMeta();
@@ -1148,7 +905,8 @@
         // Recompute suggestions after settings (dismissed keys) are loaded.
         // Avoid re-fetching events (prevents double "Aktualisiere…" on initial load).
         if (suggestionSourceEvents.length > 0) {
-          generateSuggestions(suggestionSourceEvents);
+          suggestionsAll = generatePlannerSuggestions(suggestionSourceEvents, dismissedSuggestions);
+          suggestions = takePlannerSuggestionPreview(suggestionsAll);
         }
       }
     })();
