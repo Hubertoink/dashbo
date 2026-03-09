@@ -2,17 +2,22 @@
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
   import { page } from '$app/stores';
-  import { login, setToken, getStoredToken } from '$lib/api';
+  import { login, setToken } from '$lib/api';
+  import { normalizeNextPath, resolveStoredUser } from '$lib/auth';
 
   let identifier = '';
   let password = '';
   let error: string | null = null;
   let loading = false;
 
-  $: nextPath = $page.url.searchParams.get('next') || '/';
+  $: nextPath = normalizeNextPath($page.url.searchParams.get('next'));
 
   onMount(() => {
-    if (getStoredToken()) void goto(nextPath);
+    void (async () => {
+      if (await resolveStoredUser()) {
+        await goto(nextPath);
+      }
+    })();
   });
 
   async function doLogin() {

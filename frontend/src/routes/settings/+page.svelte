@@ -6,7 +6,6 @@
   import {
     login,
     setToken,
-    getStoredToken,
     fetchSettings,
     setBackground,
     deleteBackgroundImage,
@@ -59,10 +58,10 @@
     type HueStatusDto,
     type MeDto,
     fetchMe,
-    decodeJwtPayload,
     requestEmailVerification,
     setRecurringSuggestionsSettings,
   } from '$lib/api';
+  import { getLoginRedirectPath, resolveStoredUser } from '$lib/auth';
 
   import { normalizeClockStyle, type ClockStyle } from '$lib/clockStyle';
 
@@ -1076,6 +1075,23 @@
     void goto('/login');
   }
 
+  function redirectToLogin() {
+    authError = null;
+    authed = false;
+    isAdmin = false;
+    isSuperAdmin = false;
+    me = null;
+    settings = null;
+    users = [];
+    persons = [];
+    tags = [];
+    outlookConnections = [];
+    outlookStatus = null;
+    outlookError = null;
+    setToken(null);
+    void goto(getLoginRedirectPath(`${$page.url.pathname}${$page.url.search}`));
+  }
+
   $: wizardNeedsUsers = authed && isAdmin && users.length <= 1;
   $: wizardNeedsWeather = authed && !weatherLocation.trim();
   $: wizardNeedsBackground = authed && !settings?.background;
@@ -1433,50 +1449,23 @@
     });
 
     loadEdgeConfig();
-    const existing = getStoredToken();
-    if (existing) {
-      // Try to show identity immediately from token (useful with SW cache / slow backend)
-      const payload = decodeJwtPayload<any>(existing);
-      if (payload && (payload.email || payload.name || payload.sub)) {
-        const id = Number(payload.sub);
-        const email = String(payload.email || '');
-        const name = String(payload.name || payload.email || '');
-        const isAdminFromToken = Boolean(payload.isAdmin);
-        me = {
-          id: Number.isFinite(id) ? id : 0,
-          email,
-          name,
-          isAdmin: isAdminFromToken,
-          role: String(payload.role || (isAdminFromToken ? 'admin' : 'member')),
-          calendarId: payload.calendarId != null ? Number(payload.calendarId) : null
-        };
-      }
-      try {
-        me = await fetchMe();
-        authed = true;
-        isAdmin = !!me.isAdmin;
-        isSuperAdmin = !!me.isSuperAdmin;
-
-        await refreshSettings();
-        await refreshTags();
-        await refreshUsers();
-        await refreshPersons();
-        await refreshOutlook();
-        await refreshHueStatus();
-      } catch {
-        authed = false;
-        isAdmin = false;
-        isSuperAdmin = false;
-        me = null;
-        users = [];
-        persons = [];
-      }
-    } else {
-      authed = false;
-      isAdmin = false;
-      isSuperAdmin = false;
-      me = null;
+    const sessionUser = await resolveStoredUser();
+    if (!sessionUser) {
+      redirectToLogin();
+      return;
     }
+
+    me = sessionUser;
+    authed = true;
+    isAdmin = !!sessionUser.isAdmin;
+    isSuperAdmin = !!sessionUser.isSuperAdmin;
+
+    await refreshSettings();
+    await refreshTags();
+    await refreshUsers();
+    await refreshPersons();
+    await refreshOutlook();
+    await refreshHueStatus();
   });
 
   async function saveWeatherLocation() {

@@ -17,7 +17,6 @@
     fetchOutlookStatus,
     fetchSettings,
     fetchTodos,
-    getStoredToken,
     listOutlookConnections,
     listPersons,
     listTags,
@@ -28,6 +27,7 @@
     type TagColorKey,
     type TagDto
   } from '$lib/api';
+  import { getLoginRedirectPath, resolveStoredUser } from '$lib/auth';
   import { daysForMonthGrid, formatGermanDayLabel, formatMonthTitle, startOfDay, endOfDay, sameDay } from '$lib/date';
 
   type ViewMode = 'agenda' | 'week' | 'month';
@@ -1022,16 +1022,16 @@
     if (newAllDay) {
       startAt = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0);
     } else {
-      const st = parseTime(newStartTime);
-      if (!st) {
+      const startTime = parseTime(newStartTime);
+      if (!startTime) {
         createError = 'Startzeit fehlt.';
         return;
       }
-      startAt = toLocalDateTime(d, st);
+      startAt = toLocalDateTime(d, startTime);
 
-      const et = parseTime(newEndTime);
-      if (et) {
-        endAt = toLocalDateTime(d, et);
+      const endTime = parseTime(newEndTime);
+      if (endTime) {
+        endAt = toLocalDateTime(d, endTime);
         if (endAt.getTime() <= startAt.getTime()) {
           createError = 'Ende muss nach Start liegen.';
           return;
@@ -1130,46 +1130,46 @@
   $: anyModalOpen = quickAddOpen || scribbleModalOpen || editOpen || openEvent !== null || todoCreateOpen;
 
   onMount(() => {
-    if (!getStoredToken()) {
-      void goto(`/login?next=${encodeURIComponent('/planner')}`);
-      return;
-    }
-
-    try {
-      plannerDefaultView = loadPlannerDefaultView();
-      view = plannerDefaultView;
-
-      // Mobile default in week planner: start with 3-day view (3T).
-      if (window.matchMedia('(max-width: 767px)').matches) {
-        weekSpan = 3;
-      }
-    } catch {
-      // ignore viewport detection errors
-    }
-
-    // One-time teaser animation for the mobile dock launcher
-    try {
-      const isMobile = window.matchMedia('(max-width: 767px)').matches;
-      const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-      const key = 'dashbo-planner-fab-teaser-seen';
-      const seen = localStorage.getItem(key) === '1';
-      if (isMobile && !reduceMotion && !seen) {
-        localStorage.setItem(key, '1');
-        window.setTimeout(() => {
-          if (anyModalOpen) return;
-          fabDockOpen = true;
-          window.setTimeout(() => {
-            fabDockOpen = false;
-          }, 1200);
-        }, 600);
-      }
-    } catch {
-      // ignore teaser if storage/matchMedia unavailable
-    }
-
-    metaLoading = true;
-    metaError = null;
     void (async () => {
+      if (!(await resolveStoredUser())) {
+        await goto(getLoginRedirectPath('/planner'));
+        return;
+      }
+
+      try {
+        plannerDefaultView = loadPlannerDefaultView();
+        view = plannerDefaultView;
+
+        // Mobile default in week planner: start with 3-day view (3T).
+        if (window.matchMedia('(max-width: 767px)').matches) {
+          weekSpan = 3;
+        }
+      } catch {
+        // ignore viewport detection errors
+      }
+
+      // One-time teaser animation for the mobile dock launcher
+      try {
+        const isMobile = window.matchMedia('(max-width: 767px)').matches;
+        const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        const key = 'dashbo-planner-fab-teaser-seen';
+        const seen = localStorage.getItem(key) === '1';
+        if (isMobile && !reduceMotion && !seen) {
+          localStorage.setItem(key, '1');
+          window.setTimeout(() => {
+            if (anyModalOpen) return;
+            fabDockOpen = true;
+            window.setTimeout(() => {
+              fabDockOpen = false;
+            }, 1200);
+          }, 600);
+        }
+      } catch {
+        // ignore teaser if storage/matchMedia unavailable
+      }
+
+      metaLoading = true;
+      metaError = null;
       try {
         const [s, t, p, outlookSt] = await Promise.all([
           fetchSettings(),

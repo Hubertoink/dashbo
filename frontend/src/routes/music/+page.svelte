@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onDestroy, onMount } from 'svelte';
   import { goto } from '$app/navigation';
-  import { getStoredToken } from '$lib/api';
+  import { getLoginRedirectPath, resolveStoredUser } from '$lib/auth';
   import {
     edgeFetchJson,
     getEdgeBaseUrlFromStorage,
@@ -482,14 +482,16 @@
   }
 
   onMount(() => {
-    if (!getStoredToken()) {
-      void goto('/login');
-      return;
-    }
+    void (async () => {
+      if (!(await resolveStoredUser())) {
+        await goto(getLoginRedirectPath('/music'));
+        return;
+      }
 
-    mounted = true;
-    loadPlaylist();
-    void loadStatusAndAlbums();
+      mounted = true;
+      loadPlaylist();
+      void loadStatusAndAlbums();
+    })();
   });
 
   onDestroy(() => {

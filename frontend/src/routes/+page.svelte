@@ -35,7 +35,6 @@
     type TagColorKey,
     fetchSettings,
     fetchOutlookStatus,
-    getStoredToken,
     dismissRecurringSuggestion
   } from '$lib/api';
   import { daysForMonthGrid } from '$lib/date';
@@ -44,6 +43,7 @@
   import { musicPlayerState } from '$lib/stores/musicPlayer';
   import { heosPlaybackStatus } from '$lib/stores/heosPlayback';
   import { clockStyleClasses, normalizeClockStyle, type ClockStyle } from '$lib/clockStyle';
+  import { getLoginRedirectPath, resolveStoredUser } from '$lib/auth';
 
   let selectedDate = new Date();
   let monthAnchor = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1);
@@ -1120,27 +1120,27 @@
   }
 
   onMount(() => {
-    if (!getStoredToken()) {
-      void goto('/login');
-      return;
-    }
-
-    loadLocalWidgetToggles();
-
-    loadNewsFromCache();
-
-    void loadEvents();
-
-    // Auto-refresh events; holidays only on explicit refresh/manual reload.
-    const startRefreshInterval = () => {
-      if (dataRefreshInterval) clearInterval(dataRefreshInterval);
-      dataRefreshInterval = setInterval(() => {
-        void loadEvents({ includeHolidays: false });
-      }, Math.max(5_000, Number(dataRefreshMs) || 60_000));
-    };
-
-    startRefreshInterval();
     void (async () => {
+      if (!(await resolveStoredUser())) {
+        await goto(getLoginRedirectPath('/'));
+        return;
+      }
+
+      loadLocalWidgetToggles();
+
+      loadNewsFromCache();
+
+      void loadEvents();
+
+      // Auto-refresh events; holidays only on explicit refresh/manual reload.
+      const startRefreshInterval = () => {
+        if (dataRefreshInterval) clearInterval(dataRefreshInterval);
+        dataRefreshInterval = setInterval(() => {
+          void loadEvents({ includeHolidays: false });
+        }, Math.max(5_000, Number(dataRefreshMs) || 60_000));
+      };
+
+      startRefreshInterval();
       try {
         const s = await fetchSettings();
         clockStyle = normalizeClockStyle((s as any)?.clockStyle);
