@@ -822,13 +822,13 @@
 <!-- Planner Panel -->
 <div
   class={`fixed inset-0 z-50 flex flex-col backdrop-blur-2xl ${tone === 'dark' ? 'wp-tone-dark bg-white/62 text-zinc-900' : 'wp-tone-light bg-black/70 text-white'}`}
+  style="padding-top: max(env(safe-area-inset-top), env(titlebar-area-height, 0px)); padding-bottom: env(safe-area-inset-bottom);"
   in:fly={{ y: 40, duration: 280, opacity: 0 }}
   out:fly={{ y: 30, duration: 180, opacity: 0 }}
 >
   <!-- Header -->
   <div
     class={`flex items-center justify-between px-4 py-2 border-b ${tone === 'dark' ? 'border-black/12' : 'border-white/10'}`}
-    style="padding-top: calc(0.5rem + env(safe-area-inset-top));"
     in:fade={{ duration: 200, delay: 80 }}
   >
     <button
