@@ -119,6 +119,10 @@
     return yyyymmddLocal(s) !== yyyymmddLocal(end);
   }
 
+  function startsOnDay(e: EventDto, day: Date) {
+    return sameDay(startOfLocalDay(new Date(e.startAt)), startOfLocalDay(day));
+  }
+
   let eventsByDay: Map<string, EventDto[]> = new Map();
   $: {
     const m = new Map<string, EventDto[]>();
@@ -402,7 +406,7 @@
               {@const inMonth = d.getMonth() === monthAnchor.getMonth()}
               {@const isToday = sameDay(d, new Date())}
               {@const dayEvents = eventsByDay.get(dateKey(d)) ?? []}
-              {@const singleDayEvents = dayEvents.filter((ev) => !isMultiDay(ev))}
+              {@const visibleEventBadges = dayEvents.filter((ev) => !isMultiDay(ev) || startsOnDay(ev, d))}
               {@const dayHolidays = holidaysByDay.get(dateKey(d)) ?? []}
               {@const daySuggestions = suggestionsByDay.get(dateKey(d)) ?? []}
 
@@ -420,11 +424,11 @@
                 <div class="text-xl lg:text-3xl font-semibold leading-none">{d.getDate()}</div>
 
                 <!-- Pill badges below date number, stacked vertically -->
-                {#if singleDayEvents.length > 0 || dayHolidays.length > 0 || daySuggestions.length > 0}
+                {#if visibleEventBadges.length > 0 || dayHolidays.length > 0 || daySuggestions.length > 0}
                   {@const MAX_PILLS = 3}
                   {@const allBadgeItems = [
                     ...dayHolidays.map(h => ({ type: 'holiday' as const, title: h.title, colorClass: '', colorStyle: '' })),
-                    ...singleDayEvents.map(ev => {
+                    ...visibleEventBadges.map(ev => {
                       const p0 = (ev.persons && ev.persons.length > 0 ? ev.persons[0] : ev.person) ?? null;
                       const bgClass = ev.tag
                         ? isTagColorKey(ev.tag.color) ? pillBg[ev.tag.color] : isHexColor(ev.tag.color) ? '' : 'bg-white/20'
