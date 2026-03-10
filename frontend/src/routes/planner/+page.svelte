@@ -42,6 +42,7 @@
     buildPlannerTodoCreateInputs,
     canSubmitPlannerQuickAdd,
     createPlannerQuickAddDefaults,
+    parseDateInputValue,
     parseQuarterHourTime,
     roundToNextHalfHourTime,
     toDateInputValue,
@@ -346,6 +347,11 @@
 
   function formatDayTitle(d: Date): string {
     return d.toLocaleDateString('de-DE', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' });
+  }
+
+  function formatQuickAddDateLabel(dateStr: string): string {
+    const d = parseDateInputValue(dateStr) ?? selectedDate;
+    return d.toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long' });
   }
 
   function formatTime(d: Date): string {
@@ -798,6 +804,18 @@
     // Prefetch week too so switching is instant
     void refreshWeek();
   }
+
+  $: if (quickAddOpen && newAllDay && newDate) {
+    if (!newEndDate || newEndDate < newDate) {
+      newEndDate = newDate;
+    }
+  }
+
+  $: if (quickAddOpen && !newAllDay && newEndDate === newDate) {
+    newEndDate = '';
+  }
+
+  $: quickAddDateLabel = formatQuickAddDateLabel(newDate || toDateInputValue(selectedDate));
 
   // Build a map of suggestions by day key for quick lookup
   let agendaSuggestionsByDay = new Map<string, PlannerSuggestionDto[]>();
@@ -1952,7 +1970,21 @@
           </svg>
         </button>
 
-        <h2 class="text-lg font-semibold text-white">Neuer Termin</h2>
+        <div class="text-center">
+          <h2 class="text-lg font-semibold text-white">Neuer Termin</h2>
+          <label class="relative inline-flex cursor-pointer items-center gap-2 text-sm text-white/60 transition hover:text-white/85">
+            <input
+              type="date"
+              bind:value={newDate}
+              class="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+              aria-label="Datum"
+            />
+            <span>{quickAddDateLabel}</span>
+            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+          </label>
+        </div>
 
         <div class="w-10"></div>
       </div>
@@ -1980,12 +2012,9 @@
         </div>
 
         <div class="grid grid-cols-2 gap-3">
-          <input
-            class="h-12 px-4 rounded-xl bg-white/10 border-0 text-sm"
-            type="date"
-            bind:value={newDate}
-          />
-
+          <div class="h-12 px-4 rounded-xl bg-white/10 border-0 text-sm flex items-center text-white/70">
+            {quickAddDateLabel}
+          </div>
           <label class="h-12 px-4 rounded-xl bg-white/10 border-0 text-sm flex items-center gap-2 text-white/80">
             <input type="checkbox" class="rounded bg-white/10 border-0" bind:checked={newAllDay} />
             Ganztägig
@@ -1993,13 +2022,24 @@
         </div>
 
         {#if newAllDay}
-          <div class="relative">
-            <span class="absolute left-4 top-1 text-[10px] text-white/50 uppercase tracking-wide">Bis</span>
-            <input
-              class="h-12 w-full px-4 pt-4 rounded-xl bg-white/10 border-0 text-sm"
-              type="date"
-              bind:value={newEndDate}
-            />
+          <div class="grid grid-cols-2 gap-3">
+            <div class="relative">
+              <span class="absolute left-4 top-1 text-[10px] text-white/50 uppercase tracking-wide">Von</span>
+              <input
+                class="h-12 w-full px-4 pt-4 rounded-xl bg-white/10 border-0 text-sm"
+                type="date"
+                bind:value={newDate}
+              />
+            </div>
+            <div class="relative">
+              <span class="absolute left-4 top-1 text-[10px] text-white/50 uppercase tracking-wide">Bis</span>
+              <input
+                class="h-12 w-full px-4 pt-4 rounded-xl bg-white/10 border-0 text-sm"
+                type="date"
+                bind:value={newEndDate}
+                min={newDate}
+              />
+            </div>
           </div>
         {/if}
 

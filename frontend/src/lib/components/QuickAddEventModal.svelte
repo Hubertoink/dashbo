@@ -34,6 +34,9 @@
   let title = '';
   let location = '';
   let description = '';
+  let startDateStr = '';
+  let endDateStr = '';
+  let mirroredAllDayEndDateStr = '';
   let startTime = '12:00';
   let endTime = '';
   let allDay = false;
@@ -211,6 +214,9 @@
     if (key !== lastPrefillKey) {
       lastPrefillKey = key;
       if (prefillTitle != null) title = String(prefillTitle);
+      startDateStr = yyyymmddLocal(prefilledDate);
+      endDateStr = '';
+      mirroredAllDayEndDateStr = '';
       const st = normalizeHhMm(prefillStartTime);
       if (st) startTime = st;
       const et = normalizeHhMm(prefillEndTime);
@@ -235,6 +241,9 @@
     title = '';
     location = '';
     description = '';
+    startDateStr = yyyymmddLocal(prefilledDate);
+    endDateStr = '';
+    mirroredAllDayEndDateStr = '';
     startTime = '12:00';
     endTime = '';
     allDay = false;
@@ -335,15 +344,27 @@
     return c.displayName || c.email || `Outlook ${c.id}`;
   }
 
+  function formatDateLabel(dateStr: string): string {
+    const [y, mo, da] = dateStr.split('-').map((x) => Number(x));
+    const d = new Date(y || 1970, (mo || 1) - 1, da || 1);
+    return d.toLocaleDateString('de-DE', {
+      weekday: 'long',
+      day: 'numeric',
+      month: 'long'
+    });
+  }
+
   async function submit() {
     if (!title.trim() || saving) return;
     saving = true;
     haptic(15);
 
     try {
-      const dateStr = yyyymmddLocal(prefilledDate);
+      const dateStr = startDateStr || yyyymmddLocal(prefilledDate);
+      const allDayEndDateStr = endDateStr || dateStr;
+
       const startAtIso = allDay ? toIsoFromDateStr(dateStr, '00:00') : toIsoFromDateStr(dateStr, startTime);
-      const endAtIso = allDay ? endOfDayIso(dateStr) : (endTime ? toIsoFromDateStr(dateStr, endTime) : null);
+      const endAtIso = allDay ? endOfDayIso(allDayEndDateStr) : (endTime ? toIsoFromDateStr(dateStr, endTime) : null);
 
       await createEvent({
         title: title.trim(),
@@ -407,15 +428,29 @@
     }
   }
 
-  $: dateLabel = prefilledDate.toLocaleDateString('de-DE', {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'long'
-  });
+  $: if (open && !startDateStr) {
+    startDateStr = yyyymmddLocal(prefilledDate);
+  }
+
+  $: if (open && allDay && startDateStr) {
+    if (!endDateStr || endDateStr === mirroredAllDayEndDateStr || endDateStr < startDateStr) {
+      endDateStr = startDateStr;
+    }
+    mirroredAllDayEndDateStr = startDateStr;
+  }
+
+  $: if (open && !allDay) {
+    if (endDateStr === startDateStr) {
+      endDateStr = '';
+    }
+    mirroredAllDayEndDateStr = '';
+  }
+
+  $: dateLabel = formatDateLabel(startDateStr || yyyymmddLocal(prefilledDate));
 
   // Keep ToDo due date in sync with the selected event date until the user edits it.
   $: if (open && todoDueAutofill) {
-    todoDueDateStr = yyyymmddLocal(prefilledDate);
+    todoDueDateStr = startDateStr || yyyymmddLocal(prefilledDate);
   }
 </script>
 
@@ -442,7 +477,18 @@
       <div class="flex items-center justify-between px-4 py-3 border-b border-white/10">
         <div>
           <h2 id="quick-add-title" class="text-lg font-semibold">Neuer Termin</h2>
-          <p class="text-sm text-white/60">{dateLabel}</p>
+          <label class="relative inline-flex cursor-pointer items-center gap-2 text-sm text-white/60 transition hover:text-white/85">
+            <input
+              type="date"
+              bind:value={startDateStr}
+              class="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+              aria-label="Datum"
+            />
+            <span>{dateLabel}</span>
+            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+          </label>
         </div>
         <button
           type="button"
@@ -499,6 +545,32 @@
             </div>
           {/if}
         </div>
+
+        {#if allDay}
+          <div class="sm:col-span-2">
+            <div class="text-xs text-white/50 mb-2">Datum</div>
+            <div class="flex items-center gap-2">
+              <div class="flex-1 min-w-0">
+                <div class="mb-1 text-[10px] uppercase tracking-wide text-white/40">Von</div>
+                <input
+                  type="date"
+                  bind:value={startDateStr}
+                  class="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-sm focus:outline-none focus:ring-2 focus:ring-white/30"
+                />
+              </div>
+              <span class="pt-4 text-white/40 shrink-0">–</span>
+              <div class="flex-1 min-w-0">
+                <div class="mb-1 text-[10px] uppercase tracking-wide text-white/40">Bis</div>
+                <input
+                  type="date"
+                  bind:value={endDateStr}
+                  min={startDateStr}
+                  class="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-sm focus:outline-none focus:ring-2 focus:ring-white/30"
+                />
+              </div>
+            </div>
+          </div>
+        {/if}
 
         <!-- Location -->
         <div>

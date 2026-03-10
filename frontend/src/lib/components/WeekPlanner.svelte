@@ -826,10 +826,14 @@
   out:fly={{ y: 30, duration: 180, opacity: 0 }}
 >
   <!-- Header -->
-  <div class={`flex items-center justify-between px-4 py-2 border-b ${tone === 'dark' ? 'border-black/12' : 'border-white/10'}`} in:fade={{ duration: 200, delay: 80 }}>
+  <div
+    class={`flex items-center justify-between px-4 py-2 border-b ${tone === 'dark' ? 'border-black/12' : 'border-white/10'}`}
+    style="padding-top: calc(0.5rem + env(safe-area-inset-top));"
+    in:fade={{ duration: 200, delay: 80 }}
+  >
     <button
       type="button"
-      class={`h-10 w-10 rounded-xl active:scale-95 transition grid place-items-center text-lg ${tone === 'dark' ? 'bg-black/8 hover:bg-black/12' : 'bg-white/10 hover:bg-white/15'}`}
+      class={`h-11 w-11 rounded-xl active:scale-95 transition grid place-items-center text-lg ${tone === 'dark' ? 'bg-black/8 hover:bg-black/12' : 'bg-white/10 hover:bg-white/15'}`}
       on:click={onBack}
       aria-label="Zurück"
     >
@@ -839,7 +843,7 @@
     <div class="flex items-center gap-3">
       <button
         type="button"
-        class={`h-10 w-10 rounded-xl active:scale-95 transition grid place-items-center text-xl ${tone === 'dark' ? 'bg-black/8 hover:bg-black/12' : 'bg-white/10 hover:bg-white/15'}`}
+        class={`h-11 w-11 rounded-xl active:scale-95 transition grid place-items-center text-xl ${tone === 'dark' ? 'bg-black/8 hover:bg-black/12' : 'bg-white/10 hover:bg-white/15'}`}
         on:click={() => shiftWeek(-1)}
         aria-label="Vorherige Woche"
       >
@@ -855,7 +859,7 @@
 
       <button
         type="button"
-        class={`h-10 w-10 rounded-xl active:scale-95 transition grid place-items-center text-xl ${tone === 'dark' ? 'bg-black/8 hover:bg-black/12' : 'bg-white/10 hover:bg-white/15'}`}
+        class={`h-11 w-11 rounded-xl active:scale-95 transition grid place-items-center text-xl ${tone === 'dark' ? 'bg-black/8 hover:bg-black/12' : 'bg-white/10 hover:bg-white/15'}`}
         on:click={() => shiftWeek(1)}
         aria-label="Nächste Woche"
       >
@@ -864,7 +868,7 @@
 
       <button
         type="button"
-        class={`h-10 px-3 rounded-xl text-sm font-medium transition active:scale-95 ${
+        class={`h-11 px-3 rounded-xl text-sm font-medium transition active:scale-95 ${
           isCurrentWeek
             ? tone === 'dark'
               ? 'bg-black/8 hover:bg-black/12 text-zinc-700/80'
@@ -880,7 +884,7 @@
     </div>
 
     <!-- Spacer for balance -->
-    <div class="w-10"></div>
+    <div class="w-11"></div>
   </div>
 
   <!-- Week Grid -->
