@@ -435,7 +435,7 @@
 
                 <!-- Pill badges below date number, stacked vertically -->
                 {#if visibleEventBadges.length > 0 || dayHolidays.length > 0 || daySuggestions.length > 0}
-                  {@const MAX_PILLS = 3}
+                  {@const MAX_PILLS = numLanes >= 2 ? 1 : numLanes === 1 ? 2 : 3}
                   {@const allBadgeItems = [
                     ...dayHolidays.map(h => ({ type: 'holiday' as const, title: h.title, colorClass: '', colorStyle: '' })),
                     ...visibleEventBadges.map(ev => {
