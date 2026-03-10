@@ -103,6 +103,9 @@
     endCol: number; // 1..7
     colorClass: string;
     colorStyle?: string;
+    title: string;
+    isStart: boolean;
+    isEnd: boolean;
   };
 
   function yyyymmddLocal(d: Date) {
@@ -220,15 +223,17 @@
         const endCol = endIdx + 1;
         const colorClass = e.tag
           ? isHexColor(e.tag.color)
-            ? 'bg-transparent'
-            : dotBg[e.tag.color as TagColorKey] ?? 'bg-white/25'
+            ? ''
+            : pillBg[e.tag.color as TagColorKey] ?? 'bg-white/20'
           : p0
-            ? dotBg[p0.color as TagColorKey] ?? 'bg-white/25'
-            : 'bg-white/25';
-        const colorStyle = e.tag && isHexColor(e.tag.color) ? `background-color: ${e.tag.color};` : undefined;
+            ? pillBg[p0.color as TagColorKey] ?? 'bg-white/20'
+            : 'bg-white/20';
+        const colorStyle = e.tag && isHexColor(e.tag.color) ? `background-color: ${e.tag.color}66;` : undefined;
         const key = e.occurrenceId ?? `${e.id}:${e.startAt}`;
+        const isStart = sameDay(segStart, s);
+        const isEnd = sameDay(segEnd, end);
 
-        segments.push({ key, startCol, endCol, colorClass, colorStyle });
+        segments.push({ key, startCol, endCol, colorClass, colorStyle, title: e.title, isStart, isEnd });
       }
 
       // Greedy lane assignment (max 2 lanes) to avoid overlaps in the same week
@@ -255,6 +260,10 @@
 
     return out;
   })();
+
+  $: weekLaneCount = weekSegments.map(lanes =>
+    (lanes[1]?.length ?? 0) > 0 ? 2 : (lanes[0]?.length ?? 0) > 0 ? 1 : 0
+  );
 
   // Track slide direction for animation: 1 = forward (right to left), -1 = backward (left to right)
   let slideDirection = 1;
@@ -406,13 +415,14 @@
               {@const inMonth = d.getMonth() === monthAnchor.getMonth()}
               {@const isToday = sameDay(d, new Date())}
               {@const dayEvents = eventsByDay.get(dateKey(d)) ?? []}
-              {@const visibleEventBadges = dayEvents.filter((ev) => !isMultiDay(ev) || startsOnDay(ev, d))}
+              {@const visibleEventBadges = dayEvents.filter((ev) => !isMultiDay(ev))}
               {@const dayHolidays = holidaysByDay.get(dateKey(d)) ?? []}
               {@const daySuggestions = suggestionsByDay.get(dateKey(d)) ?? []}
+              {@const numLanes = weekLaneCount[wi] ?? 0}
 
               <button
                 type="button"
-                class={`relative h-full min-h-[58px] lg:min-h-[72px] rounded-xl lg:rounded-2xl text-left px-2 lg:px-3 py-1.5 lg:py-2 transition flex flex-col justify-start overflow-hidden
+                class={`relative h-full min-h-[58px] lg:min-h-[72px] rounded-xl lg:rounded-2xl text-left px-2 lg:px-3 ${numLanes >= 2 ? 'pt-[36px] lg:pt-[46px]' : numLanes === 1 ? 'pt-[20px] lg:pt-[26px]' : 'pt-1.5 lg:pt-2'} pb-1.5 lg:pb-2 transition flex flex-col justify-start overflow-hidden
                   ${inMonth ? 'text-white' : 'text-white/35'}
                   ${isSelected ? 'bg-white/15' : 'bg-white/0 hover:bg-white/10 active:bg-white/15'}
                   ${isToday ? 'ring-2 ring-inset ring-white/30' : ''}
@@ -483,28 +493,38 @@
             {/each}
           </div>
 
-          <!-- Multi-day bars (up to 2 lanes) - positioned above day number -->
+          <!-- Multi-day bars (up to 2 lanes) -->
           {#if (weekSegments[wi]?.[0]?.length ?? 0) > 0}
-            <div class="pointer-events-none absolute inset-x-0 top-[3px] lg:top-[6px] px-4 lg:px-8 z-0">
+            <div class="pointer-events-none absolute inset-x-0 top-[4px] lg:top-[6px] px-4 lg:px-8 z-20">
               <div class="grid grid-cols-7 gap-2 lg:gap-4">
                 {#each weekSegments[wi]?.[0] ?? [] as seg (seg.key)}
                   <div
-                    class={`h-1 lg:h-1.5 rounded-full ${seg.colorClass} opacity-70`}
+                    class={`h-[14px] lg:h-[18px] flex items-center overflow-hidden ${seg.isStart && seg.isEnd ? 'rounded-full' : seg.isStart ? 'rounded-l-full' : seg.isEnd ? 'rounded-r-full' : ''} ${seg.colorClass}`}
                     style={`grid-column: ${seg.startCol} / ${seg.endCol + 1}; ${seg.colorStyle ?? ''}`}
-                  ></div>
+                    title={seg.title}
+                  >
+                    {#if seg.isStart}
+                      <span class="text-[8px] lg:text-[10px] font-semibold text-white/90 truncate leading-none whitespace-nowrap pl-1.5 lg:pl-2 pr-1">{seg.title}</span>
+                    {/if}
+                  </div>
                 {/each}
               </div>
             </div>
           {/if}
 
           {#if (weekSegments[wi]?.[1]?.length ?? 0) > 0}
-            <div class="pointer-events-none absolute inset-x-0 top-[8px] lg:top-[13px] px-4 lg:px-8 z-0">
+            <div class="pointer-events-none absolute inset-x-0 top-[20px] lg:top-[26px] px-4 lg:px-8 z-20">
               <div class="grid grid-cols-7 gap-2 lg:gap-4">
                 {#each weekSegments[wi]?.[1] ?? [] as seg (seg.key)}
                   <div
-                    class={`h-1 lg:h-1.5 rounded-full ${seg.colorClass} opacity-60`}
+                    class={`h-[14px] lg:h-[18px] flex items-center overflow-hidden ${seg.isStart && seg.isEnd ? 'rounded-full' : seg.isStart ? 'rounded-l-full' : seg.isEnd ? 'rounded-r-full' : ''} ${seg.colorClass} opacity-90`}
                     style={`grid-column: ${seg.startCol} / ${seg.endCol + 1}; ${seg.colorStyle ?? ''}`}
-                  ></div>
+                    title={seg.title}
+                  >
+                    {#if seg.isStart}
+                      <span class="text-[8px] lg:text-[10px] font-semibold text-white/90 truncate leading-none whitespace-nowrap pl-1.5 lg:pl-2 pr-1">{seg.title}</span>
+                    {/if}
+                  </div>
                 {/each}
               </div>
             </div>
