@@ -393,7 +393,7 @@
   </div>
 
   <div class="px-4 lg:px-8">
-    <div class="grid grid-cols-7 gap-2 lg:gap-4 text-white/70">
+    <div class="grid grid-cols-7 gap-1.5 lg:gap-3 text-white/70">
       {#each weekDays as d}
         <div class="px-1.5 lg:px-3 text-xs lg:text-base font-semibold">{formatGermanDayLabel(d)}</div>
       {/each}
@@ -403,13 +403,13 @@
   <div class="px-4 lg:px-8 pt-3 lg:pt-4 flex-1 min-h-0 overflow-hidden relative">
     {#key monthKey}
     <div
-      class="absolute inset-0 h-full min-h-0 grid grid-rows-6 gap-2 lg:gap-4"
+      class="absolute inset-0 h-full min-h-0 grid grid-rows-6 gap-1 lg:gap-1.5"
       in:fly={{ x: slideDirection * 50, duration: 200 }}
       out:fly|local={{ x: slideDirection * -50, duration: 180 }}
     >
       {#each weeks as week, wi}
         <div class="relative min-h-0">
-          <div class="relative z-10 grid grid-cols-7 gap-2 lg:gap-4 h-full">
+          <div class="relative z-10 grid grid-cols-7 gap-1.5 lg:gap-3 h-full">
             {#each week as d}
               {@const isSelected = sameDay(d, selected)}
               {@const inMonth = d.getMonth() === monthAnchor.getMonth()}
@@ -422,7 +422,7 @@
 
               <button
                 type="button"
-                class={`relative h-full min-h-[58px] lg:min-h-[72px] rounded-xl lg:rounded-2xl text-left px-2 lg:px-3 ${numLanes >= 2 ? 'pt-[36px] lg:pt-[46px]' : numLanes === 1 ? 'pt-[20px] lg:pt-[26px]' : 'pt-1.5 lg:pt-2'} pb-1.5 lg:pb-2 transition flex flex-col justify-start overflow-hidden
+                class={`relative h-full min-h-[48px] lg:min-h-[60px] rounded-xl lg:rounded-2xl text-left px-2 lg:px-3 pt-1.5 lg:pt-2 pb-1 lg:pb-1.5 transition flex flex-col justify-start overflow-hidden
                   ${inMonth ? 'text-white' : 'text-white/35'}
                   ${isSelected ? 'bg-white/15' : 'bg-white/0 hover:bg-white/10 active:bg-white/15'}
                   ${isToday ? 'ring-2 ring-inset ring-white/30' : ''}
@@ -430,12 +430,12 @@
                 `}
                 on:click={() => onSelect(new Date(d))}
               >
-                <!-- Day number -->
-                <div class="text-xl lg:text-3xl font-semibold leading-none">{d.getDate()}</div>
+                <!-- Day number (z-0, multi-day bars overlay with transparency) -->
+                <div class="text-xl lg:text-3xl font-semibold leading-none relative" style="text-shadow: 0 1px 3px rgba(0,0,0,0.5);">{d.getDate()}</div>
 
                 <!-- Pill badges below date number, stacked vertically -->
                 {#if visibleEventBadges.length > 0 || dayHolidays.length > 0 || daySuggestions.length > 0}
-                  {@const MAX_PILLS = numLanes >= 2 ? 1 : numLanes === 1 ? 2 : 3}
+                  {@const MAX_PILLS = numLanes >= 2 ? 2 : 3}
                   {@const allBadgeItems = [
                     ...dayHolidays.map(h => ({ type: 'holiday' as const, title: h.title, colorClass: '', colorStyle: '' })),
                     ...visibleEventBadges.map(ev => {
@@ -450,7 +450,7 @@
                   ]}
                   {@const visibleBadges = allBadgeItems.slice(0, MAX_PILLS)}
                   {@const overflow = allBadgeItems.length - MAX_PILLS}
-                  <div class="mt-0.5 lg:mt-1 flex flex-col gap-0.5 lg:gap-[3px] min-w-0 overflow-hidden">
+                  <div class="mt-0.5 flex flex-col gap-[2px] lg:gap-0.5 min-w-0 overflow-hidden">
                     {#each visibleBadges as badge, i}
                       {#if badge.type === 'holiday'}
                         <div class="h-[14px] lg:h-[18px] rounded-full border border-white/50 bg-white/0 px-1.5 lg:px-2 flex items-center self-start max-w-full" title={badge.title}>
@@ -495,11 +495,11 @@
 
           <!-- Multi-day bars (up to 2 lanes) -->
           {#if (weekSegments[wi]?.[0]?.length ?? 0) > 0}
-            <div class="pointer-events-none absolute inset-x-0 top-[4px] lg:top-[6px] px-4 lg:px-8 z-20">
-              <div class="grid grid-cols-7 gap-2 lg:gap-4">
+            <div class="pointer-events-none absolute inset-x-0 top-[2px] lg:top-[4px] px-4 lg:px-8 z-20">
+              <div class="grid grid-cols-7 gap-1.5 lg:gap-3">
                 {#each weekSegments[wi]?.[0] ?? [] as seg (seg.key)}
                   <div
-                    class={`h-[14px] lg:h-[18px] flex items-center overflow-hidden ${seg.isStart && seg.isEnd ? 'rounded-full' : seg.isStart ? 'rounded-l-full' : seg.isEnd ? 'rounded-r-full' : ''} ${seg.colorClass}`}
+                    class={`h-[14px] lg:h-[18px] flex items-center overflow-hidden backdrop-blur-[1px] ${seg.isStart && seg.isEnd ? 'rounded-full' : seg.isStart ? 'rounded-l-full' : seg.isEnd ? 'rounded-r-full' : ''} ${seg.colorClass}`}
                     style={`grid-column: ${seg.startCol} / ${seg.endCol + 1}; ${seg.colorStyle ?? ''}`}
                     title={seg.title}
                   >
@@ -513,11 +513,11 @@
           {/if}
 
           {#if (weekSegments[wi]?.[1]?.length ?? 0) > 0}
-            <div class="pointer-events-none absolute inset-x-0 top-[20px] lg:top-[26px] px-4 lg:px-8 z-20">
-              <div class="grid grid-cols-7 gap-2 lg:gap-4">
+            <div class="pointer-events-none absolute inset-x-0 top-[18px] lg:top-[24px] px-4 lg:px-8 z-20">
+              <div class="grid grid-cols-7 gap-1.5 lg:gap-3">
                 {#each weekSegments[wi]?.[1] ?? [] as seg (seg.key)}
                   <div
-                    class={`h-[14px] lg:h-[18px] flex items-center overflow-hidden ${seg.isStart && seg.isEnd ? 'rounded-full' : seg.isStart ? 'rounded-l-full' : seg.isEnd ? 'rounded-r-full' : ''} ${seg.colorClass} opacity-90`}
+                    class={`h-[14px] lg:h-[18px] flex items-center overflow-hidden backdrop-blur-[1px] ${seg.isStart && seg.isEnd ? 'rounded-full' : seg.isStart ? 'rounded-l-full' : seg.isEnd ? 'rounded-r-full' : ''} ${seg.colorClass} opacity-90`}
                     style={`grid-column: ${seg.startCol} / ${seg.endCol + 1}; ${seg.colorStyle ?? ''}`}
                     title={seg.title}
                   >
