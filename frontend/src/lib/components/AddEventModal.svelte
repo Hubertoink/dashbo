@@ -411,6 +411,16 @@
     return c.label;
   }
 
+  function formatDateLabel(dateStr: string): string {
+    const [y, mo, da] = dateStr.split('-').map((x) => Number(x));
+    const d = new Date(y || 1970, (mo || 1) - 1, da || 1);
+    return d.toLocaleDateString('de-DE', {
+      weekday: 'long',
+      day: 'numeric',
+      month: 'long'
+    });
+  }
+
   function togglePerson(id: number) {
     if (personIds.includes(id)) {
       personIds = personIds.filter(p => p !== id);
@@ -567,11 +577,7 @@
     }
   }
 
-  $: dateLabel = selectedDate.toLocaleDateString('de-DE', {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'long'
-  });
+  $: dateLabel = formatDateLabel(startDateStr || yyyymmddLocal(selectedDate));
 
   // Keep ToDo due date in sync with the selected event date until the user edits it.
   $: if (open && todoDueAutofill) {
@@ -604,14 +610,25 @@
       <div class="flex items-center justify-between px-4 py-3 border-b border-white/10 shrink-0">
         <div>
           <h2 id="add-event-title" class="text-lg font-semibold">{eventToEdit ? 'Termin bearbeiten' : 'Neuer Termin'}</h2>
-          <p class="text-sm text-white/60">
-            {dateLabel}
+          <div class="flex flex-wrap items-center gap-2 text-sm text-white/60">
+            <label class="relative inline-flex cursor-pointer items-center gap-2 transition hover:text-white/85">
+              <input
+                type="date"
+                bind:value={startDateStr}
+                class="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                aria-label="Datum"
+              />
+              <span>{dateLabel}</span>
+              <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
+            </label>
             {#if eventToEdit && eventToEdit.recurrence?.freq}
-              <span class="ml-2 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs border border-white/10 bg-white/5 text-white/70">
+              <span class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs border border-white/10 bg-white/5 text-white/70">
                 {editScope === 'occurrence' ? 'Nur dieses Serienelement' : 'Serie'}
               </span>
             {/if}
-          </p>
+          </div>
           {#if eventToEdit && eventToEdit.recurrence?.freq && editScope !== 'occurrence'}
             <p class="mt-1 text-xs text-white/45">Änderungen betreffen alle Termine der Serie.</p>
           {/if}
