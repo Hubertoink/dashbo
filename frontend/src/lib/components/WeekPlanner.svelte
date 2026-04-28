@@ -42,15 +42,20 @@
   let quickAddDate = new Date();
 
   let quickAddPrefillTitle: string | null = null;
+  let quickAddPrefillLocation: string | null = null;
+  let quickAddPrefillDescription: string | null = null;
   let quickAddPrefillStartTime: string | null = null;
   let quickAddPrefillEndTime: string | null = null;
   let quickAddPrefillAllDay: boolean | null = null;
   let quickAddPrefillPersonIds: number[] | null = null;
   let quickAddPrefillTagId: number | null = null;
+  let quickAddAcceptedSuggestionKey: string | null = null;
 
   function openQuickAdd(day: Date) {
     quickAddDate = day;
     quickAddPrefillTitle = null;
+    quickAddPrefillLocation = null;
+    quickAddPrefillDescription = null;
     // If caller passes a Date with a time (e.g. click position in the grid), prefill that time.
     const mins = minutesSinceMidnight(day);
     quickAddPrefillStartTime = mins > 0 ? hhmmFromMinutes(bucket15(mins)) : null;
@@ -58,28 +63,35 @@
     quickAddPrefillAllDay = null;
     quickAddPrefillPersonIds = null;
     quickAddPrefillTagId = null;
+    quickAddAcceptedSuggestionKey = null;
     quickAddOpen = true;
   }
 
   function openQuickAddRange(start: Date, end: Date) {
     quickAddDate = start;
     quickAddPrefillTitle = null;
+    quickAddPrefillLocation = null;
+    quickAddPrefillDescription = null;
     quickAddPrefillStartTime = hhmmFromMinutes(bucket15(minutesSinceMidnight(start)));
     quickAddPrefillEndTime = hhmmFromMinutes(bucket15(minutesSinceMidnight(end)));
     quickAddPrefillAllDay = false;
     quickAddPrefillPersonIds = null;
     quickAddPrefillTagId = null;
+    quickAddAcceptedSuggestionKey = null;
     quickAddOpen = true;
   }
 
   function openQuickAddAllDay(day: Date) {
     quickAddDate = day;
     quickAddPrefillTitle = null;
+    quickAddPrefillLocation = null;
+    quickAddPrefillDescription = null;
     quickAddPrefillStartTime = null;
     quickAddPrefillEndTime = null;
     quickAddPrefillAllDay = true;
     quickAddPrefillPersonIds = null;
     quickAddPrefillTagId = null;
+    quickAddAcceptedSuggestionKey = null;
     quickAddOpen = true;
   }
 
@@ -90,6 +102,8 @@
   type EventSuggestionDto = {
     suggestionKey: string;
     title: string;
+    description?: string | null;
+    location?: string | null;
     startAt: string;
     endAt: string | null;
     allDay: boolean;
@@ -397,6 +411,8 @@
         out.push({
           suggestionKey: sig,
           title: agg.sample.title,
+          description: agg.sample.description ?? null,
+          location: agg.sample.location ?? null,
           startAt: start.toISOString(),
           endAt: end ? end.toISOString() : null,
           allDay: false,
@@ -501,6 +517,8 @@
             out.push({
               suggestionKey: sig,
               title: e.title,
+              description: e.description ?? null,
+              location: e.location ?? null,
               startAt: isoNoonLocal(day),
               endAt: null,
               allDay: true,
@@ -542,6 +560,14 @@
   }
 
   function handleEventCreated() {
+    const acceptedSuggestionKey = quickAddAcceptedSuggestionKey;
+    if (acceptedSuggestionKey) {
+      dismissedSuggestionKeys = new Set([acceptedSuggestionKey, ...Array.from(dismissedSuggestionKeys)]);
+      suggestions = suggestions.filter((suggestion) => suggestion.suggestionKey !== acceptedSuggestionKey);
+      suggestionsForWeekKey = '';
+      quickAddAcceptedSuggestionKey = null;
+      void dismissRecurringSuggestion(acceptedSuggestionKey);
+    }
     onEventsChanged();
     if (todoEnabled) void loadTodos();
   }
@@ -799,11 +825,14 @@
     const d = new Date(s.startAt);
     quickAddDate = d;
     quickAddPrefillTitle = s.title;
+    quickAddPrefillLocation = s.location ?? null;
+    quickAddPrefillDescription = s.description ?? null;
     quickAddPrefillStartTime = timeFromIso(s.startAt);
     quickAddPrefillEndTime = s.endAt ? timeFromIso(s.endAt) : '';
     quickAddPrefillAllDay = Boolean(s.allDay);
     quickAddPrefillPersonIds = (s.persons && s.persons.length > 0 ? s.persons : s.person ? [s.person] : []).map((p: PersonDto) => p.id);
     quickAddPrefillTagId = s.tag?.id ?? null;
+    quickAddAcceptedSuggestionKey = s.suggestionKey;
     quickAddOpen = true;
   }
 </script>
@@ -960,6 +989,8 @@
   {tone}
   prefilledDate={quickAddDate}
   prefillTitle={quickAddPrefillTitle}
+  prefillLocation={quickAddPrefillLocation}
+  prefillDescription={quickAddPrefillDescription}
   prefillStartTime={quickAddPrefillStartTime}
   prefillEndTime={quickAddPrefillEndTime}
   prefillAllDay={quickAddPrefillAllDay}

@@ -380,6 +380,8 @@
   let plannerOpen = false;
   let addEventPrefill: {
     title?: string;
+    description?: string | null;
+    location?: string | null;
     allDay?: boolean;
     startTime?: string;
     endTime?: string;
@@ -423,6 +425,8 @@
     const ps = (s.persons && s.persons.length > 0 ? s.persons : s.person ? [s.person] : []) as PersonDto[];
     addEventPrefill = {
       title: s.title,
+      description: s.description ?? null,
+      location: s.location ?? null,
       allDay: Boolean(s.allDay),
       startTime: s.startTime,
       endTime: s.endTime,
@@ -492,6 +496,18 @@
     addEventPrefillKey = null;
     editScope = 'series';
     editOccurrenceStartAt = null;
+  }
+
+  async function handleAddEventModalCreated() {
+    const acceptedSuggestionKey = addEventPrefillKey;
+    if (acceptedSuggestionKey) {
+      dismissedSuggestionKeys = new Set([acceptedSuggestionKey, ...Array.from(dismissedSuggestionKeys)]);
+      dashboardSuggestions = dashboardSuggestions.filter((suggestion) => suggestion.suggestionKey !== acceptedSuggestionKey);
+      void dismissRecurringSuggestion(acceptedSuggestionKey);
+    }
+
+    await loadEvents();
+    await loadDashboardSuggestions();
   }
 
   function setViewMode(next: 'month' | 'week') {
@@ -905,6 +921,14 @@
       const bucket15 = (mins: number) => Math.round(mins / 15) * 15;
       const minutesSinceMidnight = (d: Date) => d.getHours() * 60 + d.getMinutes();
       const isBirthdayEvent = (e: EventDto) => /\b(geburtstag|birthday)\b/i.test(normalizeTitle(e.title) + ' ' + normalizeTitle(e.tag?.name ?? ''));
+      const matchesSuggestedOccurrence = (eventItem: EventDto, dayDateKey: string, titleNorm: string, startBucket: number) => {
+        const eventStart = new Date(eventItem.startAt);
+        if (Number.isNaN(eventStart.getTime())) return false;
+        if (dateKey(eventStart) !== dayDateKey) return false;
+        if (normalizeTitle(eventItem.title) === titleNorm) return true;
+        if (eventItem.allDay) return false;
+        return bucket15(minutesSinceMidnight(eventStart)) === startBucket;
+      };
 
       // Filter candidates
       const candidates = (allEventsForAnalysis ?? []).filter((e) => {
@@ -980,8 +1004,7 @@
 
             // Check if event already exists on this day
             const hasExisting = (allEventsForAnalysis ?? []).some((ev) => {
-              const evStart = new Date(ev.startAt);
-              return dateKey(evStart) === dayDateKey && normalizeTitle(ev.title) === agg.titleNorm;
+              return matchesSuggestedOccurrence(ev, dayDateKey, agg.titleNorm, agg.startBucket);
             });
             if (hasExisting) continue;
 
@@ -1008,6 +1031,8 @@
             suggestions.push({
               suggestionKey: suggKey,
               title: agg.sample.title,
+              description: agg.sample.description ?? null,
+              location: agg.sample.location ?? null,
               date: new Date(day),
               allDay: false,
               startTime: hhmmFromMinutes(agg.startBucket),
@@ -1068,6 +1093,8 @@
             suggestions.push({
               suggestionKey: suggKey,
               title: e.title,
+              description: e.description ?? null,
+              location: e.location ?? null,
               date: new Date(day),
               allDay: true,
               tag: e.tag,
@@ -1980,7 +2007,7 @@
     prefill={addEventPrefill}
     prefillKey={addEventPrefillKey}
     onClose={closeAddEventModal}
-    onCreated={loadEvents}
+    onCreated={handleAddEventModalCreated}
   />
 
   <RecurringEditChoiceModal

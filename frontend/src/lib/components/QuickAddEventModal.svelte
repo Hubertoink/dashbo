@@ -18,6 +18,8 @@
   export let tone: 'light' | 'dark' = 'light';
   export let prefilledDate: Date;
   export let prefillTitle: string | null = null;
+  export let prefillLocation: string | null = null;
+  export let prefillDescription: string | null = null;
   export let prefillStartTime: string | null = null;
   export let prefillEndTime: string | null = null;
   export let prefillAllDay: boolean | null = null;
@@ -29,6 +31,7 @@
   export let onCreated: () => void;
 
   let titleInput: HTMLInputElement | null = null;
+  let headerDateInput: HTMLInputElement | null = null;
   let wasOpen = false;
 
   let title = '';
@@ -205,6 +208,8 @@
     const key = JSON.stringify({
       d: yyyymmddLocal(prefilledDate),
       t: prefillTitle ?? null,
+      loc: prefillLocation ?? null,
+      desc: prefillDescription ?? null,
       st: prefillStartTime ?? null,
       et: prefillEndTime ?? null,
       ad: prefillAllDay ?? null,
@@ -214,6 +219,8 @@
     if (key !== lastPrefillKey) {
       lastPrefillKey = key;
       if (prefillTitle != null) title = String(prefillTitle);
+      if (prefillLocation != null) location = String(prefillLocation);
+      if (prefillDescription != null) description = String(prefillDescription);
       startDateStr = yyyymmddLocal(prefilledDate);
       endDateStr = '';
       mirroredAllDayEndDateStr = '';
@@ -354,6 +361,21 @@
     });
   }
 
+  function openHeaderDatePicker() {
+    if (!headerDateInput) return;
+    const pickerInput = headerDateInput as HTMLInputElement & { showPicker?: () => void };
+    try {
+      if (typeof pickerInput.showPicker === 'function') {
+        pickerInput.showPicker();
+        return;
+      }
+    } catch {
+      // Fall back to focus/click for browsers without a stable showPicker path.
+    }
+    pickerInput.focus();
+    pickerInput.click();
+  }
+
   async function submit() {
     if (!title.trim() || saving) return;
     saving = true;
@@ -477,18 +499,28 @@
       <div class="flex items-center justify-between px-4 py-3 border-b border-white/10">
         <div>
           <h2 id="quick-add-title" class="text-lg font-semibold">Neuer Termin</h2>
-          <label class="relative inline-flex cursor-pointer items-center gap-2 text-sm text-white/60 transition hover:text-white/85">
+          <div class="relative inline-flex items-center text-sm text-white/60">
             <input
+              bind:this={headerDateInput}
               type="date"
               bind:value={startDateStr}
-              class="absolute inset-0 h-full w-full cursor-pointer opacity-0"
-              aria-label="Datum"
+              class="pointer-events-none absolute left-0 top-0 h-px w-px opacity-0"
+              tabindex="-1"
+              aria-hidden="true"
             />
-            <span>{dateLabel}</span>
-            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-            </svg>
-          </label>
+            <button
+              type="button"
+              class="-mx-2 inline-flex items-center gap-2 rounded-lg px-2 py-1 text-left transition hover:bg-white/5 hover:text-white/85 focus:outline-none focus:ring-2 focus:ring-white/20 active:bg-white/10"
+              aria-label="Datum ändern"
+              title="Datum ändern"
+              on:click={openHeaderDatePicker}
+            >
+              <span>{dateLabel}</span>
+              <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
+            </button>
+          </div>
         </div>
         <button
           type="button"

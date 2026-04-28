@@ -2,6 +2,8 @@
   export type DashboardSuggestionDto = {
     suggestionKey: string;
     title: string;
+    description?: string | null;
+    location?: string | null;
     date: Date;
     allDay: boolean;
     startTime?: string; // HH:MM (local)
@@ -20,6 +22,8 @@
   type DashboardSuggestionDto = {
     suggestionKey: string;
     title: string;
+    description?: string | null;
+    location?: string | null;
     date: Date;
     allDay: boolean;
     startTime?: string; // HH:MM (local)
@@ -106,6 +110,7 @@
     title: string;
     isStart: boolean;
     isEnd: boolean;
+    isOutlook: boolean;
   };
 
   function yyyymmddLocal(d: Date) {
@@ -233,7 +238,7 @@
         const isStart = sameDay(segStart, s);
         const isEnd = sameDay(segEnd, end);
 
-        segments.push({ key, startCol, endCol, colorClass, colorStyle, title: e.title, isStart, isEnd });
+        segments.push({ key, startCol, endCol, colorClass, colorStyle, title: e.title, isStart, isEnd, isOutlook: e.source === 'outlook' });
       }
 
       // Greedy lane assignment (max 2 lanes) to avoid overlaps in the same week
@@ -437,16 +442,16 @@
                 {#if visibleEventBadges.length > 0 || dayHolidays.length > 0 || daySuggestions.length > 0}
                   {@const MAX_PILLS = numLanes >= 2 ? 2 : 3}
                   {@const allBadgeItems = [
-                    ...dayHolidays.map(h => ({ type: 'holiday' as const, title: h.title, colorClass: '', colorStyle: '' })),
+                    ...dayHolidays.map(h => ({ type: 'holiday' as const, title: h.title, colorClass: '', colorStyle: '', source: null })),
                     ...visibleEventBadges.map(ev => {
                       const p0 = (ev.persons && ev.persons.length > 0 ? ev.persons[0] : ev.person) ?? null;
                       const bgClass = ev.tag
                         ? isTagColorKey(ev.tag.color) ? pillBg[ev.tag.color] : isHexColor(ev.tag.color) ? '' : 'bg-white/20'
                         : p0 ? pillBg[p0.color as TagColorKey] ?? 'bg-white/20' : 'bg-white/20';
                       const bgStyle = ev.tag && isHexColor(ev.tag.color) ? `background-color: ${ev.tag.color}44` : '';
-                      return { type: 'event' as const, title: ev.title, colorClass: bgClass, colorStyle: bgStyle };
+                      return { type: 'event' as const, title: ev.title, colorClass: bgClass, colorStyle: bgStyle, source: ev.source ?? 'dashbo' };
                     }),
-                    ...daySuggestions.map(sg => ({ type: 'suggestion' as const, title: sg.title, colorClass: 'bg-violet-500/30', colorStyle: '' }))
+                    ...daySuggestions.map(sg => ({ type: 'suggestion' as const, title: sg.title, colorClass: 'bg-violet-500/30', colorStyle: '', source: null }))
                   ]}
                   {@const visibleBadges = allBadgeItems.slice(0, MAX_PILLS)}
                   {@const overflow = allBadgeItems.length - MAX_PILLS}
@@ -464,18 +469,18 @@
                         {#if i === 0}
                           <!-- First event: full-width pill with truncated title -->
                           <div
-                            class={`h-[14px] lg:h-[18px] rounded-full px-1.5 lg:px-2 flex items-center self-start max-w-full ${badge.colorClass}`}
+                            class={`h-[14px] lg:h-[18px] rounded-full px-1.5 lg:px-2 flex items-center self-start max-w-full ${badge.colorClass} ${badge.source === 'outlook' ? 'border border-dashed border-cyan-200/60 ring-1 ring-inset ring-cyan-100/35' : ''}`}
                             style={badge.colorStyle}
-                            title={badge.title}
+                            title={badge.source === 'outlook' ? `Outlook · ${badge.title}` : badge.title}
                           >
                             <span class="text-[8px] lg:text-[10px] font-semibold text-white/90 truncate leading-none">{badge.title}</span>
                           </div>
                         {:else}
                           <!-- Additional events: smaller pill -->
                           <div
-                            class={`h-[12px] lg:h-[16px] rounded-full px-1.5 lg:px-2 flex items-center self-start max-w-full ${badge.colorClass}`}
+                            class={`h-[12px] lg:h-[16px] rounded-full px-1.5 lg:px-2 flex items-center self-start max-w-full ${badge.colorClass} ${badge.source === 'outlook' ? 'border border-dashed border-cyan-200/60 ring-1 ring-inset ring-cyan-100/35' : ''}`}
                             style={badge.colorStyle}
-                            title={badge.title}
+                            title={badge.source === 'outlook' ? `Outlook · ${badge.title}` : badge.title}
                           >
                             <span class="text-[7px] lg:text-[9px] font-semibold text-white/75 truncate leading-none">{badge.title}</span>
                           </div>
@@ -499,9 +504,9 @@
               <div class="grid grid-cols-7 gap-1.5 lg:gap-3">
                 {#each weekSegments[wi]?.[0] ?? [] as seg (seg.key)}
                   <div
-                    class={`h-[14px] lg:h-[18px] flex items-center overflow-hidden backdrop-blur-[1px] ${seg.isStart && seg.isEnd ? 'rounded-full' : seg.isStart ? 'rounded-l-full' : seg.isEnd ? 'rounded-r-full' : ''} ${seg.colorClass}`}
+                    class={`h-[14px] lg:h-[18px] flex items-center overflow-hidden backdrop-blur-[1px] ${seg.isStart && seg.isEnd ? 'rounded-full' : seg.isStart ? 'rounded-l-full' : seg.isEnd ? 'rounded-r-full' : ''} ${seg.colorClass} ${seg.isOutlook ? 'border border-dashed border-cyan-200/60 ring-1 ring-inset ring-cyan-100/35' : ''}`}
                     style={`grid-column: ${seg.startCol} / ${seg.endCol + 1}; ${seg.colorStyle ?? ''}`}
-                    title={seg.title}
+                    title={seg.isOutlook ? `Outlook · ${seg.title}` : seg.title}
                   >
                     {#if seg.isStart}
                       <span class="text-[8px] lg:text-[10px] font-semibold text-white/90 truncate leading-none whitespace-nowrap pl-1.5 lg:pl-2 pr-1">{seg.title}</span>
@@ -517,9 +522,9 @@
               <div class="grid grid-cols-7 gap-1.5 lg:gap-3">
                 {#each weekSegments[wi]?.[1] ?? [] as seg (seg.key)}
                   <div
-                    class={`h-[14px] lg:h-[18px] flex items-center overflow-hidden backdrop-blur-[1px] ${seg.isStart && seg.isEnd ? 'rounded-full' : seg.isStart ? 'rounded-l-full' : seg.isEnd ? 'rounded-r-full' : ''} ${seg.colorClass} opacity-90`}
+                    class={`h-[14px] lg:h-[18px] flex items-center overflow-hidden backdrop-blur-[1px] ${seg.isStart && seg.isEnd ? 'rounded-full' : seg.isStart ? 'rounded-l-full' : seg.isEnd ? 'rounded-r-full' : ''} ${seg.colorClass} opacity-90 ${seg.isOutlook ? 'border border-dashed border-cyan-200/60 ring-1 ring-inset ring-cyan-100/35' : ''}`}
                     style={`grid-column: ${seg.startCol} / ${seg.endCol + 1}; ${seg.colorStyle ?? ''}`}
-                    title={seg.title}
+                    title={seg.isOutlook ? `Outlook · ${seg.title}` : seg.title}
                   >
                     {#if seg.isStart}
                       <span class="text-[8px] lg:text-[10px] font-semibold text-white/90 truncate leading-none whitespace-nowrap pl-1.5 lg:pl-2 pr-1">{seg.title}</span>

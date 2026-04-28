@@ -768,6 +768,7 @@
   function acceptSuggestion(s: PlannerSuggestionDto) {
     // Prefill the quick add form with suggestion data
     newTitle = s.title;
+    newLocation = s.location ?? '';
     newDate = toDateInputValue(s.date);
     newEndDate = '';
     newAllDay = s.allDay;

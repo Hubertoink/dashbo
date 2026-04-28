@@ -9,6 +9,8 @@
   type EventSuggestionDto = {
     suggestionKey: string;
     title: string;
+    description?: string | null;
+    location?: string | null;
     startAt: string;
     endAt: string | null;
     allDay: boolean;
@@ -168,6 +170,10 @@
     return ps.map((p) => ({ name: p.name, color: p.color }));
   }
 
+  function isOutlookEvent(eventItem: EventDto): boolean {
+    return eventItem.source === 'outlook';
+  }
+
   function suggestionBaseColor(s: EventSuggestionDto): string | null {
     const tagColor = s.tag?.color;
     if (tagColor && typeof tagColor === 'string') return tagColor;
@@ -255,6 +261,7 @@
   let deleting = false;
 
   function requestDelete(event: EventDto) {
+    if (isOutlookEvent(event)) return;
     deleteConfirmEvent = event;
   }
 
@@ -541,6 +548,7 @@
   }
 
   function startDrag(e: PointerEvent, event: EventDto, tileEl: HTMLElement) {
+    if (isOutlookEvent(event)) return;
     if (dragSaving) return;
     const rect = tileEl.getBoundingClientRect();
     dragOffsetX = e.clientX - rect.left;
@@ -968,30 +976,41 @@
             {#each allDayEvents as e (e.occurrenceId ?? `${e.id}:${e.startAt}`)}
               {@const color = eventBaseColor(e)}
               {@const cont = isContinuation(e, day)}
+              {@const isOutlook = isOutlookEvent(e)}
               <div class="relative">
                 <button
                   type="button"
-                  class={`w-full text-left rounded-lg px-2 py-1.5 pr-9 border text-xs transition active:scale-[0.99] ${eventTileBgClass(color)} ${cont ? 'border-dashed opacity-90' : ''}`}
+                  class={`w-full text-left rounded-lg px-2 py-1.5 border text-xs transition active:scale-[0.99] ${eventTileBgClass(color)} ${cont ? 'border-dashed opacity-90' : ''} ${isOutlook ? 'pr-2 cursor-default border-dashed border-cyan-200/60 ring-1 ring-inset ring-cyan-100/35' : 'pr-9'}`}
                   style={eventTileStyle(color)}
-                  on:click|stopPropagation={() => onEditEvent(e)}
+                  title={isOutlook ? 'Outlook · Nur Ansicht' : 'Termin bearbeiten'}
+                  on:click|stopPropagation={() => {
+                    if (!isOutlook) onEditEvent(e);
+                  }}
                 >
-                  <div class="truncate font-medium">{e.title}</div>
+                  <div class="flex items-center gap-1.5 min-w-0">
+                    <span class="truncate font-medium">{e.title}</span>
+                    {#if isOutlook}
+                      <span class="shrink-0 rounded-full border border-cyan-300/30 bg-cyan-400/10 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-cyan-100/90">Outlook</span>
+                    {/if}
+                  </div>
                 </button>
-                <button
-                  type="button"
-                  class="absolute top-1 right-1 h-6 w-6 rounded-md bg-white/5 hover:bg-white/10 active:bg-white/15 transition grid place-items-center text-white/60 hover:text-rose-300"
-                  aria-label="Termin löschen"
-                  title="Löschen"
-                  on:click|stopPropagation={() => requestDelete(e)}
-                >
-                  <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                    <path
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                    />
-                  </svg>
-                </button>
+                {#if !isOutlook}
+                  <button
+                    type="button"
+                    class="absolute top-1 right-1 h-6 w-6 rounded-md bg-white/5 hover:bg-white/10 active:bg-white/15 transition grid place-items-center text-white/60 hover:text-rose-300"
+                    aria-label="Termin löschen"
+                    title="Löschen"
+                    on:click|stopPropagation={() => requestDelete(e)}
+                  >
+                    <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                      <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                      />
+                    </svg>
+                  </button>
+                {/if}
               </div>
             {/each}
 
@@ -1154,6 +1173,7 @@
             {@const color = eventBaseColor(e)}
             {@const ePersons = eventPersons(e)}
             {@const isCompact = seg.colCount > 1}
+            {@const isOutlook = isOutlookEvent(e)}
             {@const isDragging = dragEvent?.id === e.id && (dragMoving || dragDropping)}
             <div
               class={`absolute px-0.5 ${isDragging ? 'opacity-0 pointer-events-none' : ''}`}
@@ -1163,19 +1183,22 @@
                 <!-- svelte-ignore a11y_no_static_element_interactions a11y_click_events_have_key_events -->
                 <div
                   data-event-tile="1"
-                  class={`w-full h-full text-left rounded-xl px-2 py-1 border text-xs leading-tight overflow-hidden cursor-grab select-none touch-none ${eventTileBgClass(color)} ${seg.isContinuation ? 'border-dashed opacity-90' : ''} ${isCompact ? '' : 'pr-9'} ${dragSaving && dragEvent?.id === e.id ? 'animate-pulse' : ''}`}
+                  class={`w-full h-full text-left rounded-xl px-2 py-1 border text-xs leading-tight overflow-hidden select-none touch-none ${eventTileBgClass(color)} ${seg.isContinuation ? 'border-dashed opacity-90' : ''} ${isOutlook ? 'cursor-default border-dashed border-cyan-200/60 ring-1 ring-inset ring-cyan-100/35' : 'cursor-grab'} ${isCompact || isOutlook ? '' : 'pr-9'} ${dragSaving && dragEvent?.id === e.id ? 'animate-pulse' : ''}`}
                   style={eventTileStyle(color)}
+                  title={isOutlook ? 'Outlook · Nur Ansicht' : 'Termin bearbeiten oder ziehen'}
                   role="button"
                   tabindex="0"
-                  on:pointerdown={(ev) => startDrag(ev, e, ev.currentTarget as HTMLElement)}
+                  on:pointerdown={(ev) => {
+                    if (!isOutlook) startDrag(ev, e, ev.currentTarget as HTMLElement);
+                  }}
                   on:pointermove={moveDrag}
                   on:pointerup={endDrag}
                   on:pointercancel={cancelDrag}
                   on:click|stopPropagation={() => {
-                    if (!dragMoving) onEditEvent(e);
+                    if (!dragMoving && !isOutlook) onEditEvent(e);
                   }}
                   on:keydown={(ev) => {
-                    if (ev.key === 'Enter' || ev.key === ' ') {
+                    if (!isOutlook && (ev.key === 'Enter' || ev.key === ' ')) {
                       ev.preventDefault();
                       onEditEvent(e);
                     }
@@ -1187,7 +1210,12 @@
                     <div class="text-[10px] text-white/60 whitespace-nowrap mt-0.5">{fmtTimeRange(e.startAt, e.endAt)}</div>
                   {:else}
                     <!-- Full mode: title + time + location + persons -->
-                    <div class="font-semibold truncate min-w-0">{e.title}</div>
+                    <div class="flex items-center gap-1.5 min-w-0">
+                      <span class="font-semibold truncate min-w-0">{e.title}</span>
+                      {#if isOutlook}
+                        <span class="shrink-0 rounded-full border border-cyan-300/30 bg-cyan-400/10 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-cyan-100/90">Outlook</span>
+                      {/if}
+                    </div>
                     <div class="text-[10px] text-white/60 whitespace-nowrap mt-0.5">{fmtTimeRange(e.startAt, e.endAt)}</div>
                     {#if e.location}
                       <div class="text-[10px] text-white/50 truncate">📍 {e.location}</div>
@@ -1198,7 +1226,7 @@
                   {/if}
                 </div>
 
-                {#if !isCompact && !isDragging}
+                {#if !isCompact && !isDragging && !isOutlook}
                   <button
                     type="button"
                     class="absolute top-1 right-1 h-7 w-7 rounded-lg bg-white/5 hover:bg-white/10 active:bg-white/15 transition grid place-items-center text-white/60 hover:text-rose-300"

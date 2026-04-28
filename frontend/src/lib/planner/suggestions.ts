@@ -2,6 +2,7 @@ import type { EventDto, PersonDto } from '$lib/api';
 
 export type PlannerSuggestionDto = {
   title: string;
+  location: string | null;
   date: Date;
   startTime: string | null;
   endTime: string | null;
@@ -108,6 +109,15 @@ export function generatePlannerSuggestions(events: EventDto[], dismissedSuggesti
   const result: PlannerSuggestionDto[] = [];
   const addedKeys = new Set<string>();
 
+  function matchesSuggestedOccurrence(eventItem: EventDto, dayDateKey: string, titleNorm: string, startBucket: number): boolean {
+    const eventStart = new Date(eventItem.startAt);
+    if (Number.isNaN(eventStart.getTime())) return false;
+    if (dateKey(eventStart) !== dayDateKey) return false;
+    if (normalizeTitle(eventItem.title) === titleNorm) return true;
+    if (eventItem.allDay) return false;
+    return bucket15(minutesSinceMidnight(eventStart)) === startBucket;
+  }
+
   for (const [sig, agg] of weeklyAgg) {
     for (const day of upcomingDays) {
       const dayStart = startOfLocalDay(day);
@@ -129,8 +139,7 @@ export function generatePlannerSuggestions(events: EventDto[], dismissedSuggesti
       if (addedKeys.has(suggKey) || dismissedSet.has(suggKey)) continue;
 
       const hasExisting = (events ?? []).some((ev) => {
-        const evStart = new Date(ev.startAt);
-        return dateKey(evStart) === dayDateKey && normalizeTitle(ev.title) === agg.titleNorm;
+        return matchesSuggestedOccurrence(ev, dayDateKey, agg.titleNorm, agg.startBucket);
       });
       if (hasExisting) continue;
 
@@ -157,6 +166,7 @@ export function generatePlannerSuggestions(events: EventDto[], dismissedSuggesti
       const persons = getPlannerEventPersons(agg.sample);
       result.push({
         title: agg.sample.title,
+        location: agg.sample.location ?? null,
         date: new Date(dayStart),
         allDay: false,
         startTime: hhmmFromMinutes(agg.startBucket),

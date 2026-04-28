@@ -30,6 +30,8 @@
   export let prefill:
     | {
         title?: string;
+        description?: string | null;
+        location?: string | null;
         allDay?: boolean;
         startTime?: string;
         endTime?: string;
@@ -51,6 +53,7 @@
   let personIds: number[] = [];
   let recurrence: 'weekly' | 'monthly' | null = null;
   let saving = false;
+  let headerDateInput: HTMLInputElement | null = null;
 
   // Optional ToDos created alongside the event (new events only)
   let todoError: string | null = null;
@@ -275,6 +278,8 @@
       if (prefillKey && prefillKey !== prefilledForKey) {
         prefilledForKey = prefillKey;
         if (prefill?.title != null) title = prefill.title;
+        if (prefill?.description != null) description = prefill.description;
+        if (prefill?.location != null) location = prefill.location;
         if (typeof prefill?.allDay === 'boolean') allDay = prefill.allDay;
         if (prefill?.startTime) startTime = prefill.startTime;
         if (prefill?.endTime != null) endTime = prefill.endTime;
@@ -419,6 +424,21 @@
       day: 'numeric',
       month: 'long'
     });
+  }
+
+  function openHeaderDatePicker() {
+    if (!headerDateInput) return;
+    const pickerInput = headerDateInput as HTMLInputElement & { showPicker?: () => void };
+    try {
+      if (typeof pickerInput.showPicker === 'function') {
+        pickerInput.showPicker();
+        return;
+      }
+    } catch {
+      // Fall back to the native focus/click path below.
+    }
+    pickerInput.focus();
+    pickerInput.click();
   }
 
   function togglePerson(id: number) {
@@ -611,18 +631,28 @@
         <div>
           <h2 id="add-event-title" class="text-lg font-semibold">{eventToEdit ? 'Termin bearbeiten' : 'Neuer Termin'}</h2>
           <div class="flex flex-wrap items-center gap-2 text-sm text-white/60">
-            <label class="relative inline-flex cursor-pointer items-center gap-2 transition hover:text-white/85">
+            <div class="relative inline-flex items-center">
               <input
+                bind:this={headerDateInput}
                 type="date"
                 bind:value={startDateStr}
-                class="absolute inset-0 h-full w-full cursor-pointer opacity-0"
-                aria-label="Datum"
+                class="pointer-events-none absolute left-0 top-0 h-px w-px opacity-0"
+                tabindex="-1"
+                aria-hidden="true"
               />
-              <span>{dateLabel}</span>
-              <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-              </svg>
-            </label>
+              <button
+                type="button"
+                class="-mx-2 inline-flex items-center gap-2 rounded-lg px-2 py-1 text-left transition hover:bg-white/5 hover:text-white/85 focus:outline-none focus:ring-2 focus:ring-white/20 active:bg-white/10"
+                aria-label="Datum ändern"
+                title="Datum ändern"
+                on:click={openHeaderDatePicker}
+              >
+                <span>{dateLabel}</span>
+                <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+              </button>
+            </div>
             {#if eventToEdit && eventToEdit.recurrence?.freq}
               <span class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs border border-white/10 bg-white/5 text-white/70">
                 {editScope === 'occurrence' ? 'Nur dieses Serienelement' : 'Serie'}

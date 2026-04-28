@@ -32,6 +32,8 @@
 
   let editPromptFor: string | null = null;
   let editPromptTimer: ReturnType<typeof setTimeout> | null = null;
+  let readOnlyPromptFor: string | null = null;
+  let readOnlyPromptTimer: ReturnType<typeof setTimeout> | null = null;
 
   let searchOpen = false;
   let searchQuery = '';
@@ -142,7 +144,8 @@
       ? `${formatDateLabel(event.startAt)} · Ganztägig`
       : formatDateTimeLabel(event.startAt);
     const where = event.location ? ` · ${event.location}` : '';
-    return `${when}${where}`;
+    const source = event.source === 'outlook' ? 'Outlook · ' : '';
+    return `${source}${when}${where}`;
   }
 
   type SearchResultItem = {
@@ -269,11 +272,29 @@
   onDestroy(() => {
     if (hideTimer) clearTimeout(hideTimer);
     if (editPromptTimer) clearTimeout(editPromptTimer);
+    if (readOnlyPromptTimer) clearTimeout(readOnlyPromptTimer);
   });
 
-  function requestEdit(e: EventDto) {
-    if (e.source === 'outlook') return;
-    const key = e.occurrenceId ?? `${e.id}:${e.startAt}`;
+  function eventKey(eventItem: EventDto) {
+    return eventItem.occurrenceId ?? `${eventItem.id}:${eventItem.startAt}`;
+  }
+
+  function showReadOnlyPrompt(eventItem: EventDto) {
+    const key = eventKey(eventItem);
+    readOnlyPromptFor = key;
+    if (readOnlyPromptTimer) clearTimeout(readOnlyPromptTimer);
+    readOnlyPromptTimer = setTimeout(() => {
+      readOnlyPromptFor = null;
+      readOnlyPromptTimer = null;
+    }, 2500);
+  }
+
+  function requestEdit(eventItem: EventDto) {
+    if (eventItem.source === 'outlook') {
+      showReadOnlyPrompt(eventItem);
+      return;
+    }
+    const key = eventKey(eventItem);
 
     if (editPromptFor === key) {
       editPromptFor = null;
@@ -281,7 +302,7 @@
         clearTimeout(editPromptTimer);
         editPromptTimer = null;
       }
-      onEdit(e);
+      onEdit(eventItem);
       return;
     }
 
@@ -481,6 +502,7 @@
                           {:else}
                             Uhrzeit wie üblich
                           {/if}
+                          {#if s.location} · {s.location}{/if}
                           {#if s.tag} · {s.tag.name}{/if}
                           {#if ps.length > 0}
                             {' · '}
@@ -520,11 +542,19 @@
                 {#each dayEvents as e, idx}
                   {@const k = e.occurrenceId ?? `${e.id}:${e.startAt}`}
                   {@const isPrompt = editPromptFor === k}
+                  {@const isOutlook = e.source === 'outlook'}
+                  {@const isReadOnlyPrompt = readOnlyPromptFor === k}
                   {@const ps = e.persons && e.persons.length > 0 ? e.persons : e.person ? [e.person] : []}
                   {@const p0 = ps[0]}
                   <button
                     type="button"
-                    class="flex items-center gap-2 max-w-full text-left relative"
+                    class={`flex items-center gap-2 max-w-full text-left relative rounded-xl px-2 py-1 -mx-2 transition ${
+                      isOutlook
+                        ? 'border border-cyan-300/25 bg-cyan-500/10 cursor-default hover:bg-cyan-500/14'
+                        : 'hover:bg-white/5 active:bg-white/10'
+                    }`}
+                    title={isOutlook ? 'Aus Outlook synchronisiert, in Dashbo nur lesbar' : 'Zum Bearbeiten erneut anklicken'}
+                    aria-label={isOutlook ? `${e.title} - Outlook, nur Ansicht` : e.title}
                     on:click|stopPropagation={() => requestEdit(e)}
                     in:fly={{ y: 4, duration: 120 }}
                   >
@@ -547,9 +577,24 @@
                         </div>
                       {/if}
 
-                      <div class={isPrompt ? 'blur-sm' : ''}>
+                      {#if isReadOnlyPrompt}
+                        <div class="absolute left-0 top-0 z-10" in:fly={{ y: -4, duration: 140 }} out:fade={{ duration: 100 }}>
+                          <div class="px-3 py-1.5 rounded-xl bg-cyan-950/80 border border-cyan-300/25 backdrop-blur-md text-sm font-semibold text-cyan-100">Outlook · Nur Ansicht</div>
+                        </div>
+                      {/if}
+
+                      <div class={isPrompt || isReadOnlyPrompt ? 'blur-sm' : ''}>
                         <div class="flex items-center gap-1.5 min-w-0">
                           <span class="text-base md:text-lg font-semibold leading-tight truncate">{e.title}</span>
+                          {#if isOutlook}
+                            <span class="shrink-0 inline-flex items-center gap-1 rounded-full border border-cyan-300/30 bg-cyan-400/10 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-cyan-100/90">
+                              <svg class="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                <rect x="3" y="11" width="18" height="10" rx="2" />
+                                <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                              </svg>
+                              Outlook
+                            </span>
+                          {/if}
                           {#if e.recurrence?.freq}
                             <svg
                               class="shrink-0 text-white/50"
@@ -614,9 +659,11 @@
               {:else if searchResults.length > 0}
                 <div class="space-y-1">
                   {#each searchResults as item (item.key)}
+                    {@const isOutlookResult = item.event?.source === 'outlook'}
                     <button
                       type="button"
                       class={`w-full text-left rounded-xl px-3 py-2.5 transition ${tone === 'dark' ? 'hover:bg-zinc-100 active:bg-zinc-200' : 'hover:bg-white/10 active:bg-white/14'}`}
+                      title={isOutlookResult ? 'Outlook · Nur Ansicht' : undefined}
                       on:click={() => onSelectSearchResult(item)}
                     >
                       <div class="flex items-start gap-3">
@@ -627,6 +674,9 @@
                             <span class={`text-[10px] uppercase tracking-wide rounded-full px-2 py-0.5 border shrink-0 ${tone === 'dark' ? 'border-zinc-300 text-zinc-500' : 'border-white/20 text-white/65'}`}>
                               {item.kind === 'event' ? 'Termin' : 'Todo'}
                             </span>
+                            {#if isOutlookResult}
+                              <span class="text-[10px] uppercase tracking-wide rounded-full px-2 py-0.5 border border-cyan-300/35 bg-cyan-400/10 text-cyan-200/90 shrink-0">Outlook</span>
+                            {/if}
                           </div>
                           {#if item.subtitle}
                             <div class={`text-xs mt-0.5 line-clamp-1 ${tone === 'dark' ? 'text-zinc-500' : 'text-white/55'}`}>{item.subtitle}</div>
