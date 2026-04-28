@@ -36,11 +36,13 @@
   export let doCreateTag: () => void | Promise<void>;
   export let doCreateSuggestedTag: (name: string, color: TagColorKey) => void | Promise<void>;
   export let doDeleteTag: (id: number) => void | Promise<void>;
+  export let openTagEditor: (tag: TagDto) => void;
 
   export let choosePersonColor: (key: TagColorKey) => void;
   export let chooseCustomPersonColor: (hex: string) => void;
   export let doCreatePerson: () => void | Promise<void>;
   export let doDeletePerson: (id: number) => void | Promise<void>;
+  export let openPersonEditor: (person: PersonDto) => void;
 
   export let doOutlookConnect: () => void | Promise<void>;
   export let doOutlookDisconnect: () => void | Promise<void>;
@@ -152,6 +154,7 @@
       {doCreateTag}
       {doCreateSuggestedTag}
       {doDeleteTag}
+      {openTagEditor}
     />
 
     <PersonsSection
@@ -169,6 +172,7 @@
       {chooseCustomPersonColor}
       {doCreatePerson}
       {doDeletePerson}
+      {openPersonEditor}
     />
 
     <OutlookSection

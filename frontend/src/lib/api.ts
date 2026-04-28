@@ -411,6 +411,13 @@ export async function createTag(input: { name: string; color: string; sortOrder?
   return api<TagDto>('/tags', { method: 'POST', body: JSON.stringify(input) });
 }
 
+export async function updateTag(
+  id: number,
+  patch: { name?: string; color?: string; sortOrder?: number }
+): Promise<TagDto> {
+  return api<TagDto>(`/tags/${id}`, { method: 'PUT', body: JSON.stringify(patch) });
+}
+
 export async function deleteTag(id: number): Promise<void> {
   await api<void>(`/tags/${id}`, { method: 'DELETE' });
 }
@@ -421,6 +428,13 @@ export async function listPersons(): Promise<PersonDto[]> {
 
 export async function createPerson(input: { name: string; color: string; sortOrder?: number }): Promise<PersonDto> {
   return api<PersonDto>('/persons', { method: 'POST', body: JSON.stringify(input) });
+}
+
+export async function updatePerson(
+  id: number,
+  patch: { name?: string; color?: string; sortOrder?: number }
+): Promise<PersonDto> {
+  return api<PersonDto>(`/persons/${id}`, { method: 'PUT', body: JSON.stringify(patch) });
 }
 
 export async function deletePerson(id: number): Promise<void> {

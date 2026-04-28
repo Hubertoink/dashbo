@@ -22,6 +22,7 @@
   export let chooseCustomPersonColor: (hex: string) => void;
   export let doCreatePerson: () => void | Promise<void>;
   export let doDeletePerson: (id: number) => void | Promise<void>;
+  export let openPersonEditor: (person: PersonDto) => void;
 </script>
 
 <!-- Personen -->
@@ -86,14 +87,28 @@
 
     <div class="flex flex-wrap gap-2">
       {#each persons as p (p.id)}
-        <div class="flex items-center gap-2 bg-white/10 rounded-lg px-3 py-1.5 text-sm">
-          {#if isTagColorKey(p.color)}
-            <span class={`w-2.5 h-2.5 rounded-full ${colorBg[p.color]}`}></span>
-          {:else}
-            <span class="w-2.5 h-2.5 rounded-full" style={`background-color: ${p.color}`}></span>
-          {/if}
-          <span>{p.name}</span>
-          <button class="text-white/40 hover:text-white/70 ml-1" on:click={() => doDeletePerson(p.id)}>×</button>
+        <div class="inline-flex items-center overflow-hidden rounded-lg bg-white/10 text-sm">
+          <button
+            type="button"
+            class="flex items-center gap-2 px-3 py-1.5 text-left transition hover:bg-white/10"
+            on:click={() => openPersonEditor(p)}
+            aria-label={`${p.name} bearbeiten`}
+          >
+            {#if isTagColorKey(p.color)}
+              <span class={`w-2.5 h-2.5 rounded-full ${colorBg[p.color]}`}></span>
+            {:else}
+              <span class="w-2.5 h-2.5 rounded-full" style={`background-color: ${p.color}`}></span>
+            {/if}
+            <span>{p.name}</span>
+          </button>
+          <button
+            type="button"
+            class="self-stretch px-2 text-white/40 transition hover:bg-white/10 hover:text-white/70"
+            on:click|stopPropagation={() => doDeletePerson(p.id)}
+            aria-label={`${p.name} löschen`}
+          >
+            ×
+          </button>
         </div>
       {/each}
       {#if persons.length === 0}

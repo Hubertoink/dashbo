@@ -2,7 +2,7 @@ const express = require('express');
 const { z } = require('zod');
 
 const { requireAuth, attachUserContext } = require('../middleware/auth');
-const { listPersons, createPerson, deletePerson } = require('../services/personsService');
+const { listPersons, createPerson, updatePerson, deletePerson } = require('../services/personsService');
 
 const personsRouter = express.Router();
 
@@ -15,6 +15,14 @@ const createSchema = z.object({
   color: personColor,
   sortOrder: z.coerce.number().int().min(0).max(9999).optional(),
 });
+
+const updateSchema = z
+  .object({
+    name: z.string().trim().min(1).max(40).optional(),
+    color: personColor.optional(),
+    sortOrder: z.coerce.number().int().min(0).max(9999).optional(),
+  })
+  .strict();
 
 const idSchema = z.coerce.number().int().positive();
 
@@ -42,6 +50,17 @@ personsRouter.post('/', requireAuth, attachUserContext, validateBody(createSchem
   const userId = Number(req.ctx?.userId);
   const created = await createPerson({ calendarId, userId, ...req.validatedBody });
   res.status(201).json(created);
+});
+
+personsRouter.put('/:id', requireAuth, attachUserContext, validateBody(updateSchema), async (req, res) => {
+  const parsedId = idSchema.safeParse(req.params.id);
+  if (!parsedId.success) return res.status(400).json({ error: 'invalid_id' });
+
+  const calendarId = Number(req.ctx?.calendarId);
+  if (!Number.isFinite(calendarId) || calendarId <= 0) return res.status(400).json({ error: 'missing_calendar' });
+  const updated = await updatePerson({ calendarId, id: parsedId.data, patch: req.validatedBody });
+  if (!updated) return res.status(404).json({ error: 'not_found' });
+  res.json(updated);
 });
 
 personsRouter.delete('/:id', requireAuth, attachUserContext, async (req, res) => {

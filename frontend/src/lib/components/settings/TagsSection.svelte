@@ -24,6 +24,7 @@
   export let doCreateTag: () => void | Promise<void>;
   export let doCreateSuggestedTag: (name: string, color: TagColorKey) => void | Promise<void>;
   export let doDeleteTag: (id: number) => void | Promise<void>;
+  export let openTagEditor: (tag: TagDto) => void;
 
   const suggestedTags: Array<{ name: string; color: TagColorKey }> = [
     { name: 'Arbeit', color: 'sky' },
@@ -116,15 +117,30 @@
 
   <div class="flex flex-wrap gap-2">
     {#each tags as t (t.id)}
-      <div class="flex items-center gap-2 bg-white/10 rounded-lg px-3 py-1.5 text-sm">
-        {#if isTagColorKey(t.color)}
-          <span class={`w-2.5 h-2.5 rounded-full ${colorBg[t.color]}`}></span>
-        {:else}
-          <span class="w-2.5 h-2.5 rounded-full" style={`background-color: ${t.color}`}></span>
-        {/if}
-        <span>{t.name}</span>
+      <div class="inline-flex items-center overflow-hidden rounded-lg bg-white/10 text-sm">
+        <button
+          type="button"
+          class="flex items-center gap-2 px-3 py-1.5 text-left transition hover:bg-white/10 disabled:hover:bg-transparent"
+          on:click={() => openTagEditor(t)}
+          disabled={!authed}
+          aria-label={`${t.name} bearbeiten`}
+        >
+          {#if isTagColorKey(t.color)}
+            <span class={`w-2.5 h-2.5 rounded-full ${colorBg[t.color]}`}></span>
+          {:else}
+            <span class="w-2.5 h-2.5 rounded-full" style={`background-color: ${t.color}`}></span>
+          {/if}
+          <span>{t.name}</span>
+        </button>
         {#if authed}
-          <button class="text-white/40 hover:text-white/70 ml-1" on:click={() => doDeleteTag(t.id)}>×</button>
+          <button
+            type="button"
+            class="self-stretch px-2 text-white/40 transition hover:bg-white/10 hover:text-white/70"
+            on:click|stopPropagation={() => doDeleteTag(t.id)}
+            aria-label={`${t.name} löschen`}
+          >
+            ×
+          </button>
         {/if}
       </div>
     {/each}

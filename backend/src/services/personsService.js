@@ -38,10 +38,47 @@ async function createPerson({ calendarId, userId, name, color, sortOrder }) {
   return toPerson(result.rows[0]);
 }
 
+async function updatePerson({ calendarId, id, patch }) {
+  const pool = getPool();
+
+  const fields = [];
+  const values = [];
+
+  function add(field, value) {
+    values.push(value);
+    fields.push(`${field} = $${values.length}`);
+  }
+
+  if (patch.name !== undefined) add('name', patch.name);
+  if (patch.color !== undefined) add('color', patch.color);
+  if (patch.sortOrder !== undefined) add('sort_order', Number(patch.sortOrder) || 0);
+
+  if (fields.length === 0) {
+    const existing = await pool.query('SELECT * FROM persons WHERE id = $1 AND calendar_id = $2;', [id, calendarId]);
+    if (existing.rowCount === 0) return null;
+    return toPerson(existing.rows[0]);
+  }
+
+  add('updated_at', new Date().toISOString());
+
+  const result = await pool.query(
+    `
+    UPDATE persons
+    SET ${fields.join(', ')}
+    WHERE id = $${values.length + 1} AND calendar_id = $${values.length + 2}
+    RETURNING *;
+    `,
+    [...values, id, calendarId]
+  );
+
+  if (result.rowCount === 0) return null;
+  return toPerson(result.rows[0]);
+}
+
 async function deletePerson({ calendarId, id }) {
   const pool = getPool();
   const result = await pool.query('DELETE FROM persons WHERE id = $1 AND calendar_id = $2;', [id, calendarId]);
   return result.rowCount > 0;
 }
 
-module.exports = { listPersons, createPerson, deletePerson };
+module.exports = { listPersons, createPerson, updatePerson, deletePerson };

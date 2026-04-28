@@ -43,9 +43,11 @@
     setBackgroundRotateImages,
     listTags,
     createTag,
+    updateTag,
     deleteTag,
     listPersons,
     createPerson,
+    updatePerson,
     deletePerson,
     type SettingsDto,
     type UserDto,
@@ -95,6 +97,7 @@
   import EdgeSetupModal from '$lib/components/settings/EdgeSetupModal.svelte';
   import DeleteBackgroundModal from '$lib/components/settings/DeleteBackgroundModal.svelte';
   import FolderConfirmModal from '$lib/components/settings/FolderConfirmModal.svelte';
+  import CalendarItemEditModal from '$lib/components/settings/CalendarItemEditModal.svelte';
   import { getCanInstall, getIsInstalled, pwaPromptInstall, subscribe as pwaSubscribe } from '$lib/pwaInstall';
 
   let pwaCanInstall = false;
@@ -120,6 +123,11 @@
   let newPersonColor: PersonColorKey = 'cyan';
   let personError: string | null = null;
   let personColorMenuOpen = false;
+  let editingPerson: PersonDto | null = null;
+  let editingPersonName = '';
+  let editingPersonColor = 'cyan';
+  let editingPersonSaving = false;
+  let editingPersonError: string | null = null;
 
   let weatherLocation = '';
   let weatherSaving = false;
@@ -190,6 +198,11 @@
   let newTagColor: string = 'cyan';
   let tagError: string | null = null;
   let tagColorMenuOpen = false;
+  let editingTag: TagDto | null = null;
+  let editingTagName = '';
+  let editingTagColor = 'cyan';
+  let editingTagSaving = false;
+  let editingTagError: string | null = null;
 
   const colorBg: Record<TagColorKey, string> = {
     fuchsia: 'bg-fuchsia-500',
@@ -1226,6 +1239,51 @@
     tagColorMenuOpen = false;
   }
 
+  function openTagEditor(tag: TagDto) {
+    if (!authed) return;
+    editingTag = tag;
+    editingTagName = tag.name;
+    editingTagColor = tag.color || 'cyan';
+    editingTagError = null;
+  }
+
+  function closeTagEditor() {
+    if (editingTagSaving) return;
+    editingTag = null;
+    editingTagName = '';
+    editingTagColor = 'cyan';
+    editingTagError = null;
+  }
+
+  async function saveEditingTag() {
+    if (!authed || !editingTag || editingTagSaving) return;
+    const name = editingTagName.trim();
+    const color = editingTagColor.trim();
+    if (!name) {
+      editingTagError = 'Name darf nicht leer sein.';
+      return;
+    }
+    if (!isTagColorKey(color) && !isHexColor(color)) {
+      editingTagError = 'Ungültige Farbe.';
+      return;
+    }
+
+    editingTagSaving = true;
+    editingTagError = null;
+    try {
+      await updateTag(editingTag.id, { name, color });
+      editingTag = null;
+      editingTagName = '';
+      editingTagColor = 'cyan';
+      await refreshTags();
+      showToast('Tag gespeichert');
+    } catch {
+      editingTagError = 'Tag konnte nicht gespeichert werden.';
+    } finally {
+      editingTagSaving = false;
+    }
+  }
+
   function onGlobalClick() {
     tagColorMenuOpen = false;
     personColorMenuOpen = false;
@@ -1236,6 +1294,7 @@
     tagError = null;
     try {
       await deleteTag(id);
+      if (editingTag?.id === id) closeTagEditor();
       await refreshTags();
     } catch {
       tagError = 'Tag konnte nicht gelöscht werden.';
@@ -1439,10 +1498,56 @@
     personColorMenuOpen = false;
   }
 
+  function openPersonEditor(person: PersonDto) {
+    if (!authed) return;
+    editingPerson = person;
+    editingPersonName = person.name;
+    editingPersonColor = person.color || 'cyan';
+    editingPersonError = null;
+  }
+
+  function closePersonEditor() {
+    if (editingPersonSaving) return;
+    editingPerson = null;
+    editingPersonName = '';
+    editingPersonColor = 'cyan';
+    editingPersonError = null;
+  }
+
+  async function saveEditingPerson() {
+    if (!authed || !editingPerson || editingPersonSaving) return;
+    const name = editingPersonName.trim();
+    const color = editingPersonColor.trim();
+    if (!name) {
+      editingPersonError = 'Name darf nicht leer sein.';
+      return;
+    }
+    if (!isTagColorKey(color) && !isHexColor(color)) {
+      editingPersonError = 'Ungültige Farbe.';
+      return;
+    }
+
+    editingPersonSaving = true;
+    editingPersonError = null;
+    try {
+      await updatePerson(editingPerson.id, { name, color });
+      editingPerson = null;
+      editingPersonName = '';
+      editingPersonColor = 'cyan';
+      await refreshPersons();
+      showToast('Person gespeichert');
+    } catch {
+      editingPersonError = 'Person konnte nicht gespeichert werden.';
+    } finally {
+      editingPersonSaving = false;
+    }
+  }
+
   async function doDeletePerson(id: number) {
     personError = null;
     try {
       await deletePerson(id);
+      if (editingPerson?.id === id) closePersonEditor();
       await refreshPersons();
     } catch {
       personError = 'Person konnte nicht gelöscht werden.';
@@ -1748,10 +1853,12 @@
       {doCreateTag}
       {doCreateSuggestedTag}
       {doDeleteTag}
+      {openTagEditor}
       {choosePersonColor}
       {chooseCustomPersonColor}
       {doCreatePerson}
       {doDeletePerson}
+      {openPersonEditor}
       {doOutlookConnect}
       {doOutlookDisconnect}
       {doOutlookDisconnectConnection}
@@ -1920,3 +2027,33 @@
 <DeleteUserModal bind:deletingFor {doDeleteUser} />
 
 <EdgeSetupModal bind:edgeSetupOpen />
+
+<CalendarItemEditModal
+  open={Boolean(editingTag)}
+  title="Tag bearbeiten"
+  bind:name={editingTagName}
+  bind:color={editingTagColor}
+  saving={editingTagSaving}
+  error={editingTagError}
+  {colorBg}
+  {colorNames}
+  {isTagColorKey}
+  {isHexColor}
+  onSave={saveEditingTag}
+  onClose={closeTagEditor}
+/>
+
+<CalendarItemEditModal
+  open={Boolean(editingPerson)}
+  title="Person bearbeiten"
+  bind:name={editingPersonName}
+  bind:color={editingPersonColor}
+  saving={editingPersonSaving}
+  error={editingPersonError}
+  {colorBg}
+  {colorNames}
+  {isTagColorKey}
+  {isHexColor}
+  onSave={saveEditingPerson}
+  onClose={closePersonEditor}
+/>
