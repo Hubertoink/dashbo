@@ -1702,6 +1702,7 @@
           <div class={`${dashboardTextClasses} border-t border-white/10 ${dashboardGlassBlurEnabled ? 'glass-dashboard-blur' : 'glass-dashboard-flat'} h-full overflow-hidden`}>
             <EventsPanel
               {selectedDate}
+              {monthAnchor}
               {events}
               {holidays}
               {tone}

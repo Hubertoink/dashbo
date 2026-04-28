@@ -1,6 +1,6 @@
 ﻿<script lang="ts">
   import type { EventDto, HolidayDto, TagColorKey } from '$lib/api';
-  import { fetchTodos, type TodoItemDto } from '$lib/api';
+  import { fetchEvents, fetchTodos, type TodoItemDto } from '$lib/api';
   import type { DashboardSuggestionDto } from '$lib/components/CalendarMonth.svelte';
   import { fade, fly } from 'svelte/transition';
   import { onDestroy } from 'svelte';
@@ -17,6 +17,7 @@
   }
 
   export let selectedDate: Date;
+  export let monthAnchor: Date | null = null;
   export let events: EventDto[];
   export let holidays: HolidayDto[] = [];
   export let suggestions: DashboardSuggestionDto[] = [];
@@ -37,14 +38,28 @@
 
   let searchOpen = false;
   let searchQuery = '';
-  let searchBusy = false;
   let searchError: string | null = null;
   let searchInputEl: HTMLInputElement | null = null;
+  type SearchScope = 'global' | 'month';
+  let searchScope: SearchScope = 'global';
+  let todosSearchBusy = false;
+  let eventSearchBusy = false;
+  let eventSearchRequestId = 0;
+  let globalSearchEvents: EventDto[] = [];
+  let globalSearchEventsLoadedAt = 0;
+  let monthSearchEvents: EventDto[] = [];
+  let monthSearchEventsLoadedAt = 0;
+  let monthSearchEventsKey = '';
 
   let todosIndex: TodoItemDto[] = [];
   let todosLoadedAt = 0;
   const TODOS_INDEX_TTL_MS = 60_000;
+  const SEARCH_EVENTS_TTL_MS = 5 * 60_000;
+  const GLOBAL_SEARCH_PAST_YEARS = 5;
+  const GLOBAL_SEARCH_FUTURE_YEARS = 5;
   const SEARCH_MAX_RESULTS = 60;
+
+  $: searchBusy = todosSearchBusy || eventSearchBusy;
 
   $: isToday = sameDay(selectedDate, new Date());
   $: header = isToday ? 'HEUTE' : formatGermanShortDate(selectedDate);
@@ -65,9 +80,9 @@
 
   async function ensureTodosLoaded(force = false) {
     const fresh = !force && todosLoadedAt > 0 && Date.now() - todosLoadedAt < TODOS_INDEX_TTL_MS;
-    if (fresh || searchBusy) return;
+    if (fresh || todosSearchBusy) return;
 
-    searchBusy = true;
+    todosSearchBusy = true;
     searchError = null;
     try {
       const data = await fetchTodos();
@@ -76,15 +91,100 @@
     } catch (e: any) {
       searchError = e?.message ? String(e.message) : 'Todos konnten nicht geladen werden.';
     } finally {
-      searchBusy = false;
+      todosSearchBusy = false;
     }
+  }
+
+  function globalSearchRange() {
+    const now = new Date();
+    const start = new Date(now.getFullYear() - GLOBAL_SEARCH_PAST_YEARS, 0, 1);
+    start.setHours(0, 0, 0, 0);
+    const end = new Date(now.getFullYear() + GLOBAL_SEARCH_FUTURE_YEARS, 11, 31);
+    end.setHours(23, 59, 59, 999);
+    return { start, end };
+  }
+
+  function monthSearchRange() {
+    const anchor = monthAnchor ?? selectedDate;
+    const start = new Date(anchor.getFullYear(), anchor.getMonth(), 1);
+    start.setHours(0, 0, 0, 0);
+    const end = new Date(anchor.getFullYear(), anchor.getMonth() + 1, 0);
+    end.setHours(23, 59, 59, 999);
+    return { start, end, key: `${anchor.getFullYear()}-${String(anchor.getMonth() + 1).padStart(2, '0')}` };
+  }
+
+  async function ensureSearchEventsLoaded(scope: SearchScope = searchScope, force = false) {
+    const requestId = ++eventSearchRequestId;
+    const now = Date.now();
+    eventSearchBusy = true;
+    searchError = null;
+
+    try {
+      if (scope === 'month') {
+        const { start, end, key } = monthSearchRange();
+        const fresh = !force && monthSearchEventsKey === key && monthSearchEventsLoadedAt > 0 && now - monthSearchEventsLoadedAt < SEARCH_EVENTS_TTL_MS;
+        if (fresh) return;
+        const data = await fetchEvents(start, end);
+        if (requestId !== eventSearchRequestId) return;
+        monthSearchEvents = Array.isArray(data) ? data : [];
+        monthSearchEventsKey = key;
+        monthSearchEventsLoadedAt = Date.now();
+        return;
+      }
+
+      const fresh = !force && globalSearchEventsLoadedAt > 0 && now - globalSearchEventsLoadedAt < SEARCH_EVENTS_TTL_MS;
+      if (fresh) return;
+      const { start, end } = globalSearchRange();
+      const data = await fetchEvents(start, end);
+      if (requestId !== eventSearchRequestId) return;
+      globalSearchEvents = Array.isArray(data) ? data : [];
+      globalSearchEventsLoadedAt = Date.now();
+    } catch (e: any) {
+      if (requestId === eventSearchRequestId) {
+        searchError = e?.message ? String(e.message) : 'Kalender konnte nicht geladen werden.';
+      }
+    } finally {
+      if (requestId === eventSearchRequestId) eventSearchBusy = false;
+    }
+  }
+
+  function eventSearchKey(event: EventDto) {
+    return event.occurrenceId ?? `${event.id}:${event.startAt}`;
+  }
+
+  function mergeEventIndexes(primary: EventDto[], fallback: EventDto[]) {
+    const byKey = new Map<string, EventDto>();
+    for (const event of primary ?? []) byKey.set(eventSearchKey(event), event);
+    for (const event of fallback ?? []) byKey.set(eventSearchKey(event), event);
+    return Array.from(byKey.values());
+  }
+
+  function overlapsRange(startIso: string | null | undefined, endIso: string | null | undefined, start: Date, end: Date) {
+    if (!startIso) return false;
+    const itemStart = new Date(startIso);
+    if (Number.isNaN(itemStart.getTime())) return false;
+    const itemEnd = endIso ? new Date(endIso) : itemStart;
+    if (Number.isNaN(itemEnd.getTime())) return false;
+    return itemStart <= end && itemEnd >= start;
+  }
+
+  function setSearchScope(next: SearchScope) {
+    if (searchScope === next) return;
+    searchScope = next;
+    void ensureSearchEventsLoaded(next);
+    setTimeout(() => searchInputEl?.focus(), 0);
   }
 
   function openSearch() {
     panelActivated = true;
     searchOpen = true;
     void ensureTodosLoaded();
+    void ensureSearchEventsLoaded(searchScope);
     setTimeout(() => searchInputEl?.focus(), 0);
+  }
+
+  $: if (searchOpen && searchScope === 'month' && monthSearchEventsKey && monthSearchEventsKey !== monthSearchRange().key) {
+    void ensureSearchEventsLoaded('month');
   }
 
   function closeSearch() {
@@ -173,12 +273,20 @@
   }
 
   $: searchTokens = tokenizeSearch(searchQuery);
+  $: monthScopeRange = monthSearchRange();
+  $: currentMonthEvents = (events ?? []).filter((event) => overlapsRange(event.startAt, event.endAt, monthScopeRange.start, monthScopeRange.end));
+  $: searchEventSource = searchScope === 'global'
+    ? mergeEventIndexes(globalSearchEvents, events ?? [])
+    : mergeEventIndexes(monthSearchEvents, currentMonthEvents);
+  $: searchTodoSource = searchScope === 'global'
+    ? todosIndex
+    : todosIndex.filter((todo) => overlapsRange(todo.startAt ?? todo.dueAt, todo.dueAt ?? todo.startAt, monthScopeRange.start, monthScopeRange.end));
 
   $: searchResults = (() => {
     if (searchTokens.length === 0) return [] as SearchResultItem[];
     const out: SearchResultItem[] = [];
 
-    for (const event of events) {
+    for (const event of searchEventSource) {
       const persons = event.persons && event.persons.length > 0
         ? event.persons.map((p) => p.name).join(' ')
         : event.person?.name || '';
@@ -209,7 +317,7 @@
       });
     }
 
-    for (const todo of todosIndex) {
+    for (const todo of searchTodoSource) {
       const haystack = normalizeForSearch([
         todo.title,
         todo.bodyPreview,
@@ -647,7 +755,7 @@
           <div class={`mb-2 rounded-2xl border shadow-2xl min-h-0 overflow-y-auto ${tone === 'dark' ? 'border-zinc-300 bg-white shadow-zinc-400/40' : 'border-white/25 bg-zinc-950/92 backdrop-blur-2xl shadow-black/60'}`}>
             <div class="p-3 md:p-4">
               {#if searchBusy}
-                <div class={`text-sm px-2 py-2 ${tone === 'dark' ? 'text-zinc-500' : 'text-white/55'}`}>Lade Todos…</div>
+                <div class={`text-sm px-2 py-2 ${tone === 'dark' ? 'text-zinc-500' : 'text-white/55'}`}>Lade Suche…</div>
               {/if}
 
               {#if searchError}
@@ -698,6 +806,26 @@
             <circle cx="11" cy="11" r="8"></circle>
             <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
           </svg>
+          <div class={`shrink-0 rounded-xl p-1 flex items-center gap-1 ${tone === 'dark' ? 'bg-zinc-100 text-zinc-500' : 'bg-white/8 text-white/55'}`} role="group" aria-label="Suchbereich">
+            <button
+              type="button"
+              class={`h-8 rounded-lg px-3 text-xs font-semibold transition ${searchScope === 'global' ? tone === 'dark' ? 'bg-white text-zinc-950 shadow-sm' : 'bg-white/18 text-white' : tone === 'dark' ? 'hover:bg-white/70 hover:text-zinc-800' : 'hover:bg-white/10 hover:text-white/85'}`}
+              aria-pressed={searchScope === 'global'}
+              title="Global suchen"
+              on:click={() => setSearchScope('global')}
+            >
+              Global
+            </button>
+            <button
+              type="button"
+              class={`h-8 rounded-lg px-3 text-xs font-semibold transition ${searchScope === 'month' ? tone === 'dark' ? 'bg-white text-zinc-950 shadow-sm' : 'bg-white/18 text-white' : tone === 'dark' ? 'hover:bg-white/70 hover:text-zinc-800' : 'hover:bg-white/10 hover:text-white/85'}`}
+              aria-pressed={searchScope === 'month'}
+              title="Nur im aktuellen Monat suchen"
+              on:click={() => setSearchScope('month')}
+            >
+              Monat
+            </button>
+          </div>
           <input
             bind:this={searchInputEl}
             bind:value={searchQuery}
