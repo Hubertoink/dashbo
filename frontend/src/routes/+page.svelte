@@ -38,6 +38,7 @@
     dismissRecurringSuggestion
   } from '$lib/api';
   import { daysForMonthGrid } from '$lib/date';
+  import { generateRecurringPatternSuggestions } from '$lib/planner/recurringPatterns';
   import { getEdgePlayerWidgetEnabledFromStorage } from '$lib/edge';
   import { getDashboardGlassBlurEnabledFromStorage, getDashboardTextStyleFromStorage, getDashboardBgDimmingFromStorage, DASHBOARD_BG_DIMMING_DEFAULT } from '$lib/dashboard';
   import { musicPlayerState } from '$lib/stores/musicPlayer';
@@ -910,139 +911,43 @@
       // Fetch a single consolidated range for pattern analysis + "already exists" checks.
       const allEventsForAnalysis = await fetchEvents(lookbackFrom, historyTo);
 
-      // Build pattern suggestions (simplified version for dashboard)
+      // Build pattern suggestions for dashboard
       const suggestions: DashboardSuggestionDto[] = [];
       const addedKeys = new Set<string>();
 
-      // Helper functions
       const normalizeTitle = (t: string) => String(t || '').trim().toLowerCase().replace(/\s+/g, ' ');
-      const weekdayMon0 = (d: Date) => (d.getDay() + 6) % 7;
       const dateKey = (d: Date) => `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
-      const bucket15 = (mins: number) => Math.round(mins / 15) * 15;
-      const minutesSinceMidnight = (d: Date) => d.getHours() * 60 + d.getMinutes();
       const isBirthdayEvent = (e: EventDto) => /\b(geburtstag|birthday)\b/i.test(normalizeTitle(e.title) + ' ' + normalizeTitle(e.tag?.name ?? ''));
-      const matchesSuggestedOccurrence = (eventItem: EventDto, dayDateKey: string, titleNorm: string, startBucket: number) => {
-        const eventStart = new Date(eventItem.startAt);
-        if (Number.isNaN(eventStart.getTime())) return false;
-        if (dateKey(eventStart) !== dayDateKey) return false;
-        if (normalizeTitle(eventItem.title) === titleNorm) return true;
-        if (eventItem.allDay) return false;
-        return bucket15(minutesSinceMidnight(eventStart)) === startBucket;
-      };
-
-      // Filter candidates
-      const candidates = (allEventsForAnalysis ?? []).filter((e) => {
-        if (e.source === 'outlook') return false;
-        if (e.allDay) return false;
-        if (e.recurrence) return false;
-        if (!e.title || !String(e.title).trim()) return false;
-        return true;
+      const patternSuggestions = generateRecurringPatternSuggestions({
+        sourceEvents: allEventsForAnalysis,
+        targetDays: gridDays,
+        existingEvents: allEventsForAnalysis,
+        dismissedKeys: dismissedSuggestionKeys,
+        minDate: todayStart,
+        enabled: {
+          weekly: recurringSuggestionsWeekly,
+          biweekly: recurringSuggestionsBiweekly,
+          monthly: recurringSuggestionsMonthly
+        },
+        signatureMode: 'dated',
+        existingMatchMode: 'matching'
       });
 
-      // Weekly pattern aggregation
-      if (recurringSuggestionsWeekly) {
-        const weeklyAgg = new Map<
-          string,
-          { dates: Date[]; sample: EventDto; weekday: number; startBucket: number; titleNorm: string }
-        >();
-
-        for (const e of candidates) {
-          const start = new Date(e.startAt);
-          if (Number.isNaN(start.getTime())) continue;
-          const wd = weekdayMon0(start);
-          const startMin = bucket15(minutesSinceMidnight(start));
-          const titleNorm = normalizeTitle(e.title);
-          if (!titleNorm) continue;
-
-          const sig = `weekly|${wd}|${startMin}|${titleNorm}`;
-          const existing = weeklyAgg.get(sig);
-
-          if (existing) {
-            existing.dates.push(start);
-
-            // Keep the most recent sample so person(s)/tag reflect the latest real event
-            // (matches WeekPlanner behaviour and fixes missing-person cases like "Merle").
-            const existingSampleStart = new Date(existing.sample.startAt);
-            const existingSampleMs = existingSampleStart.getTime();
-            const currentMs = start.getTime();
-            if (Number.isNaN(existingSampleMs) || currentMs > existingSampleMs) {
-              existing.sample = e;
-            }
-          } else {
-            weeklyAgg.set(sig, { dates: [start], sample: e, weekday: wd, startBucket: startMin, titleNorm });
-          }
-        }
-
-        const hhmmFromMinutes = (mins: number) => {
-          const h = Math.floor(mins / 60);
-          const m = mins % 60;
-          return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
-        };
-
-        // Generate suggestions for matching days in grid
-        for (const [sig, agg] of weeklyAgg) {
-          for (const day of gridDays) {
-            const dayStart = new Date(day);
-            dayStart.setHours(0, 0, 0, 0);
-            if (dayStart < todayStart) continue;
-            if (weekdayMon0(day) !== agg.weekday) continue;
-
-            const datesBefore = agg.dates.filter((d) => d.getTime() < dayStart.getTime());
-            if (datesBefore.length < 3) continue;
-            const weeksBefore = new Set(
-              datesBefore.map((d) => {
-                const weekStart = new Date(d.getFullYear(), d.getMonth(), d.getDate() - weekdayMon0(d));
-                return dateKey(weekStart);
-              })
-            );
-            if (weeksBefore.size < 3) continue;
-
-            const dayDateKey = dateKey(day);
-            const suggKey = `${sig}|${dayDateKey}`;
-            if (addedKeys.has(suggKey)) continue;
-            if (dismissedSuggestionKeys.has(suggKey)) continue;
-
-            // Check if event already exists on this day
-            const hasExisting = (allEventsForAnalysis ?? []).some((ev) => {
-              return matchesSuggestedOccurrence(ev, dayDateKey, agg.titleNorm, agg.startBucket);
-            });
-            if (hasExisting) continue;
-
-            addedKeys.add(suggKey);
-
-            let endTime: string | undefined;
-            try {
-              const sampleStart = new Date(agg.sample.startAt);
-              const sampleEnd = agg.sample.endAt ? new Date(agg.sample.endAt) : null;
-              if (sampleEnd && !Number.isNaN(sampleStart.getTime()) && !Number.isNaN(sampleEnd.getTime())) {
-                const deltaMs = sampleEnd.getTime() - sampleStart.getTime();
-                const minMs = 15 * 60 * 1000;
-                const maxMs = 12 * 60 * 60 * 1000;
-                if (deltaMs >= minMs && deltaMs <= maxMs) {
-                  const durMins = Math.round(deltaMs / (60 * 1000));
-                  const endMins = agg.startBucket + durMins;
-                  if (endMins > 0 && endMins < 24 * 60) endTime = hhmmFromMinutes(endMins);
-                }
-              }
-            } catch {
-              // ignore duration issues
-            }
-
-            suggestions.push({
-              suggestionKey: suggKey,
-              title: agg.sample.title,
-              description: agg.sample.description ?? null,
-              location: agg.sample.location ?? null,
-              date: new Date(day),
-              allDay: false,
-              startTime: hhmmFromMinutes(agg.startBucket),
-              endTime,
-              tag: agg.sample.tag,
-              person: agg.sample.person,
-              persons: agg.sample.persons,
-            });
-          }
-        }
+      for (const suggestion of patternSuggestions) {
+        addedKeys.add(suggestion.suggestionKey);
+        suggestions.push({
+          suggestionKey: suggestion.suggestionKey,
+          title: suggestion.sample.title,
+          description: suggestion.sample.description ?? null,
+          location: suggestion.sample.location ?? null,
+          date: new Date(suggestion.targetDay),
+          allDay: false,
+          startTime: suggestion.startTime,
+          endTime: suggestion.endTime ?? undefined,
+          tag: suggestion.sample.tag,
+          person: suggestion.sample.person,
+          persons: suggestion.sample.persons,
+        });
       }
 
       // Birthday suggestions (yearly)
@@ -1105,7 +1010,7 @@
         }
       }
 
-      dashboardSuggestions = suggestions;
+      dashboardSuggestions = suggestions.sort((left, right) => left.date.getTime() - right.date.getTime());
       dashboardSuggestionsLoaded = true;
     } catch {
       dashboardSuggestions = [];

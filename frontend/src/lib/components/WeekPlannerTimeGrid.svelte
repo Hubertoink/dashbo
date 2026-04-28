@@ -982,7 +982,7 @@
                   type="button"
                   class={`w-full text-left rounded-lg px-2 py-1.5 border text-xs transition active:scale-[0.99] ${eventTileBgClass(color)} ${cont ? 'border-dashed opacity-90' : ''} ${isOutlook ? 'pr-2 cursor-default border-dashed border-cyan-200/60 ring-1 ring-inset ring-cyan-100/35' : 'pr-9'}`}
                   style={eventTileStyle(color)}
-                  title={isOutlook ? 'Outlook · Nur Ansicht' : 'Termin bearbeiten'}
+                  title={isOutlook ? 'Outlook' : 'Termin bearbeiten'}
                   on:click|stopPropagation={() => {
                     if (!isOutlook) onEditEvent(e);
                   }}
@@ -1185,7 +1185,7 @@
                   data-event-tile="1"
                   class={`w-full h-full text-left rounded-xl px-2 py-1 border text-xs leading-tight overflow-hidden select-none touch-none ${eventTileBgClass(color)} ${seg.isContinuation ? 'border-dashed opacity-90' : ''} ${isOutlook ? 'cursor-default border-dashed border-cyan-200/60 ring-1 ring-inset ring-cyan-100/35' : 'cursor-grab'} ${isCompact || isOutlook ? '' : 'pr-9'} ${dragSaving && dragEvent?.id === e.id ? 'animate-pulse' : ''}`}
                   style={eventTileStyle(color)}
-                  title={isOutlook ? 'Outlook · Nur Ansicht' : 'Termin bearbeiten oder ziehen'}
+                  title={isOutlook ? 'Outlook' : 'Termin bearbeiten oder ziehen'}
                   role="button"
                   tabindex="0"
                   on:pointerdown={(ev) => {

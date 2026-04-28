@@ -119,7 +119,7 @@ export async function fetchPlannerAgendaEvents(selectedDate: Date): Promise<Even
 
 export async function fetchPlannerSuggestionEvents(now: Date = new Date()): Promise<EventDto[]> {
   const today = startOfLocalDay(now);
-  const suggestFrom = startOfDay(addDays(today, -56));
+  const suggestFrom = startOfDay(addDays(today, -12 * 7));
   const suggestTo = endOfDay(addDays(today, 60));
   return fetchEvents(suggestFrom, suggestTo);
 }

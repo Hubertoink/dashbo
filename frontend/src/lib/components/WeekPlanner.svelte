@@ -196,6 +196,50 @@
     return Math.floor(diff / msPerWeek);
   }
 
+  function absoluteWeekIndex(date: Date): number {
+    const weekStart = mondayStart(date);
+    return Math.floor(Date.UTC(weekStart.getFullYear(), weekStart.getMonth(), weekStart.getDate()) / (7 * 24 * 60 * 60 * 1000));
+  }
+
+  function uniqueSortedWeekIndexes(dates: Date[]): number[] {
+    return Array.from(new Set(dates.map((date) => absoluteWeekIndex(date)))).sort((left, right) => left - right);
+  }
+
+  function weekGaps(weekIndexes: number[]): number[] {
+    const result: number[] = [];
+    for (let index = 1; index < weekIndexes.length; index += 1) {
+      result.push(weekIndexes[index] - weekIndexes[index - 1]);
+    }
+    return result;
+  }
+
+  function hasWeeklyCadence(dates: Date[]): boolean {
+    const weekIndexes = uniqueSortedWeekIndexes(dates);
+    if (weekIndexes.length < 3) return false;
+
+    const gaps = weekGaps(weekIndexes);
+    const adjacentGaps = gaps.filter((gap) => gap === 1).length;
+    if (adjacentGaps >= 2) return true;
+
+    if (weekIndexes.length < 4) return false;
+    const span = weekIndexes[weekIndexes.length - 1] - weekIndexes[0] + 1;
+    const density = weekIndexes.length / span;
+    const maxGap = Math.max(...gaps);
+    return density >= 0.6 && maxGap <= 2;
+  }
+
+  function hasBiweeklyCadence(dates: Date[]): boolean {
+    const weekIndexes = uniqueSortedWeekIndexes(dates);
+    if (weekIndexes.length < 2) return false;
+
+    const gaps = weekGaps(weekIndexes);
+    const twoWeekGaps = gaps.filter((gap) => gap === 2).length;
+    if (weekIndexes.length === 2) return twoWeekGaps === 1;
+
+    const maxGap = Math.max(...gaps);
+    return twoWeekGaps >= gaps.length - 1 && maxGap <= 4;
+  }
+
   function isLeapYear(y: number): boolean {
     return (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0;
   }
@@ -426,6 +470,7 @@
       if (recurringSuggestionsWeekly) {
         for (const [sig, agg] of weeklyBySig) {
           if (agg.count < 3 || agg.weeks.size < 3) continue;
+          if (!hasWeeklyCadence(agg.dates)) continue;
 
           const targetDay = new Date(weekStartLocal);
           targetDay.setDate(targetDay.getDate() + agg.weekday);
@@ -440,6 +485,7 @@
         const currentWeekIdx = getWeekIndex(weekStartLocal, from);
         for (const [sig, agg] of biweeklyBySig) {
           if (agg.count < 2 || agg.weeks.size < 2) continue;
+          if (!hasBiweeklyCadence(agg.dates)) continue;
 
           // Check if this week has the right parity
           const sigParts = sig.split('|');

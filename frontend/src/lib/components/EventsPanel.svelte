@@ -33,8 +33,6 @@
 
   let editPromptFor: string | null = null;
   let editPromptTimer: ReturnType<typeof setTimeout> | null = null;
-  let readOnlyPromptFor: string | null = null;
-  let readOnlyPromptTimer: ReturnType<typeof setTimeout> | null = null;
 
   let searchOpen = false;
   let searchQuery = '';
@@ -380,26 +378,14 @@
   onDestroy(() => {
     if (hideTimer) clearTimeout(hideTimer);
     if (editPromptTimer) clearTimeout(editPromptTimer);
-    if (readOnlyPromptTimer) clearTimeout(readOnlyPromptTimer);
   });
 
   function eventKey(eventItem: EventDto) {
     return eventItem.occurrenceId ?? `${eventItem.id}:${eventItem.startAt}`;
   }
 
-  function showReadOnlyPrompt(eventItem: EventDto) {
-    const key = eventKey(eventItem);
-    readOnlyPromptFor = key;
-    if (readOnlyPromptTimer) clearTimeout(readOnlyPromptTimer);
-    readOnlyPromptTimer = setTimeout(() => {
-      readOnlyPromptFor = null;
-      readOnlyPromptTimer = null;
-    }, 2500);
-  }
-
   function requestEdit(eventItem: EventDto) {
     if (eventItem.source === 'outlook') {
-      showReadOnlyPrompt(eventItem);
       return;
     }
     const key = eventKey(eventItem);
@@ -647,22 +633,21 @@
                   </div>
                 {/each}
 
-                {#each dayEvents as e, idx}
+                {#each dayEvents as e}
                   {@const k = e.occurrenceId ?? `${e.id}:${e.startAt}`}
                   {@const isPrompt = editPromptFor === k}
                   {@const isOutlook = e.source === 'outlook'}
-                  {@const isReadOnlyPrompt = readOnlyPromptFor === k}
                   {@const ps = e.persons && e.persons.length > 0 ? e.persons : e.person ? [e.person] : []}
                   {@const p0 = ps[0]}
                   <button
                     type="button"
-                    class={`flex items-center gap-2 max-w-full text-left relative rounded-xl px-2 py-1 -mx-2 transition ${
+                    class={`flex items-center gap-2 max-w-full text-left relative rounded-xl px-3 py-1.5 transition ${
                       isOutlook
                         ? 'border border-cyan-300/25 bg-cyan-500/10 cursor-default hover:bg-cyan-500/14'
                         : 'hover:bg-white/5 active:bg-white/10'
                     }`}
-                    title={isOutlook ? 'Aus Outlook synchronisiert, in Dashbo nur lesbar' : 'Zum Bearbeiten erneut anklicken'}
-                    aria-label={isOutlook ? `${e.title} - Outlook, nur Ansicht` : e.title}
+                    title={isOutlook ? 'Aus Outlook synchronisiert' : 'Zum Bearbeiten erneut anklicken'}
+                    aria-label={isOutlook ? `${e.title} - Outlook` : e.title}
                     on:click|stopPropagation={() => requestEdit(e)}
                     in:fly={{ y: 4, duration: 120 }}
                   >
@@ -685,13 +670,7 @@
                         </div>
                       {/if}
 
-                      {#if isReadOnlyPrompt}
-                        <div class="absolute left-0 top-0 z-10" in:fly={{ y: -4, duration: 140 }} out:fade={{ duration: 100 }}>
-                          <div class="px-3 py-1.5 rounded-xl bg-cyan-950/80 border border-cyan-300/25 backdrop-blur-md text-sm font-semibold text-cyan-100">Outlook · Nur Ansicht</div>
-                        </div>
-                      {/if}
-
-                      <div class={isPrompt || isReadOnlyPrompt ? 'blur-sm' : ''}>
+                      <div class={isPrompt ? 'blur-sm' : ''}>
                         <div class="flex items-center gap-1.5 min-w-0">
                           <span class="text-base md:text-lg font-semibold leading-tight truncate">{e.title}</span>
                           {#if isOutlook}
@@ -771,7 +750,7 @@
                     <button
                       type="button"
                       class={`w-full text-left rounded-xl px-3 py-2.5 transition ${tone === 'dark' ? 'hover:bg-zinc-100 active:bg-zinc-200' : 'hover:bg-white/10 active:bg-white/14'}`}
-                      title={isOutlookResult ? 'Outlook · Nur Ansicht' : undefined}
+                      title={isOutlookResult ? 'Outlook' : undefined}
                       on:click={() => onSelectSearchResult(item)}
                     >
                       <div class="flex items-start gap-3">
