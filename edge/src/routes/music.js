@@ -9,7 +9,7 @@ const { getMusicLibrary } = require('../services/musicLibrary');
 const musicRouter = express.Router();
 
 // In-memory mapping for stable HEOS stream URLs.
-// Key: heos pid -> { trackId, updatedAt }
+// Key: heos pid -> { trackId, updatedAt, lastRequestedAt, requestCount }
 const heosPidToTrack = new Map();
 
 function getAudioMimeByExt(ext) {
@@ -137,6 +137,14 @@ musicRouter.get('/tracks/:trackId/stream', async (req, res) => {
   await streamTrackAbsPath(abs, req, res);
 });
 
+musicRouter.get('/heos/target', (req, res) => {
+  const pid = Number(req?.query?.pid);
+  if (!Number.isFinite(pid) || pid === 0) return res.status(400).json({ ok: false, error: 'pid_required' });
+
+  const entry = heosPidToTrack.get(pid) || null;
+  res.json({ ok: true, pid, target: entry });
+});
+
 // Stable HEOS streaming: set which track a given HEOS pid should stream.
 musicRouter.post('/heos/target', (req, res) => {
   const pid = Number(req?.body?.pid);
@@ -147,7 +155,7 @@ musicRouter.post('/heos/target', (req, res) => {
   const abs = getMusicLibrary().resolveTrackAbsPath(trackId);
   if (!abs) return res.status(404).json({ ok: false, error: 'not_found' });
 
-  heosPidToTrack.set(pid, { trackId, updatedAt: Date.now() });
+  heosPidToTrack.set(pid, { trackId, updatedAt: Date.now(), lastRequestedAt: null, requestCount: 0 });
   res.json({ ok: true, pid, trackId });
 });
 
@@ -158,6 +166,10 @@ musicRouter.get('/heos/stream', async (req, res) => {
 
   const entry = heosPidToTrack.get(pid);
   if (!entry || !entry.trackId) return res.status(409).json({ error: 'no_target', pid });
+
+  entry.lastRequestedAt = Date.now();
+  entry.requestCount = Number(entry.requestCount || 0) + 1;
+  heosPidToTrack.set(pid, entry);
 
   const abs = getMusicLibrary().resolveTrackAbsPath(entry.trackId);
   await streamTrackAbsPath(abs, req, res);

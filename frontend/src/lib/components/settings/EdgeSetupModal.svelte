@@ -44,12 +44,15 @@
 
   let edgePort = '8787';
   let edgeToken = '1000';
-  let musicDir = 'C:/Users/<you>/Music';
+  let musicDir = '';
   let edgeAllowedOrigins = 'https://dashbohub.de,http://localhost:8080,http://127.0.0.1:8080,http://localhost:5173';
   let edgePublicBaseUrl = 'http://192.168.178.27:8787';
-  let edgeImage = 'ghcr.io/Hubertoink/dashbo-edge:latest';
+  let edgeImage = 'ghcr.io/hubertoink/dashbo-edge:latest';
   let heosHosts = '';
   let heosScanCidr = '';
+
+  let musicDirError: string | null = null;
+  let edgeImageError: string | null = null;
 
   function applyTargetDefaults(nextTarget: Target) {
     if (nextTarget === 'pi') {
@@ -59,7 +62,7 @@
       edgePublicBaseUrl = '';
     } else {
       edgePort = '8787';
-      musicDir = 'C:/Users/<you>/Music';
+      musicDir = '';
       edgeAllowedOrigins = 'https://dashbohub.de,http://localhost:8080,http://127.0.0.1:8080,http://localhost:5173';
       edgePublicBaseUrl = 'http://192.168.178.27:8787';
     }
@@ -73,13 +76,31 @@
     return `"${String(v).replace(/\\/g, '\\\\').replace(/\"/g, '\\"')}"`;
   }
 
+  function validateMusicDir(): string | null {
+    const music = normalizeHostPath(musicDir);
+    if (!music) return 'Bitte trage deinen echten Musikordner ein, z.B. C:/Users/Nikolas/Music.';
+    if (/[<>|?*"]/.test(music)) return 'Der Pfad enthält ungültige Zeichen. Ersetze Platzhalter wie <you> durch deinen Windows-Benutzernamen.';
+    if (target === 'windows' && !/^[a-zA-Z]:\//.test(music) && !music.startsWith('//')) {
+      return 'Für Windows bitte einen Host-Pfad wie C:/Users/Nikolas/Music verwenden.';
+    }
+    if (target === 'pi' && !music.startsWith('/')) return 'Für Raspberry Pi bitte einen Linux-Pfad wie /mnt/music verwenden.';
+    return null;
+  }
+
+  function validateEdgeImage(): string | null {
+    const image = (edgeImage || '').trim();
+    if (!image) return 'Docker Image fehlt.';
+    if (image !== image.toLowerCase()) return 'Docker Image-Namen müssen lowercase sein, z.B. ghcr.io/hubertoink/dashbo-edge:latest.';
+    return null;
+  }
+
   function buildComposeYaml(): string {
     const port = (edgePort || '8787').trim();
     const token = (edgeToken || '').trim();
     const allowed = (edgeAllowedOrigins || '').trim();
     const publicBase = (edgePublicBaseUrl || '').trim();
     const music = normalizeHostPath(musicDir);
-    const image = (edgeImage || '').trim();
+    const image = (edgeImage || '').trim().toLowerCase();
 
     const envLines: string[] = [
       `      PORT: 8787`,
@@ -116,6 +137,7 @@
   }
 
   function downloadYaml() {
+    if (!canDownload) return;
     const yaml = buildComposeYaml();
     const blob = new Blob([yaml], { type: 'text/yaml;charset=utf-8' });
     const url = URL.createObjectURL(blob);
@@ -129,7 +151,14 @@
   }
 
   let canDownload = false;
-  $: canDownload = (edgeToken || '').trim().length > 0 && (musicDir || '').trim().length > 0 && (edgeImage || '').trim().length > 0;
+  $: musicDirError = validateMusicDir();
+  $: edgeImageError = validateEdgeImage();
+  $: canDownload =
+    (edgeToken || '').trim().length > 0 &&
+    (musicDir || '').trim().length > 0 &&
+    (edgeImage || '').trim().length > 0 &&
+    !musicDirError &&
+    !edgeImageError;
 </script>
 
 <!-- Edge Setup Modal -->
@@ -226,6 +255,9 @@
                 bind:value={edgeImage}
                 placeholder="ghcr.io/<owner>/dashbo-edge:latest"
               />
+              {#if edgeImageError}
+                <div class="mt-1 text-[11px] text-red-300">{edgeImageError}</div>
+              {/if}
             </label>
 
             <label class="text-white/70 text-xs">
@@ -242,8 +274,11 @@
               <input
                 class="mt-1 w-full h-9 rounded-lg bg-zinc-950/40 border border-white/10 px-3 text-sm"
                 bind:value={musicDir}
-                placeholder={target === 'windows' ? 'C:/Users/<you>/Music' : '/mnt/music'}
+                placeholder={target === 'windows' ? 'C:/Users/Nikolas/Music' : '/mnt/music'}
               />
+              {#if musicDirError}
+                <div class="mt-1 text-[11px] text-red-300">{musicDirError}</div>
+              {/if}
             </label>
 
             <div class="grid grid-cols-2 gap-2">

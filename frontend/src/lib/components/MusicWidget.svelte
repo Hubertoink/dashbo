@@ -52,6 +52,9 @@
   $: playing = $musicPlayerState.playing;
   $: positionSec = $musicPlayerState.positionSec;
   $: durationSec = $musicPlayerState.durationSec;
+  $: playerStatus = $musicPlayerState.status;
+  $: playerStatusText = $musicPlayerState.statusText ? String($musicPlayerState.statusText) : '';
+  $: playerLoading = playerStatus === 'loading';
   $: activeTarget = $musicPlayerState.target;
   $: activeHeosTargetPid = activeTarget?.kind === 'heos' ? activeTarget.pid : null;
   $: activeHeosTargetName = activeTarget?.kind === 'heos' ? activeTarget.name || '' : '';
@@ -81,7 +84,7 @@
   $: heosPlayerSummaries = $heosPlaybackStatus?.players ?? [];
 
   $: heosIsPlaying = Boolean($heosPlaybackStatus?.isPlaying);
-  $: isPlayingForUi = now ? playing : heosExternalActive ? heosIsPlaying : false;
+  $: isPlayingForUi = now ? (playerLoading ? false : playing) : heosExternalActive ? heosIsPlaying : false;
   $: displayArtist = now?.artist
     ? String(now.artist)
     : heosExternalActive
@@ -90,13 +93,15 @@
         ? spotifyArtist || spotifySourceLabel
         : '';
   $: displayTitle = now?.title
-    ? String(now.title)
+    ? playerStatusText || String(now.title)
     : heosExternalActive
       ? heosExternalTitle || heosExternalAlbum || (heosExternalSourceLabel ? 'Wiedergabe aktiv' : '')
       : spotifyActive
         ? spotifyTitle || spotifyAlbum || 'Wiedergabe aktiv'
         : '';
-  $: externalSuffix = heosExternal
+  $: externalSuffix = now
+    ? ''
+    : heosExternal
     ? ` (${(heosExternalSourceLabel || 'extern').toLowerCase()})`
     : spotifyActive
       ? ` (${spotifySourceLabel.toLowerCase()})`
@@ -637,7 +642,11 @@
         <div class="flex items-center gap-2 mt-0.5">
           <span class="text-[10px] text-white/40 tabular-nums w-7">{fmt(positionSec)}</span>
           <div class="flex-1 h-1 rounded-full bg-white/10 overflow-hidden">
-            <div class="h-full bg-white/30" style={`width: ${pct}%`}></div>
+            {#if playerLoading}
+              <div class="h-full w-1/2 rounded-full bg-cyan-300/55 animate-pulse"></div>
+            {:else}
+              <div class="h-full bg-white/30" style={`width: ${pct}%`}></div>
+            {/if}
           </div>
           <span class="text-[10px] text-white/40 tabular-nums w-7 text-right">{durationSec > 0 ? fmt(durationSec) : '--:--'}</span>
         </div>

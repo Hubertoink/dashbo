@@ -14,12 +14,21 @@ export type PlaybackTarget =
   | { kind: 'local'; name?: string | null }
   | { kind: 'heos'; pid: number; name?: string | null };
 
+export type PlayerStatus = 'idle' | 'loading' | 'playing' | 'paused' | 'error';
+
 type PlayerState = {
   now: NowPlayingTrack | null;
   playing: boolean;
   positionSec: number;
   durationSec: number;
   target: PlaybackTarget | null;
+  status: PlayerStatus;
+  statusText: string | null;
+};
+
+type SetNowPlayingOptions = {
+  status?: PlayerStatus;
+  statusText?: string | null;
 };
 
 type PlayCommand = {
@@ -43,7 +52,15 @@ type ControlCommand =
 
 type PlayerCommand = PlayCommand | TargetCommand | ControlCommand;
 
-const _state = writable<PlayerState>({ now: null, playing: false, positionSec: 0, durationSec: 0, target: null });
+const _state = writable<PlayerState>({
+  now: null,
+  playing: false,
+  positionSec: 0,
+  durationSec: 0,
+  target: null,
+  status: 'idle',
+  statusText: null
+});
 const _command = writable<PlayerCommand | null>(null);
 
 export const musicPlayerState = {
@@ -55,7 +72,12 @@ export const musicPlayerCommand = {
   clear: () => _command.set(null)
 };
 
-export function setNowPlaying(now: NowPlayingTrack | null, playing: boolean, target?: PlaybackTarget | null) {
+export function setNowPlaying(
+  now: NowPlayingTrack | null,
+  playing: boolean,
+  target?: PlaybackTarget | null,
+  options?: SetNowPlayingOptions
+) {
   _state.update((prev) => {
     const prevId = prev.now?.trackId ?? null;
     const nextId = now?.trackId ?? null;
@@ -71,15 +93,23 @@ export function setNowPlaying(now: NowPlayingTrack | null, playing: boolean, tar
           : prev.durationSec
       : 0;
 
+    const status = options?.status ?? (now ? (playing ? 'playing' : 'paused') : 'idle');
+
     return {
       ...prev,
       now,
       playing,
       positionSec: now ? (trackChanged ? 0 : prev.positionSec) : 0,
       durationSec: nextDuration,
-      target: now ? (target !== undefined ? target : prev.target) : null
+      target: now ? (target !== undefined ? target : prev.target) : null,
+      status,
+      statusText: options?.statusText ?? null
     };
   });
+}
+
+export function setPlayerStatus(status: PlayerStatus, statusText?: string | null) {
+  _state.update((prev) => ({ ...prev, status, statusText: statusText ?? null }));
 }
 
 export function setProgress(positionSec: number, durationSec: number) {

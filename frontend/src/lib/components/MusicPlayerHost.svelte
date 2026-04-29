@@ -38,6 +38,7 @@
   let activePlaybackTarget: PlaybackTarget = { kind: 'local' };
 
   const HEOS_DASHBO_MARKER = 'DashbO |';
+  const HEOS_START_GRACE_MS = 75_000;
 
   let heosStatusPollTimer: ReturnType<typeof setInterval> | null = null;
   let spotifyStatusPollTimer: ReturnType<typeof setInterval> | null = null;
@@ -49,6 +50,10 @@
   let heosDurationFetchInFlight = false;
   let heosDurationFetchTrackId: string | null = null;
   let heosDurationFetchLastAt = 0;
+  let heosStartGraceUntil = 0;
+  let heosStartGracePid: number | null = null;
+  let heosStartGraceTrackId: string | null = null;
+  let suppressLocalPauseEvent = false;
 
   const durationCache = new Map<string, number>();
 
@@ -78,6 +83,30 @@
     return activePlaybackTarget.kind === 'heos' ? activePlaybackTarget.pid : null;
   }
 
+  function playbackTargetLabel(target: PlaybackTarget = activePlaybackTarget): string {
+    if (target.kind === 'heos') return target.name || `Speaker ${target.pid}`;
+    return target.name || 'dieses Gerät';
+  }
+
+  function beginHeosStartGrace(pid: number, track: NowPlayingTrack) {
+    heosStartGracePid = pid;
+    heosStartGraceTrackId = track.trackId;
+    heosStartGraceUntil = Date.now() + HEOS_START_GRACE_MS;
+  }
+
+  function isHeosStartGraceActive(pid: number | null, track: NowPlayingTrack | null): boolean {
+    if (!pid || !track) return false;
+    return heosStartGracePid === pid && heosStartGraceTrackId === track.trackId && Date.now() < heosStartGraceUntil;
+  }
+
+  function clearHeosStartGrace(pid?: number | null, trackId?: string | null) {
+    if (pid && heosStartGracePid !== pid) return;
+    if (trackId && heosStartGraceTrackId !== trackId) return;
+    heosStartGraceUntil = 0;
+    heosStartGracePid = null;
+    heosStartGraceTrackId = null;
+  }
+
   async function stopHeosTarget(pid: number | null) {
     if (!pid) return;
     const edgeBaseUrl = getEdgeBaseUrlFromStorage();
@@ -105,6 +134,7 @@
   function stopLocalAudio() {
     if (!audioEl) return;
     try {
+      suppressLocalPauseEvent = !audioEl.paused;
       audioEl.pause();
       audioEl.removeAttribute('src');
       audioEl.load();
@@ -401,6 +431,7 @@
 
         const dashboTrack = current();
         const dashboStreamingToHeos = Boolean(heosActive && dashboTrack && activeHeosPid() === pid);
+        const heosStartGraceActive = isHeosStartGraceActive(pid, dashboTrack);
 
         // Detect takeover: if DashbO thinks it's controlling HEOS but the HEOS metadata clearly indicates
         // another source (e.g. Spotify) or a different non-generic track, switch to external mode.
@@ -412,8 +443,13 @@
         const looksDashbo = looksLikeDashboPlayback(summary);
         const indicatesSpotify = source.includes('spotify');
 
-        const takeover = dashboStreamingToHeos && isActive && (indicatesSpotify || (hasNonGenericMeta && !matchesDashbo && !looksDashbo));
+        const takeover =
+          dashboStreamingToHeos &&
+          !heosStartGraceActive &&
+          isActive &&
+          (indicatesSpotify || (hasNonGenericMeta && !matchesDashbo && !looksDashbo));
         if (takeover) {
+          clearHeosStartGrace(pid, dashboTrack?.trackId ?? null);
           heosActive = false;
           heosPlaying = false;
           stopHeosPolling();
@@ -421,9 +457,15 @@
           setProgress(0, 0);
         }
 
+        if (heosStartGraceActive && (looksDashbo || matchesDashbo)) {
+          clearHeosStartGrace(pid, dashboTrack?.trackId ?? null);
+          heosPlaying = isPlaying || heosPlaying;
+          if (dashboTrack) setNowPlaying(dashboTrack, heosPlaying, activePlaybackTarget);
+        }
+
         // If DashbO is currently streaming to HEOS, don't label the session as external by default
         // (HEOS can report generic 'Url Stream' metadata for our own streams).
-        const isDashbo = (dashboStreamingToHeos && !takeover) || looksDashbo || matchesDashbo;
+        const isDashbo = heosStartGraceActive || (dashboStreamingToHeos && !takeover) || looksDashbo || matchesDashbo;
         const isExternal = isActive && !isDashbo;
 
         setHeosPlaybackStatus({
@@ -471,6 +513,7 @@
     const edgeToken = getEdgeTokenFromStorage();
     if (!edgeBaseUrl || !pid) return;
 
+    heosActive = true;
     heosPosSec = 0;
     heosDurationSec = Number.isFinite(durationSec) ? Math.max(0, Math.floor(durationSec)) : 0;
     setProgress(0, heosDurationSec);
@@ -568,6 +611,54 @@
     });
   }
 
+  async function fetchHeosTargetStatus(pid: number): Promise<any | null> {
+    const edgeBaseUrl = getEdgeBaseUrlFromStorage();
+    const edgeToken = getEdgeTokenFromStorage();
+    if (!edgeBaseUrl || !pid) return null;
+
+    const r = await edgeFetchJson<any>(edgeBaseUrl, `/api/music/heos/target?pid=${encodeURIComponent(String(pid))}`, edgeToken || undefined, {
+      method: 'GET',
+      headers: buildHeosHeaders()
+    });
+    return r?.target ?? null;
+  }
+
+  async function watchHeosStreamStart(pid: number, track: NowPlayingTrack) {
+    const trackId = track.trackId;
+    const target = activePlaybackTarget;
+    for (let attempt = 0; attempt < 75; attempt += 1) {
+      if (!isHeosStartGraceActive(pid, track)) return;
+      try {
+        const status = await fetchHeosTargetStatus(pid);
+        const statusTrackId = typeof status?.trackId === 'string' ? status.trackId : '';
+        const updatedAt = Number(status?.updatedAt || 0);
+        const lastRequestedAt = Number(status?.lastRequestedAt || 0);
+        if (statusTrackId === trackId && lastRequestedAt > 0 && (!updatedAt || lastRequestedAt >= updatedAt)) {
+          heosActive = true;
+          heosPlaying = true;
+          setNowPlaying(track, true, target);
+          return;
+        }
+      } catch {
+        await sleep(10_000);
+        if (isHeosStartGraceActive(pid, track)) {
+          heosActive = true;
+          heosPlaying = true;
+          setNowPlaying(track, true, target);
+        }
+        return;
+      }
+      await sleep(1000);
+    }
+
+    if (isHeosStartGraceActive(pid, track)) {
+      setNowPlaying(track, false, activePlaybackTarget, {
+        status: 'loading',
+        statusText: `${playbackTargetLabel()} hat den Stream noch nicht angefordert...`
+      });
+    }
+  }
+
   async function forceHeosPlayStreamWithRetry(pid: number, url: string, name: string) {
     try {
       await forceHeosPlayStream(pid, url, name);
@@ -579,6 +670,7 @@
   }
 
   async function startLocalPlayback(track: NowPlayingTrack) {
+    clearHeosStartGrace();
     activePlaybackTarget = { kind: 'local' };
     if (!audioEl) {
       setNowPlaying(track, false, activePlaybackTarget);
@@ -617,7 +709,18 @@
     const heosPid = activePlaybackTarget.kind === 'heos' ? activePlaybackTarget.pid : null;
     const edgeBaseUrl = getEdgeBaseUrlFromStorage();
 
-    setNowPlaying(track, false, activePlaybackTarget);
+    const startingHeos = Boolean(heosEnabled && heosPid && edgeBaseUrl);
+    setNowPlaying(
+      track,
+      false,
+      activePlaybackTarget,
+      startingHeos
+        ? {
+            status: 'loading',
+            statusText: `Sende an ${playbackTargetLabel()}...`
+          }
+        : undefined
+    );
     const knownDuration = typeof track.durationSec === 'number' && Number.isFinite(track.durationSec) ? track.durationSec : 0;
     setProgress(0, knownDuration);
 
@@ -631,16 +734,25 @@
 
     try {
       if (heosEnabled && heosPid && edgeBaseUrl) {
+        beginHeosStartGrace(heosPid, track);
         stopLocalAudio();
         await setHeosTargetTrack(heosPid, track.trackId);
+        setNowPlaying(track, false, activePlaybackTarget, {
+          status: 'loading',
+          statusText: `Warte auf ${playbackTargetLabel()}...`
+        });
         const url = buildHeosStableStreamUrl(heosPid);
         // Keep the name stable to avoid accumulating many different URL stream entries in the HEOS app.
         await forceHeosPlayStreamWithRetry(heosPid, url, `${HEOS_DASHBO_MARKER} Stream`);
         heosActive = true;
-        heosPlaying = true;
+        heosPlaying = false;
         startHeosPolling(heosPid, knownDuration);
-        setNowPlaying(track, true, activePlaybackTarget);
+        setNowPlaying(track, false, activePlaybackTarget, {
+          status: 'loading',
+          statusText: `${playbackTargetLabel()} verbindet...`
+        });
         void ensureHeosDuration(track);
+        void watchHeosStreamStart(heosPid, track);
         return;
       }
 
@@ -653,6 +765,7 @@
         try {
           heosActive = false;
           heosPlaying = false;
+          clearHeosStartGrace(heosPid, track.trackId);
           stopHeosPolling();
           await startLocalPlayback(track);
           return;
@@ -663,6 +776,7 @@
 
       heosActive = false;
       heosPlaying = false;
+      clearHeosStartGrace(heosPid, track.trackId);
       stopHeosPolling();
       activePlaybackTarget = { kind: 'local' };
       setNowPlaying(track, false, activePlaybackTarget);
@@ -687,20 +801,30 @@
       // If HEOS is selected but not active yet, start stream for the current track.
       if (!heosActive) {
         try {
+          beginHeosStartGrace(heosPid, track);
+          setNowPlaying(track, false, activePlaybackTarget, {
+            status: 'loading',
+            statusText: `Sende an ${playbackTargetLabel()}...`
+          });
           await setHeosTargetTrack(heosPid, track.trackId);
           const url = buildHeosStableStreamUrl(heosPid);
           await forceHeosPlayStreamWithRetry(heosPid, url, `${HEOS_DASHBO_MARKER} Stream`);
           heosActive = true;
-          heosPlaying = true;
+          heosPlaying = false;
           startHeosPolling(heosPid, typeof track.durationSec === 'number' && Number.isFinite(track.durationSec) ? track.durationSec : 0);
-          setNowPlaying(track, true, activePlaybackTarget);
+          setNowPlaying(track, false, activePlaybackTarget, {
+            status: 'loading',
+            statusText: `${playbackTargetLabel()} verbindet...`
+          });
           void ensureHeosDuration(track);
+          void watchHeosStreamStart(heosPid, track);
           return;
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err || 'HEOS play failed');
           console.error('[HEOS] play_stream failed (toggle):', msg);
           heosActive = false;
           heosPlaying = false;
+          clearHeosStartGrace(heosPid, track.trackId);
           stopHeosPolling();
           // fall through to local
         }
@@ -781,6 +905,10 @@
   }
 
   function onPause() {
+    if (suppressLocalPauseEvent) {
+      suppressLocalPauseEvent = false;
+      return;
+    }
     setNowPlaying(current(), false, activePlaybackTarget);
   }
 
