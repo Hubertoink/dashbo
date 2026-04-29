@@ -2,9 +2,27 @@ import { writable } from 'svelte/store';
 
 export type HeosPlaybackState = 'play' | 'pause' | 'stop' | 'unknown';
 
+export type HeosPlayerPlaybackSummary = {
+  pid: number;
+  name: string;
+  model: string | null;
+  state: HeosPlaybackState;
+  isPlaying: boolean;
+  isActive: boolean;
+  title: string | null;
+  artist: string | null;
+  album: string | null;
+  imageUrl: string | null;
+  source: string | null;
+  url: string | null;
+  updatedAt: number | null;
+  error: string | null;
+};
+
 export type HeosPlaybackStatus = {
   enabled: boolean;
   pid: number | null;
+  players: HeosPlayerPlaybackSummary[];
 
   state: HeosPlaybackState;
   isPlaying: boolean;
@@ -27,6 +45,7 @@ export type HeosPlaybackStatus = {
 const initial: HeosPlaybackStatus = {
   enabled: false,
   pid: null,
+  players: [],
   state: 'unknown',
   isPlaying: false,
   isActive: false,

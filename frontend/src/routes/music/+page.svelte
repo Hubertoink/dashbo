@@ -5,10 +5,14 @@
   import {
     edgeFetchJson,
     getEdgeBaseUrlFromStorage,
+    getEdgeHeosEnabledFromStorage,
+    getEdgeHeosHostsFromStorage,
+    getEdgeHeosSelectedPlayerIdFromStorage,
+    getEdgeHeosSelectedPlayerNameFromStorage,
     getEdgeTokenFromStorage,
     normalizeEdgeBaseUrl
   } from '$lib/edge';
-  import { playAlbum, playTrack, type NowPlayingTrack } from '$lib/stores/musicPlayer';
+  import { playAlbum, playTrack, type NowPlayingTrack, type PlaybackTarget } from '$lib/stores/musicPlayer';
 
   type EdgeMusicStatusDto = {
     ok: boolean;
@@ -73,6 +77,10 @@
       durationSec?: number | null;
     }>;
   };
+
+  type HeosPlayerDto = { pid: number; name: string; model?: string | null };
+  type HeosGroupPlayerDto = { name: string; pid: number; role?: 'leader' | 'member' | string };
+  type HeosGroupDto = { name: string; gid: number | string; players: HeosGroupPlayerDto[] };
 
   let edgeBaseUrl = '';
   let edgeToken = '';
@@ -155,6 +163,14 @@
   let playlistBusy = false;
   let playlistError: string | null = null;
 
+  let playTarget: PlaybackTarget = { kind: 'local', name: 'Dieses Gerät' };
+  let targetMenuOpen = false;
+  let heosTargetsBusy = false;
+  let heosTargetsError: string | null = null;
+  let heosTargetsLoaded = false;
+  let heosTargetPlayers: HeosPlayerDto[] = [];
+  let heosTargetGroups: HeosGroupDto[] = [];
+
   let qTimer: any;
   let mounted = false;
 
@@ -167,6 +183,104 @@
     if (!b) return null;
     const qs = edgeToken ? `?token=${encodeURIComponent(edgeToken)}` : '';
     return `${b}/api/music/albums/${encodeURIComponent(albumId)}/cover${qs}`;
+  }
+
+  function buildHeosHeaders(): Record<string, string> {
+    const hosts = getEdgeHeosHostsFromStorage().trim();
+    return hosts ? { 'X-HEOS-HOSTS': hosts } : {};
+  }
+
+  function loadPlaybackTargetFromStorage() {
+    const heosEnabled = getEdgeHeosEnabledFromStorage();
+    const pid = getEdgeHeosSelectedPlayerIdFromStorage();
+    if (heosEnabled && pid) {
+      playTarget = { kind: 'heos', pid, name: getEdgeHeosSelectedPlayerNameFromStorage() || null };
+      return;
+    }
+    playTarget = { kind: 'local', name: 'Dieses Gerät' };
+  }
+
+  function playTargetLabel(target: PlaybackTarget = playTarget): string {
+    if (target.kind === 'heos') return target.name || `Speaker ${target.pid}`;
+    return 'Dieses Gerät';
+  }
+
+  function isCurrentTarget(kind: 'local' | 'heos', pid?: number): boolean {
+    if (kind === 'local') return playTarget.kind === 'local';
+    return playTarget.kind === 'heos' && playTarget.pid === pid;
+  }
+
+  function parseHeosGroupsPayload(payload: any): HeosGroupDto[] {
+    const arr = Array.isArray(payload) ? payload : [];
+    return arr
+      .map((g: any) => {
+        const playersRaw = Array.isArray(g?.players) ? g.players : [];
+        const players: HeosGroupPlayerDto[] = playersRaw
+          .map((p: any) => ({
+            name: String(p?.name || ''),
+            pid: Number(p?.pid),
+            role: p?.role ? String(p.role) : undefined
+          }))
+          .filter((p: any) => Number.isFinite(p.pid) && p.pid !== 0 && p.name);
+
+        return {
+          name: String(g?.name || ''),
+          gid: typeof g?.gid === 'number' ? g.gid : String(g?.gid ?? ''),
+          players
+        } as HeosGroupDto;
+      })
+      .filter((g: HeosGroupDto) => g.name && String(g.gid || '').trim());
+  }
+
+  function getHeosGroupLeaderPid(group: HeosGroupDto): number | null {
+    const leader = group.players.find((p) => String(p.role || '').toLowerCase() === 'leader');
+    const pid = leader?.pid ?? group.players[0]?.pid;
+    return Number.isFinite(pid) && pid !== 0 ? pid : null;
+  }
+
+  async function loadHeosTargets(opts?: { force?: boolean }) {
+    if (!getEdgeHeosEnabledFromStorage()) {
+      heosTargetsLoaded = true;
+      heosTargetPlayers = [];
+      heosTargetGroups = [];
+      return;
+    }
+    if (heosTargetsLoaded && !opts?.force) return;
+
+    edgeBaseUrl = getEdgeBaseUrlFromStorage();
+    edgeToken = getEdgeTokenFromStorage();
+    if (!edgeBaseUrl) return;
+
+    heosTargetsBusy = true;
+    heosTargetsError = null;
+    try {
+      const headers = buildHeosHeaders();
+      const [playersRes, groupsRes] = await Promise.all([
+        edgeFetchJson<any>(edgeBaseUrl, '/api/heos/players', edgeToken || undefined, { headers }),
+        edgeFetchJson<any>(edgeBaseUrl, '/api/heos/groups', edgeToken || undefined, { headers })
+      ]);
+
+      const players = Array.isArray(playersRes?.players) ? playersRes.players : [];
+      heosTargetPlayers = players
+        .map((p: any) => ({ pid: Number(p?.pid), name: String(p?.name || ''), model: p?.model ? String(p.model) : null }))
+        .filter((p: HeosPlayerDto) => Number.isFinite(p.pid) && p.pid !== 0 && p.name);
+      heosTargetGroups = parseHeosGroupsPayload(groupsRes?.response?.payload);
+      heosTargetsLoaded = true;
+    } catch (err) {
+      heosTargetsError = err instanceof Error ? err.message : 'HEOS Ziele konnten nicht geladen werden.';
+    } finally {
+      heosTargetsBusy = false;
+    }
+  }
+
+  async function toggleTargetMenu() {
+    targetMenuOpen = !targetMenuOpen;
+    if (targetMenuOpen) await loadHeosTargets();
+  }
+
+  function selectPlayTarget(target: PlaybackTarget) {
+    playTarget = target;
+    targetMenuOpen = false;
   }
 
   async function loadStatusAndAlbums() {
@@ -300,6 +414,7 @@
   async function openAlbum(albumId: string) {
     if (!edgeBaseUrl) return;
 
+    loadPlaybackTargetFromStorage();
     modalOpen = true;
     modalLoading = true;
     modalError = null;
@@ -321,6 +436,7 @@
 
   function closeModal() {
     modalOpen = false;
+    targetMenuOpen = false;
     modalLoading = false;
     modalError = null;
     selected = null;
@@ -442,7 +558,7 @@
 
   function playPlaylist() {
     if (playlist.length === 0) return;
-    playAlbum(playlist, 0);
+    playAlbum(playlist, 0, playTarget);
     void goto('/');
   }
 
@@ -459,7 +575,7 @@
     }));
 
     if (queue.length === 0) return;
-    playAlbum(queue, 0);
+    playAlbum(queue, 0, playTarget);
     closeModal();
     void goto('/');
   }
@@ -469,14 +585,17 @@
     const t = (selected.tracks ?? []).find((x) => x.id === trackId);
     if (!t) return;
 
-    playTrack({
-      trackId: t.id,
-      title: t.title,
-      artist: t.artist,
-      album: t.album,
-      coverUrl: coverUrl(selected.id),
-      durationSec: t.durationSec ?? null
-    });
+    playTrack(
+      {
+        trackId: t.id,
+        title: t.title,
+        artist: t.artist,
+        album: t.album,
+        coverUrl: coverUrl(selected.id),
+        durationSec: t.durationSec ?? null
+      },
+      playTarget
+    );
     closeModal();
     void goto('/');
   }
@@ -490,6 +609,7 @@
 
       mounted = true;
       loadPlaylist();
+      loadPlaybackTargetFromStorage();
       void loadStatusAndAlbums();
     })();
   });
@@ -837,10 +957,90 @@
             {:else if selected}
               <div class="text-sm font-semibold text-white line-clamp-1">{selected.album}</div>
               <div class="text-xs text-white/60 line-clamp-1">{selected.artist}</div>
-              <div class="mt-3 flex gap-2">
+              <div class="mt-3 flex flex-wrap gap-2">
                 <button class="h-9 rounded-lg border border-white/10 bg-white/5 px-3 text-sm hover:bg-white/10" on:click={playSelectedAlbum}>
                   Album abspielen
                 </button>
+                <div class="relative">
+                  <button
+                    type="button"
+                    class="h-9 rounded-lg border border-white/10 bg-white/5 px-3 text-sm hover:bg-white/10 inline-flex items-center gap-2"
+                    aria-haspopup="menu"
+                    aria-expanded={targetMenuOpen}
+                    on:click={() => void toggleTargetMenu()}
+                  >
+                    <svg viewBox="0 0 24 24" class="h-4 w-4 text-cyan-200" fill="currentColor">
+                      <path d="M4 10v4c0 1.1.9 2 2 2h2l5 4V4L8 8H6c-1.1 0-2 .9-2 2zm13.5 2c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z" />
+                    </svg>
+                    <span>{playTargetLabel()}</span>
+                  </button>
+
+                  {#if targetMenuOpen}
+                    <div class="absolute left-0 top-10 z-[70] w-72 overflow-hidden rounded-xl border border-white/10 bg-zinc-950/95 text-white shadow-2xl backdrop-blur" role="menu">
+                      <button
+                        type="button"
+                        class={`w-full px-3 py-2.5 text-left text-sm hover:bg-white/10 flex items-center justify-between ${isCurrentTarget('local') ? 'bg-white/10 text-cyan-200' : ''}`}
+                        on:click={() => selectPlayTarget({ kind: 'local', name: 'Dieses Gerät' })}
+                      >
+                        <span>Dieses Gerät</span>
+                        {#if isCurrentTarget('local')}
+                          <span class="text-xs text-cyan-200">Aktiv</span>
+                        {/if}
+                      </button>
+
+                      {#if heosTargetsBusy}
+                        <div class="px-3 py-2 text-xs text-white/50">Lade…</div>
+                      {:else if heosTargetsError}
+                        <div class="px-3 py-2 text-xs text-red-300">{heosTargetsError}</div>
+                      {:else}
+                        {#if heosTargetGroups.length > 0}
+                          <div class="border-t border-white/10 px-3 py-2 text-[11px] text-white/45">Gruppen</div>
+                          {#each heosTargetGroups as group (String(group.gid))}
+                            {@const leaderPid = getHeosGroupLeaderPid(group)}
+                            {#if leaderPid}
+                              <button
+                                type="button"
+                                class={`w-full px-3 py-2.5 text-left text-sm hover:bg-white/10 ${isCurrentTarget('heos', leaderPid) ? 'bg-cyan-400/10 text-cyan-200' : ''}`}
+                                on:click={() => selectPlayTarget({ kind: 'heos', pid: leaderPid, name: group.name })}
+                              >
+                                <div class="flex items-center justify-between gap-2">
+                                  <span class="truncate">{group.name}</span>
+                                  {#if isCurrentTarget('heos', leaderPid)}
+                                    <span class="shrink-0 text-xs text-cyan-200">Aktiv</span>
+                                  {/if}
+                                </div>
+                                <div class="mt-0.5 truncate text-[10px] text-white/40">{group.players.map((p) => p.name).join(', ')}</div>
+                              </button>
+                            {/if}
+                          {/each}
+                        {/if}
+
+                        <div class="border-t border-white/10 px-3 py-2 text-[11px] text-white/45">Speaker</div>
+                        {#if heosTargetPlayers.length === 0}
+                          <div class="px-3 py-2 text-xs text-white/50">Keine Speaker</div>
+                        {:else}
+                          {#each heosTargetPlayers as player (player.pid)}
+                            <button
+                              type="button"
+                              class={`w-full px-3 py-2.5 text-left text-sm hover:bg-white/10 ${isCurrentTarget('heos', player.pid) ? 'bg-cyan-400/10 text-cyan-200' : ''}`}
+                              on:click={() => selectPlayTarget({ kind: 'heos', pid: player.pid, name: player.name })}
+                            >
+                              <div class="flex items-center justify-between gap-2">
+                                <span class="truncate">{player.name}</span>
+                                {#if isCurrentTarget('heos', player.pid)}
+                                  <span class="shrink-0 text-xs text-cyan-200">Aktiv</span>
+                                {/if}
+                              </div>
+                              {#if player.model}
+                                <div class="mt-0.5 truncate text-[10px] text-white/40">{player.model}</div>
+                              {/if}
+                            </button>
+                          {/each}
+                        {/if}
+                      {/if}
+                    </div>
+                  {/if}
+                </div>
                 <button
                   class="h-9 rounded-lg border border-white/10 bg-white/5 px-3 text-sm hover:bg-white/10 disabled:opacity-50"
                   on:click={addSelectedAlbumToPlaylist}

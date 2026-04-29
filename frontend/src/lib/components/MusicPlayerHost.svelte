@@ -6,7 +6,8 @@
     setNowPlaying,
     setProgress,
     buildEdgeStreamUrl,
-    type NowPlayingTrack
+    type NowPlayingTrack,
+    type PlaybackTarget
   } from '$lib/stores/musicPlayer';
 
   import {
@@ -19,7 +20,12 @@
     getEdgeTokenFromStorage
   } from '$lib/edge';
 
-  import { resetHeosPlaybackStatus, setHeosPlaybackStatus } from '$lib/stores/heosPlayback';
+  import {
+    resetHeosPlaybackStatus,
+    setHeosPlaybackStatus,
+    type HeosPlaybackState,
+    type HeosPlayerPlaybackSummary
+  } from '$lib/stores/heosPlayback';
   import { resetSpotifyPlaybackStatus, setSpotifyPlaybackStatus } from '$lib/stores/spotifyPlayback';
 
   let audioEl: HTMLAudioElement | null = null;
@@ -29,6 +35,7 @@
 
   let heosActive = false;
   let heosPlaying = false;
+  let activePlaybackTarget: PlaybackTarget = { kind: 'local' };
 
   const HEOS_DASHBO_MARKER = 'DashbO |';
 
@@ -52,6 +59,23 @@
 
   function current(): NowPlayingTrack | null {
     return queue[index] ?? null;
+  }
+
+  function normalizePlaybackTarget(target?: PlaybackTarget | null): PlaybackTarget {
+    if (target?.kind === 'local') return { kind: 'local', name: target.name ?? null };
+    if (target?.kind === 'heos') {
+      const pid = Number(target.pid);
+      if (Number.isFinite(pid) && pid !== 0) {
+        return { kind: 'heos', pid, name: target.name ?? null };
+      }
+    }
+
+    const pid = getEdgeHeosSelectedPlayerIdFromStorage();
+    return pid ? { kind: 'heos', pid } : { kind: 'local' };
+  }
+
+  function activeHeosPid(): number | null {
+    return activePlaybackTarget.kind === 'heos' ? activePlaybackTarget.pid : null;
   }
 
   function normalizeTrack(track: NowPlayingTrack): NowPlayingTrack {
@@ -237,17 +261,41 @@
     return false;
   }
 
+  function normalizeHeosPlayerSummary(raw: any, updatedAt: number): HeosPlayerPlaybackSummary {
+    const pid = Number(raw?.pid);
+    const stateRaw = typeof raw?.state === 'string' ? String(raw.state) : 'unknown';
+    const state: HeosPlaybackState =
+      stateRaw === 'play' || stateRaw === 'pause' || stateRaw === 'stop' ? stateRaw : 'unknown';
+    return {
+      pid,
+      name: typeof raw?.name === 'string' && raw.name.trim() ? raw.name : String(pid || ''),
+      model: typeof raw?.model === 'string' ? raw.model : null,
+      state,
+      isPlaying: Boolean(raw?.isPlaying),
+      isActive: Boolean(raw?.isActive),
+      title: typeof raw?.title === 'string' ? raw.title : null,
+      artist: typeof raw?.artist === 'string' ? raw.artist : null,
+      album: typeof raw?.album === 'string' ? raw.album : null,
+      imageUrl: typeof raw?.imageUrl === 'string' ? raw.imageUrl : null,
+      source: typeof raw?.source === 'string' ? raw.source : null,
+      url: typeof raw?.url === 'string' ? raw.url : null,
+      updatedAt,
+      error: typeof raw?.error === 'string' ? raw.error : null
+    };
+  }
+
   function startHeosStatusPolling() {
     stopHeosStatusPolling();
 
     const tick = async () => {
       const playerWidgetEnabled = getEdgePlayerWidgetEnabledFromStorage();
       const heosEnabled = getEdgeHeosEnabledFromStorage();
-      const pid = getEdgeHeosSelectedPlayerIdFromStorage();
+      const selectedPid = getEdgeHeosSelectedPlayerIdFromStorage();
+      const pid = activeHeosPid() ?? selectedPid;
       const edgeBaseUrl = getEdgeBaseUrlFromStorage();
       const edgeToken = getEdgeTokenFromStorage();
 
-      if (!playerWidgetEnabled || !heosEnabled || !pid || !edgeBaseUrl) {
+      if (!playerWidgetEnabled || !heosEnabled || !edgeBaseUrl) {
         if (!playerWidgetEnabled) {
           stopHeosPolling();
           heosActive = false;
@@ -255,25 +303,69 @@
           setNowPlaying(null, false);
           setProgress(0, 0);
         }
-        resetHeosPlaybackStatus({ enabled: Boolean(heosEnabled), pid: pid ?? null });
+        resetHeosPlaybackStatus({ enabled: Boolean(heosEnabled), pid: pid ?? null, players: [] });
         return;
       }
 
       try {
-        const r = await edgeFetchJson<any>(
-          edgeBaseUrl,
-          `/api/heos/playback_summary?pid=${encodeURIComponent(String(pid))}`,
-          edgeToken || undefined,
-          { method: 'GET', headers: buildHeosHeaders() }
-        );
+        let summary: any = null;
+        let playerSummaries: HeosPlayerPlaybackSummary[] = [];
+        const updatedAt = Date.now();
 
-        const summary = r?.summary ?? null;
+        try {
+          const r = await edgeFetchJson<any>(
+            edgeBaseUrl,
+            '/api/heos/playback_summaries',
+            edgeToken || undefined,
+            { method: 'GET', headers: buildHeosHeaders() }
+          );
+          const rawSummaries = Array.isArray(r?.summaries) ? r.summaries : [];
+          playerSummaries = rawSummaries
+            .map((item: any) => normalizeHeosPlayerSummary(item, updatedAt))
+            .filter((item: any) => Number.isFinite(item.pid) && item.pid !== 0);
+          summary = pid ? playerSummaries.find((item) => item.pid === pid) ?? null : null;
+        } catch {
+          if (!pid) throw new Error('heos_status_failed');
+        }
+
+        if (!summary && pid) {
+          const r = await edgeFetchJson<any>(
+            edgeBaseUrl,
+            `/api/heos/playback_summary?pid=${encodeURIComponent(String(pid))}`,
+            edgeToken || undefined,
+            { method: 'GET', headers: buildHeosHeaders() }
+          );
+          summary = r?.summary ?? null;
+        }
+
+        if (!pid) {
+          setHeosPlaybackStatus({
+            enabled: true,
+            pid: null,
+            players: playerSummaries,
+            state: 'unknown',
+            isPlaying: false,
+            isActive: false,
+            title: null,
+            artist: null,
+            album: null,
+            imageUrl: null,
+            source: null,
+            url: null,
+            isDashbo: false,
+            isExternal: false,
+            updatedAt: Date.now(),
+            error: null
+          });
+          return;
+        }
+
         const state = typeof summary?.state === 'string' ? String(summary.state) : 'unknown';
         const isPlaying = Boolean(summary?.isPlaying);
         const isActive = typeof summary?.isActive === 'boolean' ? summary.isActive : isPlaying;
 
         const dashboTrack = current();
-        const dashboStreamingToHeos = Boolean(heosActive && dashboTrack);
+        const dashboStreamingToHeos = Boolean(heosActive && dashboTrack && activeHeosPid() === pid);
 
         // Detect takeover: if DashbO thinks it's controlling HEOS but the HEOS metadata clearly indicates
         // another source (e.g. Spotify) or a different non-generic track, switch to external mode.
@@ -302,6 +394,7 @@
         setHeosPlaybackStatus({
           enabled: true,
           pid,
+          players: playerSummaries,
           state: state === 'play' || state === 'pause' || state === 'stop' ? state : 'unknown',
           isPlaying,
           isActive,
@@ -321,6 +414,7 @@
         setHeosPlaybackStatus({
           enabled: true,
           pid,
+          players: [],
           updatedAt: Date.now(),
           error: msg,
           isExternal: false,
@@ -450,8 +544,9 @@
   }
 
   async function startLocalPlayback(track: NowPlayingTrack) {
+    activePlaybackTarget = { kind: 'local' };
     if (!audioEl) {
-      setNowPlaying(track, false);
+      setNowPlaying(track, false, activePlaybackTarget);
       return;
     }
 
@@ -470,7 +565,7 @@
     }
 
     await audioEl.play();
-    setNowPlaying(track, true);
+    setNowPlaying(track, true, activePlaybackTarget);
   }
 
   async function startAt(i: number) {
@@ -484,11 +579,10 @@
     }
 
     const heosEnabled = getEdgeHeosEnabledFromStorage();
-    const heosPid = getEdgeHeosSelectedPlayerIdFromStorage();
+    const heosPid = activePlaybackTarget.kind === 'heos' ? activePlaybackTarget.pid : null;
     const edgeBaseUrl = getEdgeBaseUrlFromStorage();
-    const edgeToken = getEdgeTokenFromStorage();
 
-    setNowPlaying(track, false);
+    setNowPlaying(track, false, activePlaybackTarget);
     const knownDuration = typeof track.durationSec === 'number' && Number.isFinite(track.durationSec) ? track.durationSec : 0;
     setProgress(0, knownDuration);
 
@@ -509,7 +603,7 @@
         heosActive = true;
         heosPlaying = true;
         startHeosPolling(heosPid, knownDuration);
-        setNowPlaying(track, true);
+        setNowPlaying(track, true, activePlaybackTarget);
         void ensureHeosDuration(track);
         return;
       }
@@ -534,13 +628,14 @@
       heosActive = false;
       heosPlaying = false;
       stopHeosPolling();
-      setNowPlaying(track, false);
+      activePlaybackTarget = { kind: 'local' };
+      setNowPlaying(track, false, activePlaybackTarget);
     }
   }
 
   async function toggle() {
     const heosEnabled = getEdgeHeosEnabledFromStorage();
-    const heosPid = getEdgeHeosSelectedPlayerIdFromStorage();
+    const heosPid = activePlaybackTarget.kind === 'heos' ? activePlaybackTarget.pid : null;
     const edgeBaseUrl = getEdgeBaseUrlFromStorage();
     const edgeToken = getEdgeTokenFromStorage();
 
@@ -562,7 +657,7 @@
           heosActive = true;
           heosPlaying = true;
           startHeosPolling(heosPid, typeof track.durationSec === 'number' && Number.isFinite(track.durationSec) ? track.durationSec : 0);
-          setNowPlaying(track, true);
+          setNowPlaying(track, true, activePlaybackTarget);
           void ensureHeosDuration(track);
           return;
         } catch (err) {
@@ -582,7 +677,7 @@
             body: JSON.stringify({ pid: heosPid, state })
           });
           heosPlaying = !heosPlaying;
-          setNowPlaying(track, heosPlaying);
+          setNowPlaying(track, heosPlaying, activePlaybackTarget);
           return;
         } catch {
           heosActive = false;
@@ -592,6 +687,8 @@
         }
       }
     }
+
+    activePlaybackTarget = { kind: 'local' };
 
     if (!audioEl) return;
     if (audioEl.paused) {
@@ -618,7 +715,7 @@
 
   function prev() {
     const heosEnabled = getEdgeHeosEnabledFromStorage();
-    const heosPid = getEdgeHeosSelectedPlayerIdFromStorage();
+    const heosPid = activePlaybackTarget.kind === 'heos' ? activePlaybackTarget.pid : null;
     const edgeBaseUrl = getEdgeBaseUrlFromStorage();
     if (!heosEnabled || !heosPid || !edgeBaseUrl) {
       if (!audioEl) return;
@@ -640,7 +737,7 @@
     if (queue.length === 0) return;
     const next = index + 1;
     if (next >= queue.length) {
-      setNowPlaying(current(), false);
+      setNowPlaying(current(), false, activePlaybackTarget);
       heosPlaying = false;
       return;
     }
@@ -648,11 +745,11 @@
   }
 
   function onPause() {
-    setNowPlaying(current(), false);
+    setNowPlaying(current(), false, activePlaybackTarget);
   }
 
   function onPlay() {
-    setNowPlaying(current(), true);
+    setNowPlaying(current(), true, activePlaybackTarget);
   }
 
   function onTimeUpdate() {
@@ -671,6 +768,7 @@
     if (!cmd) return;
     if (cmd.type === 'play') {
       queue = cmd.queue;
+      activePlaybackTarget = normalizePlaybackTarget(cmd.target);
       void startAt(cmd.index);
     } else if (cmd.type === 'toggle') {
       void toggle();

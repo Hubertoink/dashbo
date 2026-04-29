@@ -3,7 +3,7 @@
   import { fly, fade } from 'svelte/transition';
   import { cubicOut } from 'svelte/easing';
   import { musicPlayerState, togglePlayPause, playNext, playPrev } from '$lib/stores/musicPlayer';
-  import { heosPlaybackStatus, setHeosPlaybackStatus } from '$lib/stores/heosPlayback';
+  import { heosPlaybackStatus, setHeosPlaybackStatus, type HeosPlayerPlaybackSummary } from '$lib/stores/heosPlayback';
   import { spotifyPlaybackStatus } from '$lib/stores/spotifyPlayback';
   import {
     EDGE_BASE_URL_KEY,
@@ -52,6 +52,12 @@
   $: playing = $musicPlayerState.playing;
   $: positionSec = $musicPlayerState.positionSec;
   $: durationSec = $musicPlayerState.durationSec;
+  $: activeTarget = $musicPlayerState.target;
+  $: activeHeosTargetPid = activeTarget?.kind === 'heos' ? activeTarget.pid : null;
+  $: activeHeosTargetName = activeTarget?.kind === 'heos' ? activeTarget.name || '' : '';
+  $: heosWidgetName = activeHeosTargetPid
+    ? activeHeosTargetName || String(activeHeosTargetPid)
+    : selectedName || selectedPid;
   $: pct = durationSec > 0 ? Math.min(100, Math.max(0, (positionSec / durationSec) * 100)) : 0;
 
   $: heosExternal = $heosPlaybackStatus?.isExternal === true;
@@ -71,6 +77,8 @@
   $: spotifySourceLabel = $spotifyPlaybackStatus?.source ? String($spotifyPlaybackStatus.source) : 'Spotify';
 
   $: heosExternalActive = Boolean(heosEnabled && selectedPid && heosExternal);
+
+  $: heosPlayerSummaries = $heosPlaybackStatus?.players ?? [];
 
   $: heosIsPlaying = Boolean($heosPlaybackStatus?.isPlaying);
   $: isPlayingForUi = now ? playing : heosExternalActive ? heosIsPlaying : false;
@@ -525,6 +533,42 @@
     }
   }
 
+  function heosSummaryForPid(pid: number | string | null | undefined): HeosPlayerPlaybackSummary | null {
+    const n = Number(pid);
+    if (!Number.isFinite(n) || n === 0) return null;
+    return heosPlayerSummaries.find((summary) => summary.pid === n) ?? null;
+  }
+
+  function heosStateLabel(summary: HeosPlayerPlaybackSummary | null): string {
+    if (!summary) return '';
+    if (summary.error) return 'Fehler';
+    if (summary.isPlaying) return 'Spielt';
+    if (summary.isActive) return 'Pausiert';
+    return 'Frei';
+  }
+
+  function heosStateClass(summary: HeosPlayerPlaybackSummary | null): string {
+    if (!summary) return 'bg-white/8 text-white/40';
+    if (summary.error) return 'bg-red-500/15 text-red-300';
+    if (summary.isPlaying) return 'bg-cyan-400/15 text-cyan-200';
+    if (summary.isActive) return 'bg-amber-400/15 text-amber-200';
+    return 'bg-white/8 text-white/40';
+  }
+
+  function heosTitleLine(summary: HeosPlayerPlaybackSummary | null, fallback: string): string {
+    if (!summary) return fallback;
+    if (summary.error) return summary.error;
+    if (summary.isActive) return summary.title || summary.album || summary.source || 'Wiedergabe aktiv';
+    return fallback;
+  }
+
+  function heosMetaLine(summary: HeosPlayerPlaybackSummary | null, fallback: string): string {
+    if (!summary || summary.error) return fallback;
+    if (!summary.isActive) return fallback;
+    const parts = [summary.artist, summary.source].map((part) => String(part || '').trim()).filter(Boolean);
+    return parts.length > 0 ? parts.join(' · ') : fallback;
+  }
+
   async function toggleSpeakerPicker() {
     loadHeosConfig();
     speakerOpen = !speakerOpen;
@@ -591,8 +635,8 @@
       <!-- Controls -->
       <div class="flex flex-col items-end gap-1 ml-2">
         {#if heosEnabled}
-          {#if selectedPid}
-            <div class="text-[10px] text-white/50 leading-none">HEOS: {selectedName ? selectedName : selectedPid}{externalSuffix}</div>
+          {#if selectedPid || activeHeosTargetPid}
+            <div class="text-[10px] text-white/50 leading-none">HEOS: {heosWidgetName}{externalSuffix}</div>
           {/if}
         {/if}
 
@@ -683,8 +727,8 @@
         {#if heosEnabled && selectedPid && $heosPlaybackStatus?.error}
           <div class="text-[10px] text-red-300 leading-none mt-1 truncate">HEOS Fehler: {$heosPlaybackStatus.error}</div>
         {/if}
-        {#if heosEnabled && selectedPid}
-          <div class="text-[10px] text-white/50 leading-none mt-1">HEOS: {selectedName ? selectedName : selectedPid}{externalSuffix}</div>
+        {#if heosEnabled && (selectedPid || activeHeosTargetPid)}
+          <div class="text-[10px] text-white/50 leading-none mt-1">HEOS: {heosWidgetName}{externalSuffix}</div>
         {/if}
       </div>
       <div class="flex items-center gap-1">
@@ -827,6 +871,8 @@
                   <span>Gruppen</span>
                 </div>
                 {#each groups as g (String(g.gid))}
+                  {@const leaderPid = getGroupLeaderPid(g)}
+                  {@const summary = heosSummaryForPid(leaderPid)}
                   <div class="border-t border-white/5">
                     <div class="flex items-center hover:bg-white/10 transition rounded-xl">
                       <button
@@ -835,21 +881,32 @@
                         disabled={groupingMode}
                         on:click={() => {
                           if (groupingMode) return;
-                          const leaderPid = getGroupLeaderPid(g);
                           if (!leaderPid) return;
                           selectedPid = String(leaderPid);
                           persistSelectedPid(selectedPid, g.name);
                           void fetchVolumeForSelected();
                         }}
                       >
-                        <div class="flex items-center gap-2">
-                          <svg viewBox="0 0 24 24" class="h-3.5 w-3.5 text-white/40" fill="currentColor">
-                            <path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/>
-                          </svg>
-                          <span>{g.name}</span>
-                        </div>
-                        <div class="text-[10px] text-white/40 mt-0.5 pl-5">
-                          {g.players.map(p => p.name).join(', ')}
+                        <div class="flex items-center gap-3">
+                          <div class="h-10 w-10 shrink-0 overflow-hidden rounded-lg bg-white/8 flex items-center justify-center">
+                            {#if summary?.imageUrl}
+                              <img src={summary.imageUrl} alt="" class="h-full w-full object-cover" loading="lazy" />
+                            {:else}
+                              <svg viewBox="0 0 24 24" class="h-4 w-4 text-white/40" fill="currentColor">
+                                <path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/>
+                              </svg>
+                            {/if}
+                          </div>
+                          <div class="min-w-0 flex-1">
+                            <div class="flex items-center gap-2">
+                              <span class="truncate font-medium">{g.name}</span>
+                              {#if summary}
+                                <span class={`shrink-0 rounded-full px-2 py-0.5 text-[10px] ${heosStateClass(summary)}`}>{heosStateLabel(summary)}</span>
+                              {/if}
+                            </div>
+                            <div class="mt-0.5 truncate text-[11px] text-white/55">{heosTitleLine(summary, g.players.map((p) => p.name).join(', '))}</div>
+                            <div class="mt-0.5 truncate text-[10px] text-white/35">{heosMetaLine(summary, g.players.map((p) => p.name).join(', '))}</div>
+                          </div>
                         </div>
                       </button>
                       <!-- Dissolve group button -->
@@ -894,6 +951,7 @@
                   {/if}
                 </div>
                 {#each speakers as s, i}
+                  {@const summary = heosSummaryForPid(s.pid)}
                   {#if groupingMode}
                     <!-- Grouping mode: checkboxes -->
                     <label
@@ -920,7 +978,27 @@
                         void fetchVolumeForSelected();
                       }}
                     >
-                      {s.name}
+                      <div class="flex items-center gap-3">
+                        <div class="h-10 w-10 shrink-0 overflow-hidden rounded-lg bg-white/8 flex items-center justify-center">
+                          {#if summary?.imageUrl}
+                            <img src={summary.imageUrl} alt="" class="h-full w-full object-cover" loading="lazy" />
+                          {:else}
+                            <svg viewBox="0 0 24 24" class="h-4 w-4 text-white/40" fill="currentColor">
+                              <path d="M4 10v4c0 1.1.9 2 2 2h2l5 4V4L8 8H6c-1.1 0-2 .9-2 2zm13.5 2c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z" />
+                            </svg>
+                          {/if}
+                        </div>
+                        <div class="min-w-0 flex-1">
+                          <div class="flex items-center gap-2">
+                            <span class="truncate font-medium">{s.name}</span>
+                            {#if summary}
+                              <span class={`shrink-0 rounded-full px-2 py-0.5 text-[10px] ${heosStateClass(summary)}`}>{heosStateLabel(summary)}</span>
+                            {/if}
+                          </div>
+                          <div class="mt-0.5 truncate text-[11px] text-white/55">{heosTitleLine(summary, s.model || 'Bereit')}</div>
+                          <div class="mt-0.5 truncate text-[10px] text-white/35">{heosMetaLine(summary, s.model || '')}</div>
+                        </div>
+                      </div>
                     </button>
                   {/if}
                 {/each}

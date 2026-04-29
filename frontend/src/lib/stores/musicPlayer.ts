@@ -10,17 +10,23 @@ export type NowPlayingTrack = {
   durationSec?: number | null;
 };
 
+export type PlaybackTarget =
+  | { kind: 'local'; name?: string | null }
+  | { kind: 'heos'; pid: number; name?: string | null };
+
 type PlayerState = {
   now: NowPlayingTrack | null;
   playing: boolean;
   positionSec: number;
   durationSec: number;
+  target: PlaybackTarget | null;
 };
 
 type PlayCommand = {
   type: 'play';
   queue: NowPlayingTrack[];
   index: number;
+  target?: PlaybackTarget | null;
 };
 
 type ControlCommand =
@@ -32,7 +38,7 @@ type ControlCommand =
 
 type PlayerCommand = PlayCommand | ControlCommand;
 
-const _state = writable<PlayerState>({ now: null, playing: false, positionSec: 0, durationSec: 0 });
+const _state = writable<PlayerState>({ now: null, playing: false, positionSec: 0, durationSec: 0, target: null });
 const _command = writable<PlayerCommand | null>(null);
 
 export const musicPlayerState = {
@@ -44,7 +50,7 @@ export const musicPlayerCommand = {
   clear: () => _command.set(null)
 };
 
-export function setNowPlaying(now: NowPlayingTrack | null, playing: boolean) {
+export function setNowPlaying(now: NowPlayingTrack | null, playing: boolean, target?: PlaybackTarget | null) {
   _state.update((prev) => {
     const prevId = prev.now?.trackId ?? null;
     const nextId = now?.trackId ?? null;
@@ -65,7 +71,8 @@ export function setNowPlaying(now: NowPlayingTrack | null, playing: boolean) {
       now,
       playing,
       positionSec: now ? (trackChanged ? 0 : prev.positionSec) : 0,
-      durationSec: nextDuration
+      durationSec: nextDuration,
+      target: now ? (target !== undefined ? target : prev.target) : null
     };
   });
 }
@@ -81,13 +88,13 @@ export function setProgress(positionSec: number, durationSec: number) {
   });
 }
 
-export function playTrack(track: NowPlayingTrack) {
-  _command.set({ type: 'play', queue: [track], index: 0 });
+export function playTrack(track: NowPlayingTrack, target?: PlaybackTarget | null) {
+  _command.set({ type: 'play', queue: [track], index: 0, target });
 }
 
-export function playAlbum(tracks: NowPlayingTrack[], startIndex = 0) {
+export function playAlbum(tracks: NowPlayingTrack[], startIndex = 0, target?: PlaybackTarget | null) {
   const idx = Math.max(0, Math.min(tracks.length - 1, startIndex));
-  _command.set({ type: 'play', queue: tracks, index: idx });
+  _command.set({ type: 'play', queue: tracks, index: idx, target });
 }
 
 export function togglePlayPause() {

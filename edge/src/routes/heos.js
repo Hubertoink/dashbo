@@ -105,6 +105,11 @@ function extractHeosParsedNumber(resp, key) {
   return Number.isFinite(n) ? n : null;
 }
 
+function normalizePlaybackState(raw) {
+  const state = String(raw || '').trim().toLowerCase();
+  return state === 'play' || state === 'pause' || state === 'stop' ? state : 'unknown';
+}
+
 heosRouter.get('/players', (req, res) => {
   (async () => {
     const hosts = parseHeosHostsHeader(req);
@@ -269,6 +274,62 @@ heosRouter.get('/playback_summary', (req, res) => {
   })().catch((err) => {
     const error = normalizeHeosError(err);
     res.status(502).json({ ok: false, error });
+  });
+});
+
+heosRouter.get('/playback_summaries', (req, res) => {
+  (async () => {
+    const hosts = parseHeosHostsHeader(req);
+    const players = await listPlayers({ hosts });
+
+    const settled = await Promise.allSettled(
+      players.map(async (player) => {
+        const summary = await getPlaybackSummary(player.pid, { hosts });
+        return {
+          pid: player.pid,
+          name: player.name,
+          model: player.model || null,
+          state: normalizePlaybackState(summary?.state),
+          isPlaying: Boolean(summary?.isPlaying),
+          isActive: Boolean(summary?.isActive),
+          title: typeof summary?.title === 'string' ? summary.title : null,
+          artist: typeof summary?.artist === 'string' ? summary.artist : null,
+          album: typeof summary?.album === 'string' ? summary.album : null,
+          imageUrl: typeof summary?.imageUrl === 'string' ? summary.imageUrl : null,
+          source: typeof summary?.source === 'string' ? summary.source : null,
+          url: typeof summary?.url === 'string' ? summary.url : null,
+          error: null
+        };
+      })
+    );
+
+    const summaries = settled.map((result, index) => {
+      if (result.status === 'fulfilled') return result.value;
+      const player = players[index];
+      return {
+        pid: player.pid,
+        name: player.name,
+        model: player.model || null,
+        state: 'unknown',
+        isPlaying: false,
+        isActive: false,
+        title: null,
+        artist: null,
+        album: null,
+        imageUrl: null,
+        source: null,
+        url: null,
+        error: normalizeHeosError(result.reason)
+      };
+    });
+
+    res.json({ ok: true, players, summaries, ...getStatus() });
+  })().catch((err) => {
+    const error = normalizeHeosError(err);
+    if (String(error).toLowerCase().includes('no devices found')) {
+      return res.json({ ok: true, players: [], summaries: [], ...getStatus() });
+    }
+    res.status(502).json({ ok: false, error, ...getStatus() });
   });
 });
 
