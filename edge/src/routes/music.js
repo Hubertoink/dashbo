@@ -8,9 +8,60 @@ const { getMusicLibrary } = require('../services/musicLibrary');
 
 const musicRouter = express.Router();
 
-// In-memory mapping for stable HEOS stream URLs.
-// Key: heos pid -> { trackId, updatedAt, lastRequestedAt, requestCount }
+// In-memory mapping for HEOS stream requests.
+// Key: heos pid -> { trackId, streamId, updatedAt, lastRequestedAt, requestCount, lastRange, lastUserAgent }
 const heosPidToTrack = new Map();
+
+function readQueryString(req, names) {
+  for (const name of names) {
+    const value = req?.query?.[name];
+    if (typeof value === 'string' && value.trim()) return value.trim();
+  }
+  return '';
+}
+
+function readHeosPid(req) {
+  const raw = req?.query?.heosPid ?? req?.query?.pid;
+  const pid = Number(raw);
+  return Number.isFinite(pid) && pid !== 0 ? pid : null;
+}
+
+function makeHeosTargetEntry(trackId, streamId) {
+  return {
+    trackId,
+    streamId: streamId || null,
+    updatedAt: Date.now(),
+    lastRequestedAt: null,
+    requestCount: 0,
+    lastRange: null,
+    lastUserAgent: null
+  };
+}
+
+function markHeosStreamRequest(req, trackId) {
+  const pid = readHeosPid(req);
+  if (!pid) return { ok: true, tracked: false };
+
+  const streamId = readQueryString(req, ['sid', 'streamId', 'session']);
+  const existing = heosPidToTrack.get(pid) || null;
+
+  if (existing?.streamId && streamId && existing.streamId !== streamId) {
+    return { ok: false, stale: true, pid, reason: 'stream_id_mismatch' };
+  }
+  if (existing?.trackId && streamId && existing.trackId !== trackId) {
+    return { ok: false, stale: true, pid, reason: 'track_id_mismatch' };
+  }
+
+  const entry = existing?.trackId === trackId ? existing : makeHeosTargetEntry(trackId, streamId);
+  if (streamId && !entry.streamId) entry.streamId = streamId;
+  entry.lastRequestedAt = Date.now();
+  entry.requestCount = Number(entry.requestCount || 0) + 1;
+  entry.lastRange = req?.headers?.range ? String(req.headers.range) : null;
+  entry.lastUserAgent = req?.headers?.['user-agent'] ? String(req.headers['user-agent']).slice(0, 180) : null;
+  heosPidToTrack.set(pid, entry);
+
+  return { ok: true, tracked: true, pid, entry };
+}
 
 function getAudioMimeByExt(ext) {
   const e = String(ext || '').toLowerCase();
@@ -47,6 +98,7 @@ async function streamTrackAbsPath(abs, req, res) {
 
   res.setHeader('Accept-Ranges', 'bytes');
   res.setHeader('Content-Type', mime);
+  res.setHeader('Cache-Control', 'no-store');
 
   const range = String(req.headers.range || '');
   const m = range.match(/bytes=(\d+)-(\d+)?/);
@@ -134,6 +186,12 @@ musicRouter.get('/albums/:albumId/cover', (req, res) => {
 musicRouter.get('/tracks/:trackId/stream', async (req, res) => {
   const trackId = String(req.params.trackId || '');
   const abs = getMusicLibrary().resolveTrackAbsPath(trackId);
+  if (abs) {
+    const tracked = markHeosStreamRequest(req, trackId);
+    if (!tracked.ok && tracked.stale) {
+      return res.status(409).json({ error: 'stale_heos_stream', pid: tracked.pid, reason: tracked.reason });
+    }
+  }
   await streamTrackAbsPath(abs, req, res);
 });
 
@@ -149,14 +207,16 @@ musicRouter.get('/heos/target', (req, res) => {
 musicRouter.post('/heos/target', (req, res) => {
   const pid = Number(req?.body?.pid);
   const trackId = String(req?.body?.trackId || '').trim();
+  const streamId = String(req?.body?.streamId || req?.body?.sid || '').trim();
   if (!Number.isFinite(pid) || pid === 0) return res.status(400).json({ ok: false, error: 'pid_required' });
   if (!trackId) return res.status(400).json({ ok: false, error: 'trackId_required' });
 
   const abs = getMusicLibrary().resolveTrackAbsPath(trackId);
   if (!abs) return res.status(404).json({ ok: false, error: 'not_found' });
 
-  heosPidToTrack.set(pid, { trackId, updatedAt: Date.now(), lastRequestedAt: null, requestCount: 0 });
-  res.json({ ok: true, pid, trackId });
+  const entry = makeHeosTargetEntry(trackId, streamId);
+  heosPidToTrack.set(pid, entry);
+  res.json({ ok: true, pid, trackId, streamId: entry.streamId });
 });
 
 // Stable HEOS stream URL endpoint: HEOS will always request this URL for the selected pid.
@@ -166,10 +226,15 @@ musicRouter.get('/heos/stream', async (req, res) => {
 
   const entry = heosPidToTrack.get(pid);
   if (!entry || !entry.trackId) return res.status(409).json({ error: 'no_target', pid });
+  const streamId = readQueryString(req, ['sid', 'streamId', 'session']);
+  if (entry.streamId && streamId && entry.streamId !== streamId) {
+    return res.status(409).json({ error: 'stale_heos_stream', pid, reason: 'stream_id_mismatch' });
+  }
 
-  entry.lastRequestedAt = Date.now();
-  entry.requestCount = Number(entry.requestCount || 0) + 1;
-  heosPidToTrack.set(pid, entry);
+  const tracked = markHeosStreamRequest(req, entry.trackId);
+  if (!tracked.ok && tracked.stale) {
+    return res.status(409).json({ error: 'stale_heos_stream', pid: tracked.pid, reason: tracked.reason });
+  }
 
   const abs = getMusicLibrary().resolveTrackAbsPath(entry.trackId);
   await streamTrackAbsPath(abs, req, res);
