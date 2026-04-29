@@ -78,6 +78,41 @@
     return activePlaybackTarget.kind === 'heos' ? activePlaybackTarget.pid : null;
   }
 
+  async function stopHeosTarget(pid: number | null) {
+    if (!pid) return;
+    const edgeBaseUrl = getEdgeBaseUrlFromStorage();
+    const edgeToken = getEdgeTokenFromStorage();
+    if (!edgeBaseUrl) return;
+
+    await edgeFetchJson(edgeBaseUrl, '/api/heos/play_state', edgeToken || undefined, {
+      method: 'POST',
+      headers: buildHeosHeaders(),
+      body: JSON.stringify({ pid, state: 'stop' })
+    });
+  }
+
+  async function stopPreviousHeosIfTargetChanged(previousPid: number | null, nextTarget: PlaybackTarget) {
+    const nextPid = nextTarget.kind === 'heos' ? nextTarget.pid : null;
+    if (!previousPid || previousPid === nextPid) return;
+    try {
+      await stopHeosTarget(previousPid);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err || 'HEOS stop failed');
+      console.warn('[HEOS] previous target stop failed:', msg);
+    }
+  }
+
+  function stopLocalAudio() {
+    if (!audioEl) return;
+    try {
+      audioEl.pause();
+      audioEl.removeAttribute('src');
+      audioEl.load();
+    } catch {
+      // ignore
+    }
+  }
+
   function normalizeTrack(track: NowPlayingTrack): NowPlayingTrack {
     const raw = (track as any)?.durationSec;
     const n = typeof raw === 'number' ? raw : Number(raw);
@@ -596,6 +631,7 @@
 
     try {
       if (heosEnabled && heosPid && edgeBaseUrl) {
+        stopLocalAudio();
         await setHeosTargetTrack(heosPid, track.trackId);
         const url = buildHeosStableStreamUrl(heosPid);
         // Keep the name stable to avoid accumulating many different URL stream entries in the HEOS app.
@@ -767,9 +803,22 @@
   const unsub = musicPlayerCommand.subscribe((cmd) => {
     if (!cmd) return;
     if (cmd.type === 'play') {
-      queue = cmd.queue;
-      activePlaybackTarget = normalizePlaybackTarget(cmd.target);
-      void startAt(cmd.index);
+      void (async () => {
+        const previousPid = activeHeosPid();
+        const nextTarget = normalizePlaybackTarget(cmd.target);
+        queue = cmd.queue;
+        activePlaybackTarget = nextTarget;
+        await stopPreviousHeosIfTargetChanged(previousPid, nextTarget);
+        await startAt(cmd.index);
+      })();
+    } else if (cmd.type === 'target') {
+      void (async () => {
+        const previousPid = activeHeosPid();
+        const nextTarget = normalizePlaybackTarget(cmd.target);
+        activePlaybackTarget = nextTarget;
+        await stopPreviousHeosIfTargetChanged(previousPid, nextTarget);
+        if (current()) await startAt(index);
+      })();
     } else if (cmd.type === 'toggle') {
       void toggle();
     } else if (cmd.type === 'next') {

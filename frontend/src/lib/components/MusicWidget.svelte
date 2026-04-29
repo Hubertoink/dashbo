@@ -2,7 +2,7 @@
   import { onDestroy, onMount } from 'svelte';
   import { fly, fade } from 'svelte/transition';
   import { cubicOut } from 'svelte/easing';
-  import { musicPlayerState, togglePlayPause, playNext, playPrev } from '$lib/stores/musicPlayer';
+  import { musicPlayerState, togglePlayPause, playNext, playPrev, switchPlaybackTarget } from '$lib/stores/musicPlayer';
   import { heosPlaybackStatus, setHeosPlaybackStatus, type HeosPlayerPlaybackSummary } from '$lib/stores/heosPlayback';
   import { spotifyPlaybackStatus } from '$lib/stores/spotifyPlayback';
   import {
@@ -533,6 +533,17 @@
     }
   }
 
+  function switchDashboPlaybackToSelectedTarget(pid: string, name?: string) {
+    const n = Number(pid);
+    if (!now || !Number.isFinite(n) || n === 0) return;
+    switchPlaybackTarget({ kind: 'heos', pid: n, name: name || null });
+  }
+
+  function switchDashboPlaybackToLocal() {
+    if (!now) return;
+    switchPlaybackTarget({ kind: 'local', name: 'Dieses Gerät' });
+  }
+
   function heosSummaryForPid(pid: number | string | null | undefined): HeosPlayerPlaybackSummary | null {
     const n = Number(pid);
     if (!Number.isFinite(n) || n === 0) return null;
@@ -859,6 +870,7 @@
                   on:click={() => {
                     selectedPid = '';
                     persistSelectedPid('');
+                    switchDashboPlaybackToLocal();
                   }}
                 >
                   Kein Speaker
@@ -884,6 +896,7 @@
                           if (!leaderPid) return;
                           selectedPid = String(leaderPid);
                           persistSelectedPid(selectedPid, g.name);
+                          switchDashboPlaybackToSelectedTarget(selectedPid, g.name);
                           void fetchVolumeForSelected();
                         }}
                       >
@@ -974,7 +987,8 @@
                       style="animation: speakerCardIn {180 + i * 60}ms {i * 40}ms both cubic-bezier(.22,1,.36,1)"
                       on:click={() => {
                         selectedPid = String(s.pid);
-                        persistSelectedPid(selectedPid);
+                        persistSelectedPid(selectedPid, s.name);
+                        switchDashboPlaybackToSelectedTarget(selectedPid, s.name);
                         void fetchVolumeForSelected();
                       }}
                     >

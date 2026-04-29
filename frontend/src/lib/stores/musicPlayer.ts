@@ -29,6 +29,11 @@ type PlayCommand = {
   target?: PlaybackTarget | null;
 };
 
+type TargetCommand = {
+  type: 'target';
+  target: PlaybackTarget | null;
+};
+
 type ControlCommand =
   | { type: 'toggle' }
   | { type: 'pause' }
@@ -36,7 +41,7 @@ type ControlCommand =
   | { type: 'next' }
   | { type: 'prev' };
 
-type PlayerCommand = PlayCommand | ControlCommand;
+type PlayerCommand = PlayCommand | TargetCommand | ControlCommand;
 
 const _state = writable<PlayerState>({ now: null, playing: false, positionSec: 0, durationSec: 0, target: null });
 const _command = writable<PlayerCommand | null>(null);
@@ -95,6 +100,10 @@ export function playTrack(track: NowPlayingTrack, target?: PlaybackTarget | null
 export function playAlbum(tracks: NowPlayingTrack[], startIndex = 0, target?: PlaybackTarget | null) {
   const idx = Math.max(0, Math.min(tracks.length - 1, startIndex));
   _command.set({ type: 'play', queue: tracks, index: idx, target });
+}
+
+export function switchPlaybackTarget(target: PlaybackTarget | null) {
+  _command.set({ type: 'target', target });
 }
 
 export function togglePlayPause() {
