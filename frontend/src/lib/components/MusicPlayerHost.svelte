@@ -39,6 +39,7 @@
 
   const HEOS_DASHBO_MARKER = 'DashbO |';
   const HEOS_START_GRACE_MS = 75_000;
+  const HEOS_STREAM_REQUEST_TIMEOUT_ATTEMPTS = 18;
 
   let heosStatusPollTimer: ReturnType<typeof setInterval> | null = null;
   let spotifyStatusPollTimer: ReturnType<typeof setInterval> | null = null;
@@ -318,6 +319,7 @@
 
     const hay = `${title} ${artist} ${album} ${source}`.toLowerCase();
     if (hay.includes(HEOS_DASHBO_MARKER.toLowerCase())) return true;
+    if (url.includes('/heos-stream/')) return true;
     if (url.includes('/api/music/heos/stream')) return true;
     if (url.includes('/api/music/tracks/')) return true;
     return false;
@@ -332,7 +334,7 @@
   function summaryMatchesDashboTrack(summary: any, track: NowPlayingTrack): boolean {
     if (!summary || !track) return false;
     const url = typeof summary?.url === 'string' ? summary.url : '';
-    // New stable HEOS stream endpoint does not include trackId; matching via URL is best-effort.
+    if (url.includes('/heos-stream/')) return true;
     if (url.includes('/api/music/heos/stream')) return true;
     if (track.trackId && url.includes(`/api/music/tracks/${encodeURIComponent(track.trackId)}`)) return true;
     if (track.trackId && url.includes(`/api/music/tracks/${track.trackId}`)) return true;
@@ -675,7 +677,7 @@
   ) {
     const trackId = track.trackId;
     const target = activePlaybackTarget;
-    for (let attempt = 0; attempt < 30; attempt += 1) {
+    for (let attempt = 0; attempt < HEOS_STREAM_REQUEST_TIMEOUT_ATTEMPTS; attempt += 1) {
       if (!isLatestPlaybackStart(startSeq) || !isHeosStartGraceActive(pid, track, streamId)) return;
       try {
         const status = await fetchHeosTargetStatus(pid);
@@ -696,29 +698,25 @@
           return;
         }
 
-        if (attempt === 4 || attempt === 10 || attempt === 18) {
+        if (attempt === 3 || attempt === 7 || attempt === 12) {
           setNowPlaying(track, false, target, {
             status: 'loading',
             statusText: `Sende erneut an ${playbackTargetLabel(target)}...`
           });
           await forceHeosPlayStreamWithRetry(pid, url, name);
         }
-      } catch {
-        await sleep(10_000);
-        if (isLatestPlaybackStart(startSeq) && isHeosStartGraceActive(pid, track, streamId)) {
-          heosActive = true;
-          heosPlaying = true;
-          setNowPlaying(track, true, target);
-        }
-        return;
-      }
+      } catch {}
       await sleep(1000);
     }
 
     if (isLatestPlaybackStart(startSeq) && isHeosStartGraceActive(pid, track, streamId)) {
+      clearHeosStartGrace(pid, track.trackId, streamId);
+      heosActive = false;
+      heosPlaying = false;
+      stopHeosPolling();
       setNowPlaying(track, false, activePlaybackTarget, {
-        status: 'loading',
-        statusText: `${playbackTargetLabel()} hat den Stream noch nicht angefordert...`
+        status: 'error',
+        statusText: `${playbackTargetLabel()} erreicht Dashbo Edge nicht. IP/Firewall Port 8787 prüfen.`
       });
     }
   }
