@@ -592,7 +592,10 @@
   }
 
   function buildHeosStreamName(track: NowPlayingTrack): string {
-    const title = String(track.title || 'Track').replace(/\s+/g, ' ').trim();
+    const title = String(track.title || 'Track')
+      .replace(/[&?=]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
     return `${HEOS_DASHBO_MARKER} ${title}`.slice(0, 120);
   }
 
@@ -632,10 +635,9 @@
     // HEOS cannot send Authorization headers reliably; use query token like the track stream endpoint.
     const params = new URLSearchParams();
     if (token) params.set('token', token);
-    params.set('heosPid', String(pid));
-    params.set('sid', streamId);
-    params.set('cb', String(Date.now()));
-    return `${edgeBaseUrl}/api/music/tracks/${encodeURIComponent(trackId)}/stream?${params.toString()}`;
+    const query = params.toString();
+    const suffix = query ? `?${query}` : '';
+    return `${edgeBaseUrl}/api/music/heos/stream/${encodeURIComponent(String(pid))}/${encodeURIComponent(streamId)}/${encodeURIComponent(trackId)}${suffix}`;
   }
 
   async function setHeosTargetTrack(pid: number, trackId: string, streamId: string) {

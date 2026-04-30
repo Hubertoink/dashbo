@@ -14,14 +14,14 @@ const heosPidToTrack = new Map();
 
 function readQueryString(req, names) {
   for (const name of names) {
-    const value = req?.query?.[name];
+    const value = req?.query?.[name] ?? req?.params?.[name];
     if (typeof value === 'string' && value.trim()) return value.trim();
   }
   return '';
 }
 
 function readHeosPid(req) {
-  const raw = req?.query?.heosPid ?? req?.query?.pid;
+  const raw = req?.params?.heosPid ?? req?.params?.pid ?? req?.query?.heosPid ?? req?.query?.pid;
   const pid = Number(raw);
   return Number.isFinite(pid) && pid !== 0 ? pid : null;
 }
@@ -219,7 +219,31 @@ musicRouter.post('/heos/target', (req, res) => {
   res.json({ ok: true, pid, trackId, streamId: entry.streamId });
 });
 
-// Stable HEOS stream URL endpoint: HEOS will always request this URL for the selected pid.
+musicRouter.get('/heos/stream/:pid/:streamId/:trackId', async (req, res) => {
+  const pid = readHeosPid(req);
+  const trackId = String(req.params.trackId || '').trim();
+  if (!pid) return res.status(400).json({ error: 'pid_required' });
+  if (!trackId) return res.status(400).json({ error: 'trackId_required' });
+
+  const entry = heosPidToTrack.get(pid);
+  if (entry?.streamId && entry.streamId !== String(req.params.streamId || '').trim()) {
+    return res.status(409).json({ error: 'stale_heos_stream', pid, reason: 'stream_id_mismatch' });
+  }
+  if (entry?.trackId && entry.trackId !== trackId) {
+    return res.status(409).json({ error: 'stale_heos_stream', pid, reason: 'track_id_mismatch' });
+  }
+
+  const abs = getMusicLibrary().resolveTrackAbsPath(trackId);
+  if (abs) {
+    const tracked = markHeosStreamRequest(req, trackId);
+    if (!tracked.ok && tracked.stale) {
+      return res.status(409).json({ error: 'stale_heos_stream', pid: tracked.pid, reason: tracked.reason });
+    }
+  }
+  await streamTrackAbsPath(abs, req, res);
+});
+
+// Backwards-compatible stable HEOS stream URL endpoint.
 musicRouter.get('/heos/stream', async (req, res) => {
   const pid = Number(req?.query?.pid);
   if (!Number.isFinite(pid) || pid === 0) return res.status(400).json({ error: 'pid_required' });

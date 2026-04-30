@@ -5,6 +5,7 @@ const DEFAULT_DISCOVERY_TIMEOUT_MS = 5000;
 const DEFAULT_COMMAND_TIMEOUT_MS = 5000;
 
 const DEFAULT_SCAN_TTL_MS = 10_000;
+const DEFAULT_HOST_DISCOVERY_TTL_MS = 60_000;
 
 let connectionPromise = null;
 
@@ -12,6 +13,8 @@ let cachedPlayers = null;
 let lastScanAt = null;
 let lastError = null;
 let lastScanMethod = null;
+let cachedDiscoveredHosts = null;
+let lastHostDiscoveryAt = null;
 
 // Some sources stop reporting now-playing metadata when paused.
 // Cache the last known metadata per pid so UIs can keep showing title/cover during pause.
@@ -22,6 +25,18 @@ function normalizeHostsList(list) {
   return (Array.isArray(list) ? list : [])
     .map((s) => String(s || '').trim())
     .filter(Boolean);
+}
+
+function uniqueHosts(list) {
+  const seen = new Set();
+  const hosts = [];
+  for (const host of normalizeHostsList(list)) {
+    const key = host.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    hosts.push(host);
+  }
+  return hosts;
 }
 
 function getHeosHosts(overrideHosts) {
@@ -37,6 +52,79 @@ function getHeosHosts(overrideHosts) {
     .split(',')
     .map((s) => String(s).trim())
     .filter(Boolean);
+}
+
+function discoverHosts(timeoutMs) {
+  const timeout = Math.max(1000, Number(timeoutMs || getDiscoveryTimeoutMs()));
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const found = [];
+
+    const finish = (hosts) => {
+      if (settled) return;
+      settled = true;
+      resolve(uniqueHosts(hosts));
+    };
+
+    try {
+      heos.discoverDevices(
+        { timeout },
+        (address) => {
+          if (address) found.push(address);
+        },
+        (addresses) => finish([...(Array.isArray(addresses) ? addresses : []), ...found])
+      );
+    } catch (err) {
+      if (settled) return;
+      settled = true;
+      reject(err);
+    }
+  });
+}
+
+async function getDiscoveredHosts(opts) {
+  const force = Boolean(opts?.forceDiscover);
+  const ttlMs = Math.max(1000, Number(opts?.ttlMs ?? DEFAULT_HOST_DISCOVERY_TTL_MS));
+  if (!force && cachedDiscoveredHosts && lastHostDiscoveryAt && Date.now() - lastHostDiscoveryAt.getTime() < ttlMs) {
+    return cachedDiscoveredHosts;
+  }
+
+  try {
+    const hosts = await discoverHosts(opts?.timeoutMs);
+    if (hosts.length > 0) {
+      cachedDiscoveredHosts = hosts;
+      lastHostDiscoveryAt = new Date();
+      lastScanMethod = 'ssdp_hosts';
+      return hosts;
+    }
+  } catch {
+    // fall back to cached hosts below
+  }
+
+  if (cachedDiscoveredHosts && cachedDiscoveredHosts.length > 0) return cachedDiscoveredHosts;
+
+  const cidr = String(process.env.HEOS_SCAN_CIDR || '').trim();
+  if (cidr) {
+    const scannedHost = await findHostByPortScan(cidr, {
+      port: 1255,
+      timeoutMs: Number(process.env.HEOS_SCAN_TIMEOUT_MS || 200),
+      concurrency: Number(process.env.HEOS_SCAN_CONCURRENCY || 64)
+    });
+    if (scannedHost) {
+      cachedDiscoveredHosts = [scannedHost];
+      lastHostDiscoveryAt = new Date();
+      lastScanMethod = 'tcp_scan';
+      return cachedDiscoveredHosts;
+    }
+  }
+
+  return [];
+}
+
+async function resolveCommandHosts(opts) {
+  const configured = getHeosHosts(opts?.hosts);
+  if (configured.length > 0) return configured;
+  return getDiscoveredHosts({ timeoutMs: opts?.timeoutMs });
 }
 
 function parseCidrV4(cidr) {
@@ -156,6 +244,30 @@ async function connectOnce() {
     throw lastErr || new Error('HEOS connect failed');
   }
 
+  const discoveredHosts = await getDiscoveredHosts({ forceDiscover: false });
+  if (discoveredHosts.length > 0) {
+    lastScanMethod = 'ssdp_hosts';
+    let lastErr = null;
+    for (const h of discoveredHosts) {
+      try {
+        const conn = await heos.connect(h);
+
+        conn.onClose(() => {
+          connectionPromise = null;
+        });
+
+        conn.onError(() => {
+          // keep connection cached; read operations will fail and trigger reconnect on next call
+        });
+
+        return conn;
+      } catch (e) {
+        lastErr = e;
+      }
+    }
+    throw lastErr || new Error('HEOS connect failed');
+  }
+
   try {
     lastScanMethod = 'ssdp';
     const conn = await heos.discoverAndConnect(getDiscoveryTimeoutMs());
@@ -236,12 +348,13 @@ async function sendOnConn(conn, commandGroup, command, attributes, opts) {
 }
 
 async function sendWithHostsFallback(commandGroup, command, attributes, opts) {
-  const hosts = getHeosHosts(opts?.hosts);
+  const hosts = await resolveCommandHosts(opts);
   if (hosts.length === 0) {
     return send(commandGroup, command, attributes, opts);
   }
 
-  lastScanMethod = hosts.length === 1 && process.env.HEOS_HOST ? 'host' : 'hosts';
+  const configuredHosts = getHeosHosts(opts?.hosts);
+  lastScanMethod = configuredHosts.length === 1 && process.env.HEOS_HOST ? 'host' : configuredHosts.length > 0 ? 'hosts' : 'ssdp_hosts';
   let lastErr = null;
   let lastResponse = null;
 
@@ -322,10 +435,11 @@ async function scanPlayers(opts) {
   }
 
   try {
-    const hosts = getHeosHosts(opts?.hosts);
+    const configuredHosts = getHeosHosts(opts?.hosts);
+    const hosts = configuredHosts.length > 0 ? configuredHosts : await getDiscoveredHosts({ forceDiscover: force });
 
     let players = [];
-    if (hosts.length > 1) {
+    if (hosts.length > 0) {
       // Some setups (notably Docker on Windows) may return only the connected device.
       // Query each host and union the results to get a complete list.
       const byPid = new Map();
@@ -349,9 +463,9 @@ async function scanPlayers(opts) {
         }
       }
       players = Array.from(byPid.values());
-      lastScanMethod = 'hosts';
+      lastScanMethod = configuredHosts.length > 0 ? 'hosts' : 'ssdp_hosts';
     } else {
-      const resp = await sendWithHostsFallback('player', 'get_players');
+      const resp = await send('player', 'get_players');
       players = parsePlayersPayload(resp?.payload);
     }
 
@@ -378,7 +492,8 @@ async function scanPlayers(opts) {
 async function findHostForPid(pid, hosts) {
   const p = typeof pid === 'number' ? pid : Number(pid);
   if (!Number.isFinite(p) || p === 0) return null;
-  const hs = normalizeHostsList(hosts);
+  let hs = normalizeHostsList(hosts);
+  if (hs.length === 0) hs = await resolveCommandHosts({});
   if (hs.length === 0) return null;
 
   for (const host of hs) {
@@ -414,7 +529,9 @@ function getStatus() {
     lastScanAt: lastScanAt ? lastScanAt.toISOString() : null,
     lastError: lastError || null,
     lastScanMethod: lastScanMethod || null,
-    playersCount: Array.isArray(cachedPlayers) ? cachedPlayers.length : 0
+    playersCount: Array.isArray(cachedPlayers) ? cachedPlayers.length : 0,
+    discoveredHostsCount: Array.isArray(cachedDiscoveredHosts) ? cachedDiscoveredHosts.length : 0,
+    lastHostDiscoveryAt: lastHostDiscoveryAt ? lastHostDiscoveryAt.toISOString() : null
   };
 }
 
