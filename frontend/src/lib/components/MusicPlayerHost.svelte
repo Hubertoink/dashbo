@@ -19,6 +19,7 @@
     getEdgeHeosSelectedPlayerIdFromStorage,
     getEdgeTokenFromStorage
   } from '$lib/edge';
+  import { addMusicDebugEntry } from '$lib/musicDebug';
 
   import {
     resetHeosPlaybackStatus,
@@ -59,6 +60,60 @@
   let heosAutoAdvanceTrackId: string | null = null;
 
   const durationCache = new Map<string, number>();
+
+  function debugNow(): number {
+    return typeof performance !== 'undefined' && typeof performance.now === 'function' ? performance.now() : Date.now();
+  }
+
+  function debugDurationMs(startedAt: number): number {
+    return Math.max(0, Math.round(debugNow() - startedAt));
+  }
+
+  function debugTrack(track: NowPlayingTrack | null | undefined): Record<string, unknown> | null {
+    if (!track) return null;
+    return {
+      trackId: track.trackId,
+      title: track.title,
+      artist: track.artist,
+      durationSec: typeof track.durationSec === 'number' && Number.isFinite(track.durationSec) ? track.durationSec : null
+    };
+  }
+
+  function debugTarget(target: PlaybackTarget = activePlaybackTarget): Record<string, unknown> {
+    return target.kind === 'heos'
+      ? { kind: 'heos', pid: target.pid, name: target.name ?? null }
+      : { kind: 'local', name: target.name ?? null };
+  }
+
+  function debugError(err: unknown): Record<string, unknown> {
+    return err instanceof Error ? { name: err.name, message: err.message } : { message: String(err || 'unknown_error') };
+  }
+
+  function debugHeosResponse(response: DashboHeosSessionResponse | null | undefined): Record<string, unknown> | null {
+    if (!response) return null;
+    return {
+      ok: response.ok,
+      pid: response.pid,
+      trackId: response.trackId,
+      streamId: response.streamId ?? response.target?.streamId ?? null,
+      started: response.started,
+      resumed: response.resumed,
+      restarted: response.restarted,
+      reused: response.reused,
+      retried: response.retried,
+      state: response.state,
+      observedState: response.observedState,
+      target: response.target
+        ? {
+            trackId: response.target.trackId,
+            streamId: response.target.streamId,
+            requestCount: response.target.requestCount,
+            lastRequestedAt: response.target.lastRequestedAt,
+            lastUserAgent: response.target.lastUserAgent
+          }
+        : null
+    };
+  }
 
   function buildHeosHeaders(): Record<string, string> {
     const hosts = getEdgeHeosHostsFromStorage().trim();
@@ -125,11 +180,19 @@
     const edgeToken = getEdgeTokenFromStorage();
     if (!edgeBaseUrl) return;
 
-    await edgeFetchJson(edgeBaseUrl, '/api/heos/dashbo_play_state', edgeToken || undefined, {
-      method: 'POST',
-      headers: buildHeosHeaders(),
-      body: JSON.stringify({ pid, state: 'stop' })
-    });
+    const startedAt = debugNow();
+    addMusicDebugEntry('heos.stop.request', { pid, target: debugTarget() });
+    try {
+      const response = await edgeFetchJson<DashboHeosSessionResponse>(edgeBaseUrl, '/api/heos/dashbo_play_state', edgeToken || undefined, {
+        method: 'POST',
+        headers: buildHeosHeaders(),
+        body: JSON.stringify({ pid, state: 'stop' })
+      });
+      addMusicDebugEntry('heos.stop.result', { durationMs: debugDurationMs(startedAt), response: debugHeosResponse(response) });
+    } catch (err) {
+      addMusicDebugEntry('heos.stop.error', { durationMs: debugDurationMs(startedAt), error: debugError(err) }, 'error');
+      throw err;
+    }
   }
 
   async function stopPreviousHeosIfTargetChanged(previousPid: number | null, nextTarget: PlaybackTarget) {
@@ -473,6 +536,16 @@
           isActive &&
           (indicatesSpotify || (hasNonGenericMeta && !matchesDashbo && !looksDashbo));
         if (takeover) {
+          addMusicDebugEntry('heos.status.takeover_detected', {
+            pid,
+            state,
+            source,
+            title,
+            artist,
+            matchesDashbo,
+            looksDashbo,
+            track: debugTrack(dashboTrack)
+          }, 'warn');
           clearHeosStartGrace(pid, dashboTrack?.trackId ?? null);
           heosActive = false;
           heosPlaying = false;
@@ -482,6 +555,14 @@
         }
 
         if (heosStartGraceActive && (looksDashbo || matchesDashbo)) {
+          addMusicDebugEntry('heos.status.grace_confirmed', {
+            pid,
+            state,
+            isPlaying,
+            matchesDashbo,
+            looksDashbo,
+            track: debugTrack(dashboTrack)
+          });
           clearHeosStartGrace(pid, dashboTrack?.trackId ?? null);
           heosPlaying = isPlaying || heosPlaying;
           if (dashboTrack) setNowPlaying(dashboTrack, heosPlaying, activePlaybackTarget);
@@ -590,7 +671,10 @@
     started?: boolean;
     resumed?: boolean;
     restarted?: boolean;
+    reused?: boolean;
+    retried?: boolean;
     state?: string;
+    observedState?: string;
     target?: {
       trackId?: string;
       streamId?: string | null;
@@ -608,11 +692,23 @@
     if (!pid) throw new Error('HEOS pid fehlt');
     if (!track?.trackId) throw new Error('Track fehlt');
 
-    return edgeFetchJson<DashboHeosSessionResponse>(edgeBaseUrl, '/api/heos/play_dashbo_track', edgeToken || undefined, {
-      method: 'POST',
-      headers: buildHeosHeaders(),
-      body: JSON.stringify({ pid, trackId: track.trackId, name: track.title, stopFirst: Boolean(opts?.stopFirst) })
-    });
+    const startedAt = debugNow();
+    addMusicDebugEntry('heos.play_dashbo_track.request', { pid, track: debugTrack(track), stopFirst: Boolean(opts?.stopFirst) });
+    try {
+      const response = await edgeFetchJson<DashboHeosSessionResponse>(edgeBaseUrl, '/api/heos/play_dashbo_track', edgeToken || undefined, {
+        method: 'POST',
+        headers: buildHeosHeaders(),
+        body: JSON.stringify({ pid, trackId: track.trackId, name: track.title, stopFirst: Boolean(opts?.stopFirst) })
+      });
+      addMusicDebugEntry('heos.play_dashbo_track.result', {
+        durationMs: debugDurationMs(startedAt),
+        response: debugHeosResponse(response)
+      }, response?.started ? 'info' : 'warn');
+      return response;
+    } catch (err) {
+      addMusicDebugEntry('heos.play_dashbo_track.error', { durationMs: debugDurationMs(startedAt), error: debugError(err) }, 'error');
+      throw err;
+    }
   }
 
   async function setDashboHeosPlaybackState(
@@ -626,17 +722,35 @@
     if (!edgeBaseUrl) throw new Error('Edge Base URL fehlt');
     if (!pid) throw new Error('HEOS pid fehlt');
 
-    return edgeFetchJson<DashboHeosSessionResponse>(edgeBaseUrl, '/api/heos/dashbo_play_state', edgeToken || undefined, {
-      method: 'POST',
-      headers: buildHeosHeaders(),
-      body: JSON.stringify({ pid, state, trackId: track?.trackId, name: track?.title, forceRestart: Boolean(opts?.forceRestart) })
+    const startedAt = debugNow();
+    addMusicDebugEntry('heos.dashbo_play_state.request', {
+      pid,
+      state,
+      track: debugTrack(track || null),
+      forceRestart: Boolean(opts?.forceRestart)
     });
+    try {
+      const response = await edgeFetchJson<DashboHeosSessionResponse>(edgeBaseUrl, '/api/heos/dashbo_play_state', edgeToken || undefined, {
+        method: 'POST',
+        headers: buildHeosHeaders(),
+        body: JSON.stringify({ pid, state, trackId: track?.trackId, name: track?.title, forceRestart: Boolean(opts?.forceRestart) })
+      });
+      addMusicDebugEntry('heos.dashbo_play_state.result', {
+        durationMs: debugDurationMs(startedAt),
+        response: debugHeosResponse(response)
+      }, response?.restarted && !response?.started ? 'warn' : 'info');
+      return response;
+    } catch (err) {
+      addMusicDebugEntry('heos.dashbo_play_state.error', { durationMs: debugDurationMs(startedAt), error: debugError(err) }, 'error');
+      throw err;
+    }
   }
 
   async function startLocalPlayback(track: NowPlayingTrack) {
     clearHeosStartGrace();
     activePlaybackTarget = { kind: 'local' };
     if (!audioEl) {
+      addMusicDebugEntry('local.play.no_audio_element', { track: debugTrack(track) }, 'warn');
       setNowPlaying(track, false, activePlaybackTarget);
       return;
     }
@@ -655,8 +769,16 @@
       // ignore
     }
 
-    await audioEl.play();
-    setNowPlaying(track, true, activePlaybackTarget);
+    const startedAt = debugNow();
+    addMusicDebugEntry('local.play.request', { track: debugTrack(track), target: debugTarget(activePlaybackTarget) });
+    try {
+      await audioEl.play();
+      addMusicDebugEntry('local.play.result', { durationMs: debugDurationMs(startedAt), track: debugTrack(track) });
+      setNowPlaying(track, true, activePlaybackTarget);
+    } catch (err) {
+      addMusicDebugEntry('local.play.error', { durationMs: debugDurationMs(startedAt), track: debugTrack(track), error: debugError(err) }, 'error');
+      throw err;
+    }
   }
 
   async function startAt(i: number) {
@@ -665,6 +787,7 @@
     const trackRaw = current();
     const track = trackRaw ? normalizeTrack(trackRaw) : null;
     if (!track) {
+      addMusicDebugEntry('player.start.empty_queue', { index: i, target: debugTarget(activePlaybackTarget) }, 'warn');
       setNowPlaying(null, false);
       setProgress(0, 0);
       return;
@@ -675,6 +798,16 @@
     const edgeBaseUrl = getEdgeBaseUrlFromStorage();
 
     const startingHeos = Boolean(heosEnabled && heosPid && edgeBaseUrl);
+    addMusicDebugEntry('player.start.begin', {
+      index: i,
+      startSeq,
+      target: debugTarget(activePlaybackTarget),
+      track: debugTrack(track),
+      heosEnabled,
+      heosPid,
+      edgeConfigured: Boolean(edgeBaseUrl),
+      startingHeos
+    });
     setNowPlaying(
       track,
       false,
@@ -715,7 +848,10 @@
           statusText: `Warte auf ${playbackTargetLabel()}...`
         });
         const response = await playDashboTrackOnHeos(heosPid, track, { stopFirst: false });
-        if (!isLatestPlaybackStart(startSeq)) return;
+        if (!isLatestPlaybackStart(startSeq)) {
+          addMusicDebugEntry('player.start.stale_result', { startSeq, latestSeq: playbackStartSeq, track: debugTrack(track) }, 'warn');
+          return;
+        }
         heosStreamId = typeof response?.streamId === 'string' ? response.streamId : null;
         if (heosStreamId) beginHeosStartGrace(heosPid, track, heosStreamId);
         heosActive = true;
@@ -724,6 +860,7 @@
         void ensureHeosDuration(track);
         if (response?.started) {
           clearHeosStartGrace(heosPid, track.trackId, heosStreamId);
+          addMusicDebugEntry('player.start.heos_ready', { track: debugTrack(track), response: debugHeosResponse(response) });
           setNowPlaying(track, true, activePlaybackTarget);
           return;
         }
@@ -732,6 +869,7 @@
         heosPlaying = false;
         clearHeosStartGrace(heosPid, track.trackId, heosStreamId);
         stopHeosPolling();
+        addMusicDebugEntry('player.start.heos_no_request', { track: debugTrack(track), response: debugHeosResponse(response) }, 'warn');
         setNowPlaying(track, false, activePlaybackTarget, {
           status: 'error',
           statusText: `${playbackTargetLabel()} hat den Dashbo-Stream nicht angefordert.`
@@ -745,6 +883,7 @@
       if (heosEnabled && heosPid) {
         const msg = err instanceof Error ? err.message : String(err || 'HEOS play failed');
         console.error('[HEOS] play_stream failed:', msg);
+        addMusicDebugEntry('player.start.heos_error', { track: debugTrack(track), target: debugTarget(activePlaybackTarget), error: debugError(err) }, 'error');
         heosActive = false;
         heosPlaying = false;
         clearHeosStartGrace(heosPid, track.trackId, heosStreamId);
@@ -761,6 +900,7 @@
       clearHeosStartGrace(heosPid, track.trackId, heosStreamId);
       stopHeosPolling();
       activePlaybackTarget = { kind: 'local' };
+      addMusicDebugEntry('player.start.local_fallback_state', { track: debugTrack(track), error: debugError(err) }, 'warn');
       setNowPlaying(track, false, activePlaybackTarget);
     }
   }
@@ -777,8 +917,19 @@
       heosPlaying = false;
     }
 
+    addMusicDebugEntry('player.toggle.begin', {
+      target: debugTarget(activePlaybackTarget),
+      track: debugTrack(track),
+      heosEnabled,
+      heosPid,
+      heosActive,
+      heosPlaying,
+      edgeConfigured: Boolean(edgeBaseUrl)
+    });
+
     if (heosEnabled && heosPid && edgeBaseUrl && track) {
       if (!heosActive) {
+        addMusicDebugEntry('player.toggle.start_instead', { pid: heosPid, track: debugTrack(track) });
         await startAt(index);
         return;
       }
@@ -792,6 +943,7 @@
         const response = await setDashboHeosPlaybackState(heosPid, nextState, track);
         if (nextState === 'pause') {
           heosPlaying = false;
+          addMusicDebugEntry('player.toggle.heos_paused', { pid: heosPid, track: debugTrack(track), response: debugHeosResponse(response) });
           setNowPlaying(track, false, activePlaybackTarget);
           return;
         }
@@ -800,6 +952,7 @@
           heosActive = false;
           heosPlaying = false;
           stopHeosPolling();
+          addMusicDebugEntry('player.toggle.heos_restart_failed', { pid: heosPid, track: debugTrack(track), response: debugHeosResponse(response) }, 'warn');
           setNowPlaying(track, false, activePlaybackTarget, {
             status: 'error',
             statusText: `${playbackTargetLabel()} hat den Dashbo-Stream nicht fortgesetzt.`
@@ -812,11 +965,13 @@
         heosActive = true;
         heosPlaying = true;
         startHeosPolling(heosPid, typeof track.durationSec === 'number' && Number.isFinite(track.durationSec) ? track.durationSec : heosDurationSec);
+        addMusicDebugEntry('player.toggle.heos_playing', { pid: heosPid, track: debugTrack(track), response: debugHeosResponse(response) });
         setNowPlaying(track, true, activePlaybackTarget);
         return;
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err || 'HEOS play state failed');
         console.error('[HEOS] dashbo_play_state failed:', msg);
+        addMusicDebugEntry('player.toggle.heos_error', { pid: heosPid, track: debugTrack(track), error: debugError(err) }, 'error');
         setNowPlaying(track, heosPlaying, activePlaybackTarget, {
           status: 'error',
           statusText: `${playbackTargetLabel()} konnte nicht gesteuert werden.`
@@ -873,6 +1028,7 @@
   function onEnded() {
     if (queue.length === 0) return;
     const next = index + 1;
+    addMusicDebugEntry('player.ended', { index, nextIndex: next, track: debugTrack(current()), target: debugTarget(activePlaybackTarget) });
     if (next >= queue.length) {
       setNowPlaying(current(), false, activePlaybackTarget);
       heosPlaying = false;
@@ -911,6 +1067,13 @@
       void (async () => {
         const previousPid = activeHeosPid();
         const nextTarget = normalizePlaybackTarget(cmd.target);
+        addMusicDebugEntry('command.play', {
+          index: cmd.index,
+          queueLength: cmd.queue.length,
+          previousPid,
+          target: debugTarget(nextTarget),
+          track: debugTrack(cmd.queue[cmd.index] ?? null)
+        });
         queue = cmd.queue;
         activePlaybackTarget = nextTarget;
         await stopPreviousHeosIfTargetChanged(previousPid, nextTarget);
@@ -920,15 +1083,19 @@
       void (async () => {
         const previousPid = activeHeosPid();
         const nextTarget = normalizePlaybackTarget(cmd.target);
+        addMusicDebugEntry('command.target', { previousPid, target: debugTarget(nextTarget), currentTrack: debugTrack(current()) });
         activePlaybackTarget = nextTarget;
         await stopPreviousHeosIfTargetChanged(previousPid, nextTarget);
         if (current()) await startAt(index);
       })();
     } else if (cmd.type === 'toggle') {
+      addMusicDebugEntry('command.toggle', { target: debugTarget(activePlaybackTarget), track: debugTrack(current()) });
       void toggle();
     } else if (cmd.type === 'next') {
+      addMusicDebugEntry('command.next', { index, queueLength: queue.length, track: debugTrack(current()), target: debugTarget(activePlaybackTarget) });
       next();
     } else if (cmd.type === 'prev') {
+      addMusicDebugEntry('command.prev', { index, queueLength: queue.length, track: debugTrack(current()), target: debugTarget(activePlaybackTarget) });
       prev();
     }
     musicPlayerCommand.clear();

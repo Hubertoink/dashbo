@@ -1,10 +1,19 @@
 <script lang="ts">
-  import { onDestroy, tick } from 'svelte';
+  import { onDestroy, onMount, tick } from 'svelte';
   import type { HueStatusDto, NewsFeedId, OutlookConnectionDto, SettingsDto } from '$lib/api';
 
   import DashboardPreview from '$lib/components/DashboardPreview.svelte';
   import WidgetSettingsCard from '$lib/components/WidgetSettingsCard.svelte';
   import { CLOCK_STYLE_OPTIONS, clockStyleClasses, type ClockStyle } from '$lib/clockStyle';
+  import {
+    clearMusicDebugEntries,
+    exportMusicDebugEntries,
+    initMusicDebug,
+    musicDebugEnabled,
+    musicDebugEntries,
+    setMusicDebugEnabled,
+    type MusicDebugEntry
+  } from '$lib/musicDebug';
 
   export let authed: boolean;
   export let settings: SettingsDto | null;
@@ -139,6 +148,8 @@
   export let previewClass = 'mb-6';
   export let highlightWidget: string | null = null;
   let hueSetupOpen = false;
+  let musicDebugMessage: string | null = null;
+  let musicDebugMessageTimer: ReturnType<typeof setTimeout> | null = null;
 
   function toggleNewsFeed(id: NewsFeedId) {
     if (newsFeeds.includes(id)) newsFeeds = newsFeeds.filter((x) => x !== id);
@@ -187,9 +198,64 @@
     }
   }
 
+  function showMusicDebugMessage(message: string) {
+    musicDebugMessage = message;
+    if (musicDebugMessageTimer) clearTimeout(musicDebugMessageTimer);
+    musicDebugMessageTimer = setTimeout(() => {
+      musicDebugMessage = null;
+      musicDebugMessageTimer = null;
+    }, 2500);
+  }
+
+  function toggleMusicDebug() {
+    const next = !$musicDebugEnabled;
+    setMusicDebugEnabled(next);
+    showMusicDebugMessage(next ? 'Debug Log aktiv' : 'Debug Log aus');
+  }
+
+  function clearMusicDebug() {
+    clearMusicDebugEntries();
+    showMusicDebugMessage('Debug Log geleert');
+  }
+
+  async function copyMusicDebug() {
+    try {
+      await navigator.clipboard.writeText(exportMusicDebugEntries());
+      showMusicDebugMessage('Debug Log kopiert');
+    } catch {
+      showMusicDebugMessage('Kopieren nicht möglich');
+    }
+  }
+
+  function formatMusicDebugTime(at: number): string {
+    const d = new Date(at);
+    const ms = String(d.getMilliseconds()).padStart(3, '0');
+    return `${d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}.${ms}`;
+  }
+
+  function formatMusicDebugDetails(entry: MusicDebugEntry): string {
+    if (!entry.details || Object.keys(entry.details).length === 0) return '';
+    try {
+      return JSON.stringify(entry.details);
+    } catch {
+      return String(entry.details);
+    }
+  }
+
+  function musicDebugLevelClass(level: string): string {
+    if (level === 'error') return 'text-red-200 bg-red-500/10 border-red-400/20';
+    if (level === 'warn') return 'text-amber-200 bg-amber-500/10 border-amber-400/20';
+    return 'text-cyan-100 bg-cyan-500/10 border-cyan-400/20';
+  }
+
+  onMount(() => {
+    initMusicDebug();
+  });
+
   onDestroy(() => {
     window.removeEventListener('resize', updateTodoDefaultAccountMenuPosition);
     window.removeEventListener('scroll', updateTodoDefaultAccountMenuPosition, true);
+    if (musicDebugMessageTimer) clearTimeout(musicDebugMessageTimer);
   });
 
   type TodoAccountOption = { id: number | null; label: string; color?: string };
@@ -1096,6 +1162,75 @@
           </div>
         {:else}
           <div class="text-[11px] text-white/50">HEOS ist deaktiviert. Aktiviere HEOS, um Speaker zu laden und Gruppen zu steuern.</div>
+        {/if}
+      </div>
+
+      <div class="rounded-xl border border-white/10 bg-white/5 p-3">
+        <div class="flex items-start justify-between gap-3">
+          <div class="min-w-0">
+            <div class="text-sm font-medium text-white/90">Debug Log</div>
+            <div class="text-[11px] text-white/50">Temporärer Ablauf-Trace für lokale Musik, HEOS und Edge-Antwortzeiten.</div>
+          </div>
+
+          <button
+            type="button"
+            class="relative h-6 w-11 shrink-0 rounded-full transition-colors duration-200 {$musicDebugEnabled
+              ? 'bg-cyan-500/60'
+              : 'bg-white/20'}"
+            on:click={toggleMusicDebug}
+            aria-pressed={$musicDebugEnabled}
+            aria-label="Debug Log {$musicDebugEnabled ? 'deaktivieren' : 'aktivieren'}"
+          >
+            <span
+              class="absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform duration-200 {$musicDebugEnabled
+                ? 'translate-x-5'
+                : 'translate-x-0'}"
+            ></span>
+          </button>
+        </div>
+
+        <div class="mt-3 flex flex-wrap items-center gap-2">
+          <button
+            class="h-8 px-3 rounded-lg bg-white/20 hover:bg-white/25 text-xs font-medium disabled:opacity-50"
+            type="button"
+            on:click={copyMusicDebug}
+            disabled={$musicDebugEntries.length === 0}
+          >
+            Kopieren
+          </button>
+          <button
+            class="h-8 px-3 rounded-lg bg-white/10 hover:bg-white/15 text-xs font-medium disabled:opacity-50"
+            type="button"
+            on:click={clearMusicDebug}
+            disabled={$musicDebugEntries.length === 0}
+          >
+            Leeren
+          </button>
+          <div class="text-[11px] text-white/50 tabular-nums">{$musicDebugEntries.length} Einträge</div>
+          {#if musicDebugMessage}
+            <div class="text-[11px] text-white/70">{musicDebugMessage}</div>
+          {/if}
+        </div>
+
+        {#if $musicDebugEntries.length > 0}
+          <div class="mt-3 max-h-56 overflow-auto rounded-lg border border-white/10 bg-black/20">
+            <div class="divide-y divide-white/10">
+              {#each $musicDebugEntries.slice().reverse() as entry (entry.id)}
+                <div class="p-2 text-[11px]">
+                  <div class="flex flex-wrap items-center gap-2">
+                    <span class="text-white/40 tabular-nums">{formatMusicDebugTime(entry.at)}</span>
+                    <span class={`rounded border px-1.5 py-0.5 uppercase tracking-wide ${musicDebugLevelClass(entry.level)}`}>{entry.level}</span>
+                    <span class="text-white/85 font-medium">{entry.event}</span>
+                  </div>
+                  {#if formatMusicDebugDetails(entry)}
+                    <pre class="mt-1 whitespace-pre-wrap break-words text-white/55 leading-relaxed">{formatMusicDebugDetails(entry)}</pre>
+                  {/if}
+                </div>
+              {/each}
+            </div>
+          </div>
+        {:else}
+          <div class="mt-3 text-[11px] text-white/45">Noch keine Debug-Einträge.</div>
         {/if}
       </div>
 
