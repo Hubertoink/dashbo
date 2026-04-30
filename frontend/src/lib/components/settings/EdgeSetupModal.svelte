@@ -44,47 +44,28 @@
 
   let edgePort = '8787';
   let edgeToken = '1000';
-  let musicDir = '';
-  let edgeAllowedOrigins = 'https://dashbohub.de,http://localhost:8080,http://127.0.0.1:8080,http://localhost:5173';
+  let edgeAllowedOrigins = 'https://dashbohub.de,http://localhost:8080,http://127.0.0.1:8080,http://localhost:5173,http://127.0.0.1:5173';
   let edgePublicBaseUrl = 'http://192.168.178.27:8787';
   let edgeImage = 'ghcr.io/hubertoink/dashbo-edge:latest';
   let heosHosts = '';
   let heosScanCidr = '';
 
-  let musicDirError: string | null = null;
   let edgeImageError: string | null = null;
 
   function applyTargetDefaults(nextTarget: Target) {
     if (nextTarget === 'pi') {
       edgePort = '8787';
-      musicDir = '/mnt/music';
       edgeAllowedOrigins = 'https://dashbohub.de';
       edgePublicBaseUrl = '';
     } else {
       edgePort = '8787';
-      musicDir = '';
-      edgeAllowedOrigins = 'https://dashbohub.de,http://localhost:8080,http://127.0.0.1:8080,http://localhost:5173';
+      edgeAllowedOrigins = 'https://dashbohub.de,http://localhost:8080,http://127.0.0.1:8080,http://localhost:5173,http://127.0.0.1:5173';
       edgePublicBaseUrl = 'http://192.168.178.27:8787';
     }
   }
 
-  function normalizeHostPath(input: string): string {
-    return (input || '').trim().replace(/\\/g, '/');
-  }
-
   function quote(v: string): string {
     return `"${String(v).replace(/\\/g, '\\\\').replace(/\"/g, '\\"')}"`;
-  }
-
-  function validateMusicDir(): string | null {
-    const music = normalizeHostPath(musicDir);
-    if (!music) return 'Bitte trage deinen echten Musikordner ein, z.B. C:/Users/Nikolas/Music.';
-    if (/[<>|?*"]/.test(music)) return 'Der Pfad enthält ungültige Zeichen. Ersetze Platzhalter wie <you> durch deinen Windows-Benutzernamen.';
-    if (target === 'windows' && !/^[a-zA-Z]:\//.test(music) && !music.startsWith('//')) {
-      return 'Für Windows bitte einen Host-Pfad wie C:/Users/Nikolas/Music verwenden.';
-    }
-    if (target === 'pi' && !music.startsWith('/')) return 'Für Raspberry Pi bitte einen Linux-Pfad wie /mnt/music verwenden.';
-    return null;
   }
 
   function validateEdgeImage(): string | null {
@@ -99,7 +80,6 @@
     const token = (edgeToken || '').trim();
     const allowed = (edgeAllowedOrigins || '').trim();
     const publicBase = (edgePublicBaseUrl || '').trim();
-    const music = normalizeHostPath(musicDir);
     const image = (edgeImage || '').trim().toLowerCase();
 
     const envLines: string[] = [
@@ -128,7 +108,6 @@
       `    ports:`,
       `      - ${quote(`${port}:8787`)}`,
       `    volumes:`,
-      `      - ${quote(`${music}:/mnt/music:ro`)}`,
       `      - dashbo_edge_data:/var/lib/dashbo-edge`,
       ``,
       `volumes:`,
@@ -151,13 +130,10 @@
   }
 
   let canDownload = false;
-  $: musicDirError = validateMusicDir();
   $: edgeImageError = validateEdgeImage();
   $: canDownload =
     (edgeToken || '').trim().length > 0 &&
-    (musicDir || '').trim().length > 0 &&
     (edgeImage || '').trim().length > 0 &&
-    !musicDirError &&
     !edgeImageError;
 </script>
 
@@ -181,7 +157,7 @@
       <div class="flex items-start justify-between gap-4 mb-3">
         <div>
           <div class="font-semibold text-lg">Pi/PC Edge Setup</div>
-          <div class="text-white/50 text-sm">Lokale Musikbibliothek + HEOS über einen lokalen Edge-Service</div>
+          <div class="text-white/50 text-sm">HEOS-Status und Now-Playing-Cover über einen lokalen Edge-Service</div>
         </div>
         <button
           class="h-9 px-3 rounded-lg bg-white/10 hover:bg-white/15 text-sm"
@@ -201,7 +177,7 @@
                 Ziel
                 <span
                   class="h-5 w-5 rounded-full bg-white/10 border border-white/10 inline-flex items-center justify-center text-[11px] text-white/80"
-                  on:mouseenter={(e) => showTooltip(e.currentTarget as HTMLElement, 'Windows erzeugt eine Compose-Datei mit Windows-Musikpfad. Pi nutzt standardmäßig /mnt/music.')}
+                  on:mouseenter={(e) => showTooltip(e.currentTarget as HTMLElement, 'Windows und Pi erzeugen eine Compose-Datei für den lokalen Edge-Service.')}
                   on:mouseleave={hideTooltip}
                 >
                   i
@@ -257,27 +233,6 @@
               />
               {#if edgeImageError}
                 <div class="mt-1 text-[11px] text-red-300">{edgeImageError}</div>
-              {/if}
-            </label>
-
-            <label class="text-white/70 text-xs">
-              <span class="inline-flex items-center gap-2">
-                Musikordner (Host) (MUSIC_DIR)
-                <span
-                  class="h-5 w-5 rounded-full bg-white/10 border border-white/10 inline-flex items-center justify-center text-[11px] text-white/80"
-                  on:mouseenter={(e) => showTooltip(e.currentTarget as HTMLElement, 'Pfad auf deinem Host-System, der als /mnt/music in den Container gemountet wird.')}
-                  on:mouseleave={hideTooltip}
-                >
-                  i
-                </span>
-              </span>
-              <input
-                class="mt-1 w-full h-9 rounded-lg bg-zinc-950/40 border border-white/10 px-3 text-sm"
-                bind:value={musicDir}
-                placeholder={target === 'windows' ? 'C:/Users/Nikolas/Music' : '/mnt/music'}
-              />
-              {#if musicDirError}
-                <div class="mt-1 text-[11px] text-red-300">{musicDirError}</div>
               {/if}
             </label>
 
@@ -412,22 +367,20 @@
           <div class="font-medium mb-1">Windows PC</div>
           <div class="text-white/70">
             1) Docker Desktop starten
-            <br />2) Musik in deiner Bibliothek ablegen (z.B. <span class="font-medium">C:\\Users\\huber\\Musik</span>)
-            <br />3) Oben auf <span class="font-medium">YML herunterladen</span> klicken (Datei: <span class="font-medium">docker-compose.win-edge.generated.yml</span>)
-            <br />4) Image holen: <span class="font-medium">docker compose -f docker-compose.win-edge.generated.yml pull</span>
-            <br />5) Starten: <span class="font-medium">docker compose -f docker-compose.win-edge.generated.yml up -d</span>
-            <br />6) Hier in den Einstellungen die Edge Base URL + Token eintragen
+            <br />2) Oben auf <span class="font-medium">YML herunterladen</span> klicken (Datei: <span class="font-medium">docker-compose.win-edge.generated.yml</span>)
+            <br />3) Image holen: <span class="font-medium">docker compose -f docker-compose.win-edge.generated.yml pull</span>
+            <br />4) Starten: <span class="font-medium">docker compose -f docker-compose.win-edge.generated.yml up -d</span>
+            <br />5) Hier in den Einstellungen die Edge Base URL + Token eintragen
           </div>
         </div>
 
         <div>
           <div class="font-medium mb-1">Raspberry Pi</div>
           <div class="text-white/70">
-            1) SSD nach <span class="font-medium">/mnt/music</span> mounten
-            <br />2) Oben auf <span class="font-medium">YML herunterladen</span> klicken (Datei: <span class="font-medium">docker-compose.pi-edge.generated.yml</span>)
-            <br />3) Image holen: <span class="font-medium">docker compose -f docker-compose.pi-edge.generated.yml pull</span>
-            <br />4) Starten: <span class="font-medium">docker compose -f docker-compose.pi-edge.generated.yml up -d</span>
-            <br />5) Edge Base URL + Token im Browser-Gerät speichern
+            1) Oben auf <span class="font-medium">YML herunterladen</span> klicken (Datei: <span class="font-medium">docker-compose.pi-edge.generated.yml</span>)
+            <br />2) Image holen: <span class="font-medium">docker compose -f docker-compose.pi-edge.generated.yml pull</span>
+            <br />3) Starten: <span class="font-medium">docker compose -f docker-compose.pi-edge.generated.yml up -d</span>
+            <br />4) Edge Base URL + Token im Browser-Gerät speichern
           </div>
         </div>
 

@@ -99,10 +99,6 @@
   export let edgeTestMessage: string | null;
   export let edgeTestOk: boolean | null;
 
-  export let scanEdgeNow: () => void | Promise<void>;
-  export let edgeScanBusy: boolean;
-  export let edgeScanMessage: string | null;
-
   export let edgeHeosEnabled: boolean;
   export let saveEdgeHeosEnabled: () => void | Promise<void>;
 
@@ -246,9 +242,6 @@
           {edgeTestBusy}
           {edgeTestMessage}
           {edgeTestOk}
-          {scanEdgeNow}
-          {edgeScanBusy}
-          {edgeScanMessage}
           bind:edgeHeosEnabled
           {saveEdgeHeosEnabled}
           bind:edgeHeosHosts

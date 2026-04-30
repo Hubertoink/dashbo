@@ -1,9 +1,8 @@
 <script lang="ts">
-  import { onDestroy, onMount } from 'svelte';
+  import { onMount } from 'svelte';
   import { fly, fade } from 'svelte/transition';
   import { cubicOut } from 'svelte/easing';
-  import { musicPlayerState, togglePlayPause, playNext, playPrev, switchPlaybackTarget } from '$lib/stores/musicPlayer';
-  import { heosPlaybackStatus, setHeosPlaybackStatus, type HeosPlayerPlaybackSummary } from '$lib/stores/heosPlayback';
+  import { heosPlaybackStatus, type HeosPlayerPlaybackSummary } from '$lib/stores/heosPlayback';
   import { spotifyPlaybackStatus } from '$lib/stores/spotifyPlayback';
   import {
     EDGE_BASE_URL_KEY,
@@ -18,208 +17,107 @@
 
   export let tone: 'light' | 'dark' = 'light';
 
-  type HeosPlayerDto = { pid: number; name: string; model?: string };
-  type HeosGroupPlayerDto = { name: string; pid: number; role?: 'leader' | 'member' | string };
-  type HeosGroupDto = { name: string; gid: number | string; players: HeosGroupPlayerDto[] };
-
-  // Group creation mode
-  let groupingMode = false;
-  let selectedForGroup: Set<number> = new Set();
-  let groupBusy = false;
-  let groupError: string | null = null;
-
-  function updateHeosGroupsLineFromGroups() {
-    heosGroupsLine = groups.length > 0 ? `${groups.length} Gruppen` : 'Keine Gruppen';
-  }
-
-  function sleep(ms: number) {
-    return new Promise<void>((resolve) => setTimeout(resolve, ms));
-  }
-
-  async function refreshGroupsUntilPidGone(pid: number, opts?: { tries?: number; delayMs?: number }) {
-    const tries = Math.max(1, Math.min(10, Number(opts?.tries ?? 4)));
-    const delayMs = Math.max(50, Math.min(2000, Number(opts?.delayMs ?? 350)));
-
-    for (let i = 0; i < tries; i += 1) {
-      await fetchGroups();
-      const stillPresent = groups.some((g) => g.players.some((p) => p.pid === pid));
-      if (!stillPresent) return;
-      if (i < tries - 1) await sleep(delayMs);
-    }
-  }
-
-  $: now = $musicPlayerState.now;
-  $: playing = $musicPlayerState.playing;
-  $: positionSec = $musicPlayerState.positionSec;
-  $: durationSec = $musicPlayerState.durationSec;
-  $: playerStatus = $musicPlayerState.status;
-  $: playerStatusText = $musicPlayerState.statusText ? String($musicPlayerState.statusText) : '';
-  $: playerLoading = playerStatus === 'loading';
-  $: activeTarget = $musicPlayerState.target;
-  $: activeHeosTargetPid = activeTarget?.kind === 'heos' ? activeTarget.pid : null;
-  $: activeHeosTargetName = activeTarget?.kind === 'heos' ? activeTarget.name || '' : '';
-  $: heosWidgetName = activeHeosTargetPid
-    ? activeHeosTargetName || String(activeHeosTargetPid)
-    : selectedName || selectedPid;
-  $: pct = durationSec > 0 ? Math.min(100, Math.max(0, (positionSec / durationSec) * 100)) : 0;
-
-  $: heosExternal = $heosPlaybackStatus?.isExternal === true;
-  $: heosExternalTitle = $heosPlaybackStatus?.title ? String($heosPlaybackStatus.title) : '';
-  $: heosExternalArtist = $heosPlaybackStatus?.artist ? String($heosPlaybackStatus.artist) : '';
-  $: heosExternalAlbum = $heosPlaybackStatus?.album ? String($heosPlaybackStatus.album) : '';
-  $: heosExternalSource = $heosPlaybackStatus?.source ? String($heosPlaybackStatus.source) : '';
-  $: heosExternalImageUrl = $heosPlaybackStatus?.imageUrl ? String($heosPlaybackStatus.imageUrl) : '';
-  $: heosExternalSourceLabel =
-    heosExternalSource && heosExternalSource.toLowerCase() !== 'station' ? heosExternalSource : '';
-
-  $: spotifyActive = Boolean($spotifyPlaybackStatus?.enabled && $spotifyPlaybackStatus?.active);
-  $: spotifyTitle = $spotifyPlaybackStatus?.title ? String($spotifyPlaybackStatus.title) : '';
-  $: spotifyArtist = $spotifyPlaybackStatus?.artist ? String($spotifyPlaybackStatus.artist) : '';
-  $: spotifyAlbum = $spotifyPlaybackStatus?.album ? String($spotifyPlaybackStatus.album) : '';
-  $: spotifyImageUrl = $spotifyPlaybackStatus?.imageUrl ? String($spotifyPlaybackStatus.imageUrl) : '';
-  $: spotifySourceLabel = $spotifyPlaybackStatus?.source ? String($spotifyPlaybackStatus.source) : 'Spotify';
-
-  $: heosExternalActive = Boolean(heosEnabled && selectedPid && heosExternal);
-
-  $: heosPlayerSummaries = $heosPlaybackStatus?.players ?? [];
-
-  $: heosIsPlaying = Boolean($heosPlaybackStatus?.isPlaying);
-  $: isPlayingForUi = now ? (playerLoading ? false : playing) : heosExternalActive ? heosIsPlaying : false;
-  $: displayArtist = now?.artist
-    ? String(now.artist)
-    : heosExternalActive
-      ? heosExternalArtist || heosExternalSourceLabel || 'Externe Wiedergabe'
-      : spotifyActive
-        ? spotifyArtist || spotifySourceLabel
-        : '';
-  $: displayTitle = now?.title
-    ? playerStatusText || String(now.title)
-    : heosExternalActive
-      ? heosExternalTitle || heosExternalAlbum || (heosExternalSourceLabel ? 'Wiedergabe aktiv' : '')
-      : spotifyActive
-        ? spotifyTitle || spotifyAlbum || 'Wiedergabe aktiv'
-        : '';
-  $: externalSuffix = now
-    ? ''
-    : heosExternal
-    ? ` (${(heosExternalSourceLabel || 'extern').toLowerCase()})`
-    : spotifyActive
-      ? ` (${spotifySourceLabel.toLowerCase()})`
-      : '';
+  type HeosPlayerDto = { pid: number; name: string; model?: string | null };
 
   let heosEnabled = false;
   let edgeBaseUrl = '';
   let edgeToken = '';
+  let heosHosts = '';
+  let selectedPid = '';
+  let selectedName = '';
+
   let speakerOpen = false;
   let speakersBusy = false;
   let speakersError: string | null = null;
   let speakers: HeosPlayerDto[] = [];
-  let groupsBusy = false;
-  let groupsError: string | null = null;
-  let groups: HeosGroupDto[] = [];
-  let selectedPid = '';
-  let selectedName = '';
-  let heosHosts = '';
   let heosStatusLine: string | null = null;
-  let heosGroupsLine: string | null = null;
 
   let heosVolumeBusy = false;
   let heosVolumeError: string | null = null;
   let heosVolumeLevel: number | null = null;
 
-  let heosSkipDisabledUntil = 0;
-  let heosSkipTimer: ReturnType<typeof setTimeout> | null = null;
-  $: heosSkipDisabled = heosExternalActive && heosSkipDisabledUntil > Date.now();
+  $: heosPlayerSummaries = $heosPlaybackStatus?.players ?? [];
+  $: selectedSummary = summaryForPid(selectedPid);
+  $: activeSummary = heosPlayerSummaries.find((summary) => summary.isActive) ?? null;
+  $: watchedSummary = selectedSummary?.isActive ? selectedSummary : activeSummary ?? selectedSummary ?? null;
+  $: watchedPid = watchedSummary?.pid ?? (selectedPid ? Number(selectedPid) : null);
+  $: watchedName = watchedSummary?.name || selectedName || (watchedPid ? `Speaker ${watchedPid}` : '');
 
-  function disableHeosSkipFor(ms: number) {
-    const t = Math.max(1000, Math.min(120_000, Math.floor(ms)));
-    heosSkipDisabledUntil = Date.now() + t;
-    if (heosSkipTimer) clearTimeout(heosSkipTimer);
-    heosSkipTimer = setTimeout(() => {
-      heosSkipDisabledUntil = 0;
-      heosSkipTimer = null;
-    }, t);
+  $: heosActive = Boolean(heosEnabled && watchedSummary?.isActive);
+  $: spotifyActive = Boolean($spotifyPlaybackStatus?.enabled && $spotifyPlaybackStatus?.active);
+  $: nowPlayingActive = heosActive || spotifyActive;
+  $: isPlayingForUi = heosActive ? Boolean(watchedSummary?.isPlaying) : Boolean($spotifyPlaybackStatus?.isPlaying);
+
+  $: displayImageUrl =
+    (heosActive ? cleanMeta(watchedSummary?.imageUrl) : '') || (spotifyActive ? cleanMeta($spotifyPlaybackStatus?.imageUrl) : '');
+  $: displayTitle = heosActive
+    ? cleanMeta(watchedSummary?.title) || cleanMeta(watchedSummary?.album) || 'Wiedergabe aktiv'
+    : spotifyActive
+      ? cleanMeta($spotifyPlaybackStatus?.title) || cleanMeta($spotifyPlaybackStatus?.album) || 'Wiedergabe aktiv'
+      : 'Keine Wiedergabe';
+  $: displayArtist = heosActive
+    ? cleanMeta(watchedSummary?.artist) || cleanMeta(watchedSummary?.source) || watchedName || 'Musik'
+    : spotifyActive
+      ? cleanMeta($spotifyPlaybackStatus?.artist) || cleanMeta($spotifyPlaybackStatus?.source) || 'Spotify'
+      : heosEnabled
+        ? watchedName || 'HEOS'
+        : 'Musik';
+  $: displayAlbum = heosActive
+    ? cleanMeta(watchedSummary?.album)
+    : spotifyActive
+      ? cleanMeta($spotifyPlaybackStatus?.album)
+      : '';
+  $: sourceLabel = heosActive
+    ? cleanMeta(watchedSummary?.source) || 'HEOS'
+    : spotifyActive
+      ? cleanMeta($spotifyPlaybackStatus?.source) || 'Spotify'
+      : heosEnabled
+        ? 'HEOS'
+        : 'Aus';
+  $: statusLabel = nowPlayingActive ? (isPlayingForUi ? 'Live' : 'Pause') : 'Still';
+
+  function cleanMeta(raw: unknown): string {
+    const value = String(raw ?? '').trim();
+    if (!value) return '';
+    const lower = value.toLowerCase();
+    if (lower === 'url stream' || lower === 'stream' || lower === 'unknown' || lower === 'unknown artist' || lower === 'unknown title') return '';
+    return value;
   }
 
-  async function heosPost(path: string, body: any) {
-    const base = normalizeEdgeBaseUrl(edgeBaseUrl);
-    if (!base) throw new Error('Edge Base URL fehlt');
-
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (heosHosts.trim()) headers['X-HEOS-HOSTS'] = heosHosts.trim();
-
-    return edgeFetchJson<any>(base, path, edgeToken || undefined, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(body)
-    });
+  function summaryForPid(pid: number | string | null | undefined): HeosPlayerPlaybackSummary | null {
+    const n = Number(pid);
+    if (!Number.isFinite(n) || n === 0) return null;
+    return heosPlayerSummaries.find((summary) => summary.pid === n) ?? null;
   }
 
-  async function heosToggleExternal() {
-    if (!heosExternalActive) {
-      togglePlayPause();
-      return;
-    }
-    const pid = Number(selectedPid);
-    if (!Number.isFinite(pid) || pid === 0) return;
-
-    const nextState = heosIsPlaying ? 'pause' : 'play';
-    await heosPost('/api/heos/play_state', { pid, state: nextState });
-    setHeosPlaybackStatus({
-      pid,
-      state: nextState as any,
-      isPlaying: nextState === 'play',
-      isActive: true,
-      updatedAt: Date.now(),
-      error: null
-    });
+  function heosStateLabel(summary: HeosPlayerPlaybackSummary | null): string {
+    if (!summary) return 'Bereit';
+    if (summary.error) return 'Fehler';
+    if (summary.isPlaying) return 'Live';
+    if (summary.isActive) return 'Pause';
+    return 'Still';
   }
 
-  async function heosNextExternal() {
-    if (!heosExternalActive) {
-      playNext();
-      return;
-    }
-    if (heosSkipDisabled) return;
-    const pid = Number(selectedPid);
-    if (!Number.isFinite(pid) || pid === 0) return;
-    try {
-      await heosPost('/api/heos/next', { pid });
-    } catch {
-      // Some sources (e.g. radio/stations) don't support skip.
-      disableHeosSkipFor(30_000);
-    }
+  function heosStateClass(summary: HeosPlayerPlaybackSummary | null): string {
+    if (!summary) return 'bg-white/10 text-white/45';
+    if (summary.error) return 'bg-red-500/15 text-red-200';
+    if (summary.isPlaying) return 'bg-emerald-400/15 text-emerald-100';
+    if (summary.isActive) return 'bg-amber-400/15 text-amber-100';
+    return 'bg-white/10 text-white/45';
   }
 
-  async function heosPrevExternal() {
-    if (!heosExternalActive) {
-      playPrev();
-      return;
-    }
-    if (heosSkipDisabled) return;
-    const pid = Number(selectedPid);
-    if (!Number.isFinite(pid) || pid === 0) return;
-    try {
-      await heosPost('/api/heos/prev', { pid });
-    } catch {
-      // Some sources (e.g. radio/stations) don't support skip.
-      disableHeosSkipFor(30_000);
-    }
+  function heosTitleLine(summary: HeosPlayerPlaybackSummary | null, fallback: string): string {
+    if (!summary) return fallback;
+    if (summary.error) return summary.error;
+    if (summary.isActive) return cleanMeta(summary.title) || cleanMeta(summary.album) || cleanMeta(summary.source) || 'Wiedergabe aktiv';
+    return fallback;
   }
 
-  onDestroy(() => {
-    if (heosSkipTimer) clearTimeout(heosSkipTimer);
-  });
-
-  function closeSpeakerModal() {
-    speakerOpen = false;
-  }
-
-  function handleSpeakerKeydown(e: KeyboardEvent) {
-    if (e.key === 'Escape') closeSpeakerModal();
-    groupingMode = false;
-    selectedForGroup = new Set();
-    groupError = null;
+  function heosMetaLine(summary: HeosPlayerPlaybackSummary | null, fallback: string): string {
+    if (!summary || summary.error) return fallback;
+    if (!summary.isActive) return fallback;
+    const parts = [cleanMeta(summary.artist), cleanMeta(summary.source)].filter(Boolean);
+    return parts.length > 0 ? parts.join(' · ') : fallback;
   }
 
   function loadHeosConfig() {
@@ -227,10 +125,9 @@
     heosEnabled = localStorage.getItem(EDGE_HEOS_ENABLED_KEY) === '1';
     edgeBaseUrl = localStorage.getItem(EDGE_BASE_URL_KEY) ?? '';
     edgeToken = localStorage.getItem(EDGE_TOKEN_KEY) ?? '';
-    const pidRaw = localStorage.getItem(EDGE_HEOS_SELECTED_PLAYER_ID_KEY);
-    selectedPid = pidRaw ? String(pidRaw) : '';
-    selectedName = localStorage.getItem(EDGE_HEOS_SELECTED_PLAYER_NAME_KEY) ?? '';
     heosHosts = localStorage.getItem(EDGE_HEOS_HOSTS_KEY) ?? '';
+    selectedPid = localStorage.getItem(EDGE_HEOS_SELECTED_PLAYER_ID_KEY) ?? '';
+    selectedName = localStorage.getItem(EDGE_HEOS_SELECTED_PLAYER_NAME_KEY) ?? '';
   }
 
   function fmtIsoShort(iso: string | null | undefined): string {
@@ -244,6 +141,10 @@
     }
   }
 
+  function heosHeaders(): Record<string, string> {
+    return heosHosts.trim() ? { 'X-HEOS-HOSTS': heosHosts.trim() } : {};
+  }
+
   async function fetchSpeakers(opts?: { force?: boolean }) {
     speakersError = null;
     heosStatusLine = null;
@@ -254,219 +155,73 @@
 
       const force = Boolean(opts?.force);
       const path = force ? '/api/heos/scan?force=1' : '/api/heos/players';
-
-      const headers: Record<string, string> = {};
-      if (heosHosts.trim()) headers['X-HEOS-HOSTS'] = heosHosts.trim();
-
       const r = await edgeFetchJson<any>(
         base,
         path,
         edgeToken || undefined,
-        force ? { method: 'POST', headers } : { headers }
+        force ? { method: 'POST', headers: heosHeaders() } : { headers: heosHeaders() }
       );
-      const players = Array.isArray(r?.players) ? r.players : [];
-      speakers = players;
+      speakers = Array.isArray(r?.players) ? r.players : [];
 
-      // If we already have a pid selected, refresh the cached name.
       if (selectedPid) {
         const n = Number(selectedPid);
-        const match = Array.isArray(players) ? players.find((p: any) => Number(p?.pid) === n) : null;
+        const match = speakers.find((player) => Number(player.pid) === n);
         if (match?.name && typeof localStorage !== 'undefined') {
           selectedName = String(match.name);
           localStorage.setItem(EDGE_HEOS_SELECTED_PLAYER_NAME_KEY, selectedName);
         }
       }
 
-      const count = Array.isArray(players) ? players.length : 0;
+      const count = speakers.length;
       const scannedAt = fmtIsoShort(r?.lastScanAt);
       const err = typeof r?.lastError === 'string' && r.lastError ? r.lastError : '';
-      heosStatusLine = err
-        ? `Fehler: ${err}`
-        : scannedAt
-          ? `${count} Speaker · Scan: ${scannedAt}`
-          : `${count} Speaker`;
+      heosStatusLine = err ? `Fehler: ${err}` : scannedAt ? `${count} Speaker · ${scannedAt}` : `${count} Speaker`;
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Speaker konnten nicht geladen werden.';
-      // 501 almost certainly means an outdated Edge instance is still running.
-      if (String(msg).includes('501')) {
-        speakersError = 'HEOS API ist auf dem Edge noch nicht aktiv (501). Bitte Edge neu starten/neu deployen.';
-      } else {
-        speakersError = msg;
-      }
+      speakersError = err instanceof Error ? err.message : 'Speaker konnten nicht geladen werden.';
       speakers = [];
     } finally {
       speakersBusy = false;
     }
   }
 
-  function parseHeosGroupsPayload(payload: any): HeosGroupDto[] {
-    const arr = Array.isArray(payload) ? payload : [];
-    return arr
-      .map((g: any) => {
-        const playersRaw = Array.isArray(g?.players) ? g.players : [];
-        const players: HeosGroupPlayerDto[] = playersRaw
-          .map((p: any) => ({
-            name: String(p?.name || ''),
-            pid: Number(p?.pid),
-            role: p?.role ? String(p.role) : undefined
-          }))
-          .filter((p: any) => Number.isFinite(p.pid) && p.pid !== 0 && p.name);
-
-        return {
-          name: String(g?.name || ''),
-          gid: typeof g?.gid === 'number' ? g.gid : String(g?.gid ?? ''),
-          players
-        } as HeosGroupDto;
-      })
-      .filter((g: HeosGroupDto) => g.name && String(g.gid || '').trim());
-  }
-
-  function getGroupLeaderPid(group: HeosGroupDto): number | null {
-    const leader = group.players.find((p) => String(p.role || '').toLowerCase() === 'leader');
-    const pid = leader?.pid ?? group.players[0]?.pid;
-    return Number.isFinite(pid) && pid !== 0 ? pid : null;
-  }
-
-  async function fetchGroups() {
-    groupsError = null;
-    heosGroupsLine = null;
-    groupsBusy = true;
+  function persistSelectedPid(pid: string, nameOverride?: string) {
     try {
-      const base = normalizeEdgeBaseUrl(edgeBaseUrl);
-      if (!base) throw new Error('Edge Base URL fehlt');
-
-      const headers: Record<string, string> = {};
-      if (heosHosts.trim()) headers['X-HEOS-HOSTS'] = heosHosts.trim();
-
-      const r = await edgeFetchJson<any>(base, '/api/heos/groups', edgeToken || undefined, { headers });
-      const payload = r?.response?.payload;
-      groups = parseHeosGroupsPayload(payload);
-      updateHeosGroupsLineFromGroups();
-    } catch (err) {
-      groupsError = err instanceof Error ? err.message : 'Gruppen konnten nicht geladen werden.';
-      groups = [];
-      updateHeosGroupsLineFromGroups();
-    } finally {
-      groupsBusy = false;
-    }
-  }
-
-  async function createGroup(leaderPid: number, memberPids: number[]) {
-    groupError = null;
-    groupBusy = true;
-    try {
-      const base = normalizeEdgeBaseUrl(edgeBaseUrl);
-      if (!base) throw new Error('Edge Base URL fehlt');
-
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (heosHosts.trim()) headers['X-HEOS-HOSTS'] = heosHosts.trim();
-
-      await edgeFetchJson<any>(base, '/api/heos/group', edgeToken || undefined, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ leaderPid, memberPids })
-      });
-      // Reset grouping mode and refresh
-      groupingMode = false;
-      selectedForGroup = new Set();
-      // HEOS grouping state can take a moment to propagate.
-      await fetchGroups();
-      if (groups.length === 0) {
-        await sleep(250);
-        await fetchGroups();
+      if (typeof localStorage === 'undefined') return;
+      const n = Number(pid);
+      if (!pid || !Number.isFinite(n) || n === 0) {
+        localStorage.removeItem(EDGE_HEOS_SELECTED_PLAYER_ID_KEY);
+        localStorage.removeItem(EDGE_HEOS_SELECTED_PLAYER_NAME_KEY);
+        selectedPid = '';
+        selectedName = '';
+        return;
       }
-      await fetchSpeakers();
-    } catch (err) {
-      groupError = err instanceof Error ? err.message : 'Gruppe konnte nicht erstellt werden.';
-    } finally {
-      groupBusy = false;
+
+      selectedPid = String(n);
+      localStorage.setItem(EDGE_HEOS_SELECTED_PLAYER_ID_KEY, selectedPid);
+      const matchName = nameOverride || speakers.find((speaker) => speaker.pid === n)?.name || '';
+      selectedName = matchName;
+      if (matchName) localStorage.setItem(EDGE_HEOS_SELECTED_PLAYER_NAME_KEY, matchName);
+      else localStorage.removeItem(EDGE_HEOS_SELECTED_PLAYER_NAME_KEY);
+    } catch {
+      // ignore storage errors
     }
   }
 
-  async function dissolveGroup(pid: number) {
-    groupError = null;
-    groupBusy = true;
-    try {
-      const base = normalizeEdgeBaseUrl(edgeBaseUrl);
-      if (!base) throw new Error('Edge Base URL fehlt');
-
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (heosHosts.trim()) headers['X-HEOS-HOSTS'] = heosHosts.trim();
-
-      await edgeFetchJson<any>(base, '/api/heos/ungroup', edgeToken || undefined, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ pid })
-      });
-    } catch (err) {
-      // If HEOS is already ungrouped, a subsequent ungroup can return a generic error.
-      // We'll refresh groups anyway and only surface an error if the group still exists.
-      groupError = err instanceof Error ? err.message : 'Gruppe konnte nicht aufgelöst werden.';
-    } finally {
-      // Refresh lists (with a short retry to avoid stale UI due to HEOS propagation delays)
-      await refreshGroupsUntilPidGone(pid);
-      await fetchSpeakers();
-
-      const stillPresent = groups.some((g) => g.players.some((p) => p.pid === pid));
-      if (!stillPresent) {
-        // Clear stale errors if the group is actually gone.
-        groupError = null;
-      }
-      groupBusy = false;
-    }
-  }
-
-  function toggleSpeakerForGroup(pid: number) {
-    if (selectedForGroup.has(pid)) {
-      selectedForGroup.delete(pid);
-    } else {
-      selectedForGroup.add(pid);
-    }
-    selectedForGroup = new Set(selectedForGroup); // trigger reactivity
-  }
-
-  function cancelGrouping() {
-    groupingMode = false;
-    selectedForGroup = new Set();
-    groupError = null;
-  }
-
-  function startGrouping() {
-    groupingMode = true;
-    selectedForGroup = new Set();
-    groupError = null;
-  }
-
-  async function confirmGrouping() {
-    const pids = Array.from(selectedForGroup);
-    if (pids.length < 2) {
-      groupError = 'Mindestens 2 Speaker für eine Gruppe nötig.';
-      return;
-    }
-    // First selected becomes leader
-    const [leader, ...members] = pids;
-    await createGroup(leader, members);
-  }
-
-  async function fetchVolumeForSelected() {
+  async function fetchVolumeForCurrent() {
     heosVolumeError = null;
     heosVolumeLevel = null;
-    const pid = Number(selectedPid);
+    const pid = Number(watchedPid);
     if (!Number.isFinite(pid) || pid === 0) return;
 
     heosVolumeBusy = true;
     try {
       const base = normalizeEdgeBaseUrl(edgeBaseUrl);
       if (!base) throw new Error('Edge Base URL fehlt');
-
-      const headers: Record<string, string> = {};
-      if (heosHosts.trim()) headers['X-HEOS-HOSTS'] = heosHosts.trim();
-
-      const r = await edgeFetchJson<any>(base, `/api/heos/volume?pid=${encodeURIComponent(String(pid))}`, edgeToken || undefined, { headers });
-      const lvl = Number.isFinite(Number(r?.level))
-        ? Number(r.level)
-        : Number(r?.response?.heos?.message?.parsed?.level);
-      if (Number.isFinite(lvl)) heosVolumeLevel = Math.max(0, Math.min(100, Math.round(lvl)));
+      const r = await edgeFetchJson<any>(base, `/api/heos/volume?pid=${encodeURIComponent(String(pid))}`, edgeToken || undefined, {
+        headers: heosHeaders()
+      });
+      const level = Number.isFinite(Number(r?.level)) ? Number(r.level) : Number(r?.response?.heos?.message?.parsed?.level);
+      if (Number.isFinite(level)) heosVolumeLevel = Math.max(0, Math.min(100, Math.round(level)));
     } catch (err) {
       heosVolumeError = err instanceof Error ? err.message : 'Lautstärke konnte nicht geladen werden.';
     } finally {
@@ -474,22 +229,18 @@
     }
   }
 
-  async function setVolumeForSelected(level: number) {
+  async function setVolumeForCurrent(level: number) {
     heosVolumeError = null;
-    const pid = Number(selectedPid);
+    const pid = Number(watchedPid);
     if (!Number.isFinite(pid) || pid === 0) return;
 
     heosVolumeBusy = true;
     try {
       const base = normalizeEdgeBaseUrl(edgeBaseUrl);
       if (!base) throw new Error('Edge Base URL fehlt');
-
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (heosHosts.trim()) headers['X-HEOS-HOSTS'] = heosHosts.trim();
-
       const r = await edgeFetchJson<any>(base, '/api/heos/volume', edgeToken || undefined, {
         method: 'POST',
-        headers,
+        headers: { ...heosHeaders(), 'Content-Type': 'application/json' },
         body: JSON.stringify({ pid, level })
       });
       const applied = Number.isFinite(Number(r?.level)) ? Number(r.level) : Number(level);
@@ -501,339 +252,133 @@
     }
   }
 
-  async function adjustVolumeForSelected(delta: number) {
+  async function adjustVolumeForCurrent(delta: number) {
     const current = Number.isFinite(Number(heosVolumeLevel)) ? Number(heosVolumeLevel) : 0;
-    const next = Math.max(0, Math.min(100, Math.round(current + delta)));
-    await setVolumeForSelected(next);
-  }
-
-  function persistSelectedPid(pid: string, nameOverride?: string) {
-    try {
-      if (typeof localStorage === 'undefined') return;
-      const n = Number(pid);
-      if (!pid || !Number.isFinite(n) || n === 0) {
-        localStorage.removeItem(EDGE_HEOS_SELECTED_PLAYER_ID_KEY);
-        localStorage.removeItem(EDGE_HEOS_SELECTED_PLAYER_NAME_KEY);
-        selectedName = '';
-      } else {
-        localStorage.setItem(EDGE_HEOS_SELECTED_PLAYER_ID_KEY, String(n));
-
-        if (typeof nameOverride === 'string' && nameOverride.trim()) {
-          selectedName = nameOverride.trim();
-          localStorage.setItem(EDGE_HEOS_SELECTED_PLAYER_NAME_KEY, selectedName);
-          return;
-        }
-
-        const match = speakers.find((s) => s.pid === n);
-        if (match?.name) {
-          selectedName = match.name;
-          localStorage.setItem(EDGE_HEOS_SELECTED_PLAYER_NAME_KEY, selectedName);
-        } else {
-          localStorage.removeItem(EDGE_HEOS_SELECTED_PLAYER_NAME_KEY);
-          selectedName = '';
-        }
-      }
-    } catch {
-      // ignore
-    }
-  }
-
-  function switchDashboPlaybackToSelectedTarget(pid: string, name?: string) {
-    const n = Number(pid);
-    if (!now || !Number.isFinite(n) || n === 0) return;
-    switchPlaybackTarget({ kind: 'heos', pid: n, name: name || null });
-  }
-
-  function switchDashboPlaybackToLocal() {
-    if (!now) return;
-    switchPlaybackTarget({ kind: 'local', name: 'Dieses Gerät' });
-  }
-
-  function heosSummaryForPid(pid: number | string | null | undefined): HeosPlayerPlaybackSummary | null {
-    const n = Number(pid);
-    if (!Number.isFinite(n) || n === 0) return null;
-    return heosPlayerSummaries.find((summary) => summary.pid === n) ?? null;
-  }
-
-  function heosStateLabel(summary: HeosPlayerPlaybackSummary | null): string {
-    if (!summary) return '';
-    if (summary.error) return 'Fehler';
-    if (summary.isPlaying) return 'Spielt';
-    if (summary.isActive) return 'Pausiert';
-    return 'Frei';
-  }
-
-  function heosStateClass(summary: HeosPlayerPlaybackSummary | null): string {
-    if (!summary) return 'bg-white/8 text-white/40';
-    if (summary.error) return 'bg-red-500/15 text-red-300';
-    if (summary.isPlaying) return 'bg-cyan-400/15 text-cyan-200';
-    if (summary.isActive) return 'bg-amber-400/15 text-amber-200';
-    return 'bg-white/8 text-white/40';
-  }
-
-  function heosTitleLine(summary: HeosPlayerPlaybackSummary | null, fallback: string): string {
-    if (!summary) return fallback;
-    if (summary.error) return summary.error;
-    if (summary.isActive) return summary.title || summary.album || summary.source || 'Wiedergabe aktiv';
-    return fallback;
-  }
-
-  function heosMetaLine(summary: HeosPlayerPlaybackSummary | null, fallback: string): string {
-    if (!summary || summary.error) return fallback;
-    if (!summary.isActive) return fallback;
-    const parts = [summary.artist, summary.source].map((part) => String(part || '').trim()).filter(Boolean);
-    return parts.length > 0 ? parts.join(' · ') : fallback;
+    await setVolumeForCurrent(Math.max(0, Math.min(100, Math.round(current + delta))));
   }
 
   async function toggleSpeakerPicker() {
     loadHeosConfig();
     speakerOpen = !speakerOpen;
-    if (speakerOpen && speakers.length === 0 && !speakersBusy) {
-      await fetchSpeakers({ force: true });
-    }
-    if (speakerOpen) {
-      if (!groupsBusy) await fetchGroups();
-      await fetchVolumeForSelected();
-    }
+    if (speakerOpen && speakers.length === 0 && !speakersBusy) await fetchSpeakers({ force: true });
+    if (speakerOpen) await fetchVolumeForCurrent();
+  }
+
+  function closeSpeakerModal() {
+    speakerOpen = false;
+  }
+
+  function handleSpeakerKeydown(event: KeyboardEvent) {
+    if (event.key === 'Escape') closeSpeakerModal();
   }
 
   onMount(() => {
     loadHeosConfig();
   });
-
-  function fmt(sec: number) {
-    const s = Math.max(0, Math.floor(sec || 0));
-    const m = Math.floor(s / 60);
-    const r = s % 60;
-    return `${m}:${String(r).padStart(2, '0')}`;
-  }
 </script>
 
-<!-- Kompaktes Widget mit Cover als Teil des Rahmens -->
-<div class="relative rounded-lg border border-white/5 bg-black/34 backdrop-blur-md overflow-hidden h-[88px] text-white">
-  <!-- Cover als Hintergrund-Teil links (1/3 Breite) -->
-  <div class="absolute inset-y-0 left-0 w-1/3">
-    {#if now?.coverUrl}
-      <img src={now.coverUrl} alt="" class="h-full w-full object-cover" loading="lazy" />
-      <div class="absolute inset-0 bg-gradient-to-r from-transparent to-black/70"></div>
-    {:else if heosEnabled && selectedPid && heosExternal && heosExternalImageUrl}
-      <img src={heosExternalImageUrl} alt="" class="h-full w-full object-cover" loading="lazy" />
-      <div class="absolute inset-0 bg-gradient-to-r from-transparent to-black/70"></div>
-    {:else if spotifyActive && spotifyImageUrl}
-      <img src={spotifyImageUrl} alt="" class="h-full w-full object-cover" loading="lazy" />
-      <div class="absolute inset-0 bg-gradient-to-r from-transparent to-black/70"></div>
-    {:else}
-      <div class="h-full w-full bg-white/5 flex items-center justify-center">
-        <svg viewBox="0 0 24 24" class="h-8 w-8 text-white/20" fill="currentColor">
-          <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>
-        </svg>
-      </div>
-    {/if}
-  </div>
+<div class="relative min-h-[112px] overflow-hidden rounded-lg border border-white/10 bg-black/45 text-white shadow-lg shadow-black/20 backdrop-blur-md">
+  {#if displayImageUrl}
+    <img src={displayImageUrl} alt="" class="absolute inset-0 h-full w-full object-cover opacity-28 blur-sm scale-105" loading="lazy" />
+    <div class="absolute inset-0 bg-gradient-to-r from-black/90 via-black/70 to-black/45"></div>
+  {:else}
+    <div class="absolute inset-0 bg-gradient-to-br from-zinc-950 via-zinc-900 to-black"></div>
+  {/if}
 
-  <!-- Content rechts über dem Cover hinausragend -->
-  <div class="relative h-full flex items-center pl-[36%] pr-3">
-    {#if now || heosExternalActive || spotifyActive}
-      <div class="flex-1 min-w-0 flex flex-col justify-center gap-1">
-        <div class="text-sm font-semibold truncate leading-tight">{displayArtist ? displayArtist : 'Musik'}</div>
-        <div class="text-white/50 text-xs truncate">{displayTitle ? displayTitle : '—'}</div>
-        
-        <!-- Progress bar -->
-        <div class="flex items-center gap-2 mt-0.5">
-          <span class="text-[10px] text-white/40 tabular-nums w-7">{fmt(positionSec)}</span>
-          <div class="flex-1 h-1 rounded-full bg-white/10 overflow-hidden">
-            {#if playerLoading}
-              <div class="h-full w-1/2 rounded-full bg-cyan-300/55 animate-pulse"></div>
-            {:else}
-              <div class="h-full bg-white/30" style={`width: ${pct}%`}></div>
-            {/if}
-          </div>
-          <span class="text-[10px] text-white/40 tabular-nums w-7 text-right">{durationSec > 0 ? fmt(durationSec) : '--:--'}</span>
+  <div class="relative flex h-full min-h-[112px] items-center gap-3 p-3">
+    <div class="h-20 w-20 shrink-0 overflow-hidden rounded-lg border border-white/10 bg-white/10 shadow-md shadow-black/25">
+      {#if displayImageUrl}
+        <img src={displayImageUrl} alt="" class="h-full w-full object-cover" loading="lazy" />
+      {:else}
+        <div class="flex h-full w-full items-center justify-center bg-white/5">
+          <svg viewBox="0 0 24 24" class="h-8 w-8 text-white/25" fill="currentColor">
+            <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z" />
+          </svg>
         </div>
+      {/if}
+    </div>
+
+    <div class="min-w-0 flex-1 self-stretch py-1">
+      <div class="mb-1 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wide text-white/50">
+        <span class={`h-1.5 w-1.5 rounded-full ${nowPlayingActive ? 'bg-emerald-300' : 'bg-white/30'}`}></span>
+        <span>{statusLabel}</span>
+        <span class="text-white/25">·</span>
+        <span class="truncate">{sourceLabel}</span>
+        {#if watchedName}
+          <span class="hidden min-w-0 truncate text-white/35 sm:inline">{watchedName}</span>
+        {/if}
       </div>
 
-      <!-- Controls -->
-      <div class="flex flex-col items-end gap-1 ml-2">
-        {#if heosEnabled}
-          {#if selectedPid || activeHeosTargetPid}
-            <div class="text-[10px] text-white/50 leading-none">HEOS: {heosWidgetName}{externalSuffix}</div>
-          {/if}
-        {/if}
+      <div class="truncate text-base font-semibold leading-tight text-white">{displayArtist}</div>
+      <div class="mt-0.5 line-clamp-2 text-sm leading-snug text-white/70">{displayTitle}</div>
+      {#if displayAlbum && displayAlbum !== displayTitle}
+        <div class="mt-1 truncate text-[11px] text-white/40">{displayAlbum}</div>
+      {/if}
+      {#if heosEnabled && $heosPlaybackStatus?.error}
+        <div class="mt-1 truncate text-[11px] text-red-200">{$heosPlaybackStatus.error}</div>
+      {/if}
+    </div>
 
-        <div class="flex items-center gap-1">
+    <div class="flex shrink-0 flex-col items-center gap-1 self-stretch py-1">
+      {#if heosEnabled}
         <button
           type="button"
-          class={`h-7 w-7 rounded-lg bg-white/10 hover:bg-white/20 inline-flex items-center justify-center ${heosSkipDisabled ? 'opacity-40 pointer-events-none' : ''}`}
-          on:click={heosPrevExternal}
-          aria-label="Zurück"
-        >
-          <svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="currentColor">
-            <path d="M6 5h2v14H6V5zm14 0L10 12l10 7V5z" />
-          </svg>
-        </button>
-
-        <button
-          type="button"
-          class="h-8 w-8 rounded-lg bg-white/15 hover:bg-white/25 inline-flex items-center justify-center"
-          on:click={heosToggleExternal}
-          aria-label={isPlayingForUi ? 'Pause' : 'Play'}
-        >
-          {#if isPlayingForUi}
-            <svg viewBox="0 0 24 24" class="h-4 w-4" fill="currentColor">
-              <path d="M6 5h4v14H6V5zm8 0h4v14h-4V5z" />
-            </svg>
-          {:else}
-            <svg viewBox="0 0 24 24" class="h-4 w-4" fill="currentColor">
-              <path d="M8 5v14l12-7L8 5z" />
-            </svg>
-          {/if}
-        </button>
-
-        <button
-          type="button"
-          class={`h-7 w-7 rounded-lg bg-white/10 hover:bg-white/20 inline-flex items-center justify-center ${heosSkipDisabled ? 'opacity-40 pointer-events-none' : ''}`}
-          on:click={heosNextExternal}
-          aria-label="Weiter"
-        >
-          <svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="currentColor">
-            <path d="M16 5h2v14h-2V5zM4 5l10 7-10 7V5z" />
-          </svg>
-        </button>
-
-        {#if heosEnabled}
-          <div class="flex flex-col items-center gap-1 ml-1">
-            <button
-              type="button"
-              class="h-7 w-7 rounded-lg bg-white/10 hover:bg-white/20 inline-flex items-center justify-center"
-              on:click={toggleSpeakerPicker}
-              aria-label="HEOS Speaker wählen"
-              title="HEOS Speaker wählen"
-            >
-              <svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="currentColor">
-                <path d="M4 10v4c0 1.1.9 2 2 2h2l5 4V4L8 8H6c-1.1 0-2 .9-2 2zm13.5 2c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z" />
-              </svg>
-            </button>
-
-            <a
-              class="h-7 w-7 rounded-lg bg-white/10 hover:bg-white/20 inline-flex items-center justify-center"
-              href="/music"
-              aria-label="Bibliothek"
-              title="Bibliothek"
-            >
-              <svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="currentColor">
-                <path d="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-1 9h-4v4h-2v-4H9V9h4V5h2v4h4v2z"/>
-              </svg>
-            </a>
-          </div>
-        {:else}
-          <!-- Bibliothek Icon-Button -->
-          <a
-            class="h-7 w-7 rounded-lg bg-white/10 hover:bg-white/20 inline-flex items-center justify-center ml-1"
-            href="/music"
-            aria-label="Bibliothek"
-            title="Bibliothek"
-          >
-            <svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="currentColor">
-              <path d="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-1 9h-4v4h-2v-4H9V9h4V5h2v4h4v2z"/>
-            </svg>
-          </a>
-        {/if}
-      </div>
-      </div>
-    {:else}
-      <div class="flex-1">
-        <div class="text-white/70 text-sm font-medium">{displayArtist ? displayArtist : 'Musik'}</div>
-        <div class="text-white/40 text-xs">{displayTitle ? displayTitle : 'Keine Wiedergabe'}</div>
-        {#if heosEnabled && selectedPid && $heosPlaybackStatus?.error}
-          <div class="text-[10px] text-red-300 leading-none mt-1 truncate">HEOS Fehler: {$heosPlaybackStatus.error}</div>
-        {/if}
-        {#if heosEnabled && (selectedPid || activeHeosTargetPid)}
-          <div class="text-[10px] text-white/50 leading-none mt-1">HEOS: {heosWidgetName}{externalSuffix}</div>
-        {/if}
-      </div>
-      <div class="flex items-center gap-1">
-        {#if heosEnabled}
-          <button
-            type="button"
-            class="h-8 w-8 rounded-lg bg-white/10 hover:bg-white/20 inline-flex items-center justify-center"
-            on:click={toggleSpeakerPicker}
-            aria-label="HEOS Speaker wählen"
-            title="HEOS Speaker wählen"
-          >
-            <svg viewBox="0 0 24 24" class="h-4 w-4" fill="currentColor">
-              <path d="M4 10v4c0 1.1.9 2 2 2h2l5 4V4L8 8H6c-1.1 0-2 .9-2 2zm13.5 2c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z" />
-            </svg>
-          </button>
-        {/if}
-        <a
-          class="h-8 w-8 rounded-lg bg-white/10 hover:bg-white/20 inline-flex items-center justify-center"
-          href="/music"
-          aria-label="Bibliothek"
-          title="Bibliothek"
+          class="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-white/10 text-white/75 transition hover:bg-white/20 hover:text-white"
+          on:click={toggleSpeakerPicker}
+          aria-label="HEOS Speaker wählen"
+          title="HEOS Speaker wählen"
         >
           <svg viewBox="0 0 24 24" class="h-4 w-4" fill="currentColor">
-            <path d="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-1 9h-4v4h-2v-4H9V9h4V5h2v4h4v2z"/>
+            <path d="M4 10v4c0 1.1.9 2 2 2h2l5 4V4L8 8H6c-1.1 0-2 .9-2 2zm13.5 2c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z" />
           </svg>
-        </a>
-      </div>
-    {/if}
+        </button>
+      {/if}
+    </div>
   </div>
-
 </div>
 
 <svelte:window on:keydown={speakerOpen ? handleSpeakerKeydown : undefined} />
 
 {#if heosEnabled && speakerOpen}
   <div class="fixed inset-0 z-[120] flex" role="dialog" aria-modal="true" aria-label="HEOS Speaker">
-    <!-- Backdrop -->
     <button
       type="button"
       class={`absolute inset-0 backdrop-blur-sm ${tone === 'dark' ? 'bg-black/35' : 'bg-black/60'}`}
       aria-label="Schließen"
       on:click={closeSpeakerModal}
-      transition:fade={{ duration: 250 }}
+      transition:fade={{ duration: 180 }}
     ></button>
 
-    <!-- Panel -->
     <div
-      class={`heos-speaker-panel relative w-[420px] max-w-[90vw] h-full backdrop-blur-xl overflow-hidden flex flex-col ${tone === 'dark' ? 'heos-tone-dark border-r border-black/10 bg-white/95 text-zinc-900' : 'heos-tone-light border-r border-white/10 bg-zinc-950/[.97] text-white'}`}
-      transition:fly={{ x: -420, duration: 380, easing: cubicOut }}
+      class="relative flex h-full w-[420px] max-w-[90vw] flex-col overflow-hidden border-r border-white/10 bg-zinc-950/[.97] text-white shadow-2xl shadow-black/30 backdrop-blur-xl"
+      transition:fly={{ x: -420, duration: 300, easing: cubicOut }}
     >
-      <!-- Header -->
-      <div class="shrink-0 px-6 pt-6 pb-4">
-        <div class="flex items-center justify-between">
-          <div class="flex items-center gap-3">
-            <div class="h-9 w-9 rounded-xl bg-cyan-400/15 flex items-center justify-center">
-              <svg viewBox="0 0 24 24" class="h-5 w-5 text-cyan-300" fill="currentColor">
-                <path d="M4 10v4c0 1.1.9 2 2 2h2l5 4V4L8 8H6c-1.1 0-2 .9-2 2zm13.5 2c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z" />
-              </svg>
-            </div>
-            <div>
-              <h3 class="text-base font-semibold text-white leading-tight">HEOS Speaker</h3>
-              <p class="text-[11px] text-white/45 mt-0.5">Wähle, auf welchem Speaker abgespielt wird.</p>
-            </div>
+      <div class="shrink-0 px-5 pb-3 pt-5">
+        <div class="flex items-center justify-between gap-3">
+          <div class="min-w-0">
+            <h3 class="truncate text-base font-semibold leading-tight">HEOS Anzeige</h3>
+            <div class="mt-0.5 truncate text-[11px] text-white/45">{watchedName || 'Automatisch'}</div>
           </div>
           <div class="flex items-center gap-1.5">
             <button
               type="button"
-              class="h-8 w-8 rounded-lg bg-white/8 hover:bg-white/14 text-white/60 hover:text-white/90 flex items-center justify-center transition-all duration-200 disabled:opacity-50"
+              class="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-white/10 text-white/65 transition hover:bg-white/15 hover:text-white disabled:opacity-50"
               title="Aktualisieren"
               aria-label="Aktualisieren"
-              disabled={speakersBusy || groupsBusy || groupBusy}
+              disabled={speakersBusy}
               on:click={async () => {
                 await fetchSpeakers({ force: true });
-                await fetchGroups();
-                await fetchVolumeForSelected();
+                await fetchVolumeForCurrent();
               }}
             >
-              <svg viewBox="0 0 24 24" class="h-4 w-4 {speakersBusy || groupsBusy ? 'animate-spin' : ''}" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <svg viewBox="0 0 24 24" class="h-4 w-4 {speakersBusy ? 'animate-spin' : ''}" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <polyline points="23 4 23 10 17 10"></polyline>
                 <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
               </svg>
             </button>
             <button
               type="button"
-              class="h-8 w-8 rounded-lg bg-white/8 hover:bg-white/14 text-white/60 hover:text-white/90 flex items-center justify-center transition-all duration-200"
+              class="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-white/10 text-white/65 transition hover:bg-white/15 hover:text-white"
               aria-label="Schließen"
               on:click={closeSpeakerModal}
             >
@@ -844,268 +389,114 @@
             </button>
           </div>
         </div>
-      </div>
-
-      <!-- Divider -->
-      <div class={`mx-6 h-px bg-gradient-to-r ${tone === 'dark' ? 'from-black/10 via-black/5 to-transparent' : 'from-white/10 via-white/5 to-transparent'}`}></div>
-
-      <!-- Status info -->
-      <div class="shrink-0 px-6 pt-3 pb-1">
         {#if heosStatusLine}
-          <div class="text-[11px] text-white/50">{heosStatusLine}</div>
-        {/if}
-        {#if heosGroupsLine}
-          <div class="text-[11px] text-white/50 mt-0.5">{heosGroupsLine}</div>
-        {/if}
-        {#if groupError}
-          <div class="text-xs text-red-300 mt-1">{groupError}</div>
+          <div class="mt-3 text-[11px] text-white/45">{heosStatusLine}</div>
         {/if}
       </div>
 
-      <!-- Content -->
-      <div class="flex-1 overflow-y-auto px-6 py-4 scroll-smooth" style={`scrollbar-width: thin; scrollbar-color: ${tone === 'dark' ? 'rgba(0,0,0,0.15)' : 'rgba(255,255,255,0.15)'} transparent;`}>
-        <div>
-          {#if speakersBusy || groupsBusy}
-            <div class="text-xs text-white/60">Lade…</div>
-          {:else if speakersError || groupsError}
-            <div class="text-xs text-red-300">{speakersError || groupsError}</div>
-          {:else}
-            <div class="rounded-xl bg-white/5 border border-white/10 overflow-hidden">
-              <!-- No speaker option (only in selection mode) -->
-              {#if !groupingMode}
-                <button
-                  type="button"
-                  class={`w-full px-4 py-3 text-left text-sm hover:bg-white/10 transition rounded-xl ${!selectedPid ? 'bg-white/10' : ''}`}
-                  on:click={() => {
-                    selectedPid = '';
-                    persistSelectedPid('');
-                    switchDashboPlaybackToLocal();
-                  }}
-                >
-                  Kein Speaker
-                </button>
-              {/if}
+      <div class="h-px shrink-0 bg-white/10"></div>
 
-              <!-- Groups Section -->
-              {#if groups.length > 0}
-                <div class="px-4 py-2 text-[11px] text-white/50 border-t border-white/10 flex items-center justify-between">
-                  <span>Gruppen</span>
-                </div>
-                {#each groups as g (String(g.gid))}
-                  {@const leaderPid = getGroupLeaderPid(g)}
-                  {@const summary = heosSummaryForPid(leaderPid)}
-                  <div class="border-t border-white/5">
-                    <div class="flex items-center hover:bg-white/10 transition rounded-xl">
-                      <button
-                        type="button"
-                        class={`flex-1 px-4 py-3 text-left text-sm ${selectedName === g.name ? 'bg-white/10' : ''}`}
-                        disabled={groupingMode}
-                        on:click={() => {
-                          if (groupingMode) return;
-                          if (!leaderPid) return;
-                          selectedPid = String(leaderPid);
-                          persistSelectedPid(selectedPid, g.name);
-                          switchDashboPlaybackToSelectedTarget(selectedPid, g.name);
-                          void fetchVolumeForSelected();
-                        }}
-                      >
-                        <div class="flex items-center gap-3">
-                          <div class="h-10 w-10 shrink-0 overflow-hidden rounded-lg bg-white/8 flex items-center justify-center">
-                            {#if summary?.imageUrl}
-                              <img src={summary.imageUrl} alt="" class="h-full w-full object-cover" loading="lazy" />
-                            {:else}
-                              <svg viewBox="0 0 24 24" class="h-4 w-4 text-white/40" fill="currentColor">
-                                <path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/>
-                              </svg>
-                            {/if}
-                          </div>
-                          <div class="min-w-0 flex-1">
-                            <div class="flex items-center gap-2">
-                              <span class="truncate font-medium">{g.name}</span>
-                              {#if summary}
-                                <span class={`shrink-0 rounded-full px-2 py-0.5 text-[10px] ${heosStateClass(summary)}`}>{heosStateLabel(summary)}</span>
-                              {/if}
-                            </div>
-                            <div class="mt-0.5 truncate text-[11px] text-white/55">{heosTitleLine(summary, g.players.map((p) => p.name).join(', '))}</div>
-                            <div class="mt-0.5 truncate text-[10px] text-white/35">{heosMetaLine(summary, g.players.map((p) => p.name).join(', '))}</div>
-                          </div>
-                        </div>
-                      </button>
-                      <!-- Dissolve group button -->
-                      <button
-                        type="button"
-                        class="h-8 w-8 mr-2 rounded-md hover:bg-red-500/20 inline-flex items-center justify-center text-white/40 hover:text-red-400 transition disabled:opacity-50"
-                        title="Gruppe auflösen"
-                        aria-label="Gruppe auflösen"
-                        disabled={groupBusy}
-                        on:click|stopPropagation={async () => {
-                          const leaderPid = getGroupLeaderPid(g);
-                          if (!leaderPid) return;
+      <div class="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+        {#if speakersBusy}
+          <div class="text-xs text-white/60">Lade...</div>
+        {:else if speakersError}
+          <div class="text-xs text-red-200">{speakersError}</div>
+        {:else}
+          <div class="overflow-hidden rounded-lg border border-white/10 bg-white/5">
+            <button
+              type="button"
+              class={`w-full px-4 py-3 text-left text-sm transition hover:bg-white/10 ${!selectedPid ? 'bg-white/10' : ''}`}
+              on:click={() => {
+                persistSelectedPid('');
+                void fetchVolumeForCurrent();
+              }}
+            >
+              <div class="font-medium">Automatisch</div>
+              <div class="mt-0.5 truncate text-[11px] text-white/45">Aktive Wiedergabe im HEOS-System</div>
+            </button>
 
-                          // Optimistic UI update: remove group immediately.
-                          groups = groups.filter((x) => String(x.gid) !== String(g.gid));
-                          updateHeosGroupsLineFromGroups();
-
-                          await dissolveGroup(leaderPid);
-                        }}
-                      >
-                        <svg viewBox="0 0 24 24" class="h-4 w-4" fill="currentColor">
-                          <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
-                        </svg>
-                      </button>
-                    </div>
-                  </div>
-                {/each}
-              {/if}
-
-              <!-- Speakers Section -->
-              <div>
-                <div class="px-4 py-2 text-[11px] text-white/50 border-t border-white/10 flex items-center justify-between">
-                  <span>Speaker</span>
-                  {#if !groupingMode && speakers.length >= 2}
-                    <button
-                      type="button"
-                      class="text-[10px] text-cyan-400 hover:text-cyan-300"
-                      on:click={startGrouping}
-                    >
-                      + Gruppe bilden
-                    </button>
-                  {/if}
-                </div>
-                {#each speakers as s, i}
-                  {@const summary = heosSummaryForPid(s.pid)}
-                  {#if groupingMode}
-                    <!-- Grouping mode: checkboxes -->
-                    <label
-                      class={`flex items-center gap-2 w-full px-4 py-3 text-left text-sm hover:bg-white/10 transition cursor-pointer rounded-xl ${selectedForGroup.has(s.pid) ? 'bg-white/10' : ''}`}
-                      style="animation: speakerCardIn {180 + i * 60}ms {i * 40}ms both cubic-bezier(.22,1,.36,1)"
-                    >
-                      <input
-                        type="checkbox"
-                        class="w-4 h-4 rounded border-white/30 bg-white/10 text-cyan-500 focus:ring-cyan-500/50"
-                        checked={selectedForGroup.has(s.pid)}
-                        on:change={() => toggleSpeakerForGroup(s.pid)}
-                      />
-                      <span>{s.name}</span>
-                    </label>
-                  {:else}
-                    <!-- Normal mode: selection -->
-                    <button
-                      type="button"
-                      class={`w-full px-4 py-3 text-left text-sm hover:bg-white/10 transition rounded-xl ${selectedPid === String(s.pid) ? 'bg-cyan-400/10 text-cyan-300' : ''}`}
-                      style="animation: speakerCardIn {180 + i * 60}ms {i * 40}ms both cubic-bezier(.22,1,.36,1)"
-                      on:click={() => {
-                        selectedPid = String(s.pid);
-                        persistSelectedPid(selectedPid, s.name);
-                        switchDashboPlaybackToSelectedTarget(selectedPid, s.name);
-                        void fetchVolumeForSelected();
-                      }}
-                    >
-                      <div class="flex items-center gap-3">
-                        <div class="h-10 w-10 shrink-0 overflow-hidden rounded-lg bg-white/8 flex items-center justify-center">
-                          {#if summary?.imageUrl}
-                            <img src={summary.imageUrl} alt="" class="h-full w-full object-cover" loading="lazy" />
-                          {:else}
-                            <svg viewBox="0 0 24 24" class="h-4 w-4 text-white/40" fill="currentColor">
-                              <path d="M4 10v4c0 1.1.9 2 2 2h2l5 4V4L8 8H6c-1.1 0-2 .9-2 2zm13.5 2c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z" />
-                            </svg>
-                          {/if}
-                        </div>
-                        <div class="min-w-0 flex-1">
-                          <div class="flex items-center gap-2">
-                            <span class="truncate font-medium">{s.name}</span>
-                            {#if summary}
-                              <span class={`shrink-0 rounded-full px-2 py-0.5 text-[10px] ${heosStateClass(summary)}`}>{heosStateLabel(summary)}</span>
-                            {/if}
-                          </div>
-                          <div class="mt-0.5 truncate text-[11px] text-white/55">{heosTitleLine(summary, s.model || 'Bereit')}</div>
-                          <div class="mt-0.5 truncate text-[10px] text-white/35">{heosMetaLine(summary, s.model || '')}</div>
-                        </div>
-                      </div>
-                    </button>
-                  {/if}
-                {/each}
-              </div>
-            </div>
-
-            <!-- Grouping mode actions -->
-            {#if groupingMode}
-              <div class="flex items-center gap-2 mt-3">
-                <button
-                  type="button"
-                  class="h-8 px-3 rounded-lg bg-white/10 hover:bg-white/15 text-xs font-medium"
-                  on:click={cancelGrouping}
-                >
-                  Abbrechen
-                </button>
-                <button
-                  type="button"
-                  class="h-8 px-3 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-xs font-medium disabled:opacity-50"
-                  disabled={selectedForGroup.size < 2 || groupBusy}
-                  on:click={confirmGrouping}
-                >
-                  {groupBusy ? 'Erstelle...' : `Gruppe erstellen (${selectedForGroup.size})`}
-                </button>
-              </div>
-              <div class="text-[10px] text-white/40 mt-2">
-                Wähle mindestens 2 Speaker. Der erste wird Leader.
-              </div>
-            {/if}
-          {/if}
-        </div>
-
-        <!-- Volume control (only when not grouping) -->
-        {#if selectedPid && !groupingMode}
-          <div class="mt-4 rounded-2xl border border-white/8 bg-white/[.03] p-4">
-            <div class="flex items-center justify-between mb-3">
-              <div class="text-xs text-white/60 font-medium">Lautstärke</div>
-              <div class="text-xs text-white/50 tabular-nums font-medium">{heosVolumeLevel ?? '--'}</div>
-            </div>
-
-            {#if heosVolumeError}
-              <div class="text-xs text-red-300 mb-2">{heosVolumeError}</div>
-            {/if}
-
-            <div class="flex items-center gap-3">
-              <svg viewBox="0 0 24 24" class="h-4 w-4 shrink-0 text-white/35" fill="currentColor">
-                <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z" />
-              </svg>
-              <input
-                class="heos-range flex-1"
-                type="range"
-                min="0"
-                max="100"
-                step="1"
-                value={heosVolumeLevel ?? 0}
-                disabled={heosVolumeBusy}
-                on:change={(e) => {
-                  const v = Number((e.currentTarget as HTMLInputElement).value);
-                  void setVolumeForSelected(v);
+            {#each speakers as speaker, index (speaker.pid)}
+              {@const summary = summaryForPid(speaker.pid)}
+              <button
+                type="button"
+                class={`w-full border-t border-white/10 px-4 py-3 text-left text-sm transition hover:bg-white/10 ${selectedPid === String(speaker.pid) ? 'bg-cyan-400/10 text-cyan-100' : ''}`}
+                style="animation: speakerCardIn {160 + index * 35}ms {index * 25}ms both cubic-bezier(.22,1,.36,1)"
+                on:click={() => {
+                  persistSelectedPid(String(speaker.pid), speaker.name);
+                  void fetchVolumeForCurrent();
                 }}
-              />
-            </div>
-
-            <div class="mt-3 flex items-center justify-center gap-2">
-              <button
-                type="button"
-                class="h-8 min-w-8 px-3 rounded-lg border border-white/10 bg-white/8 hover:bg-white/12 text-white/80 text-sm font-semibold transition disabled:opacity-50"
-                on:click={() => void adjustVolumeForSelected(-5)}
-                disabled={heosVolumeBusy}
-                aria-label="Lautstärke verringern"
               >
-                −
+                <div class="flex items-center gap-3">
+                  <div class="h-10 w-10 shrink-0 overflow-hidden rounded-lg bg-white/10">
+                    {#if summary?.imageUrl}
+                      <img src={summary.imageUrl} alt="" class="h-full w-full object-cover" loading="lazy" />
+                    {:else}
+                      <div class="flex h-full w-full items-center justify-center">
+                        <svg viewBox="0 0 24 24" class="h-4 w-4 text-white/35" fill="currentColor">
+                          <path d="M4 10v4c0 1.1.9 2 2 2h2l5 4V4L8 8H6c-1.1 0-2 .9-2 2zm13.5 2c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z" />
+                        </svg>
+                      </div>
+                    {/if}
+                  </div>
+                  <div class="min-w-0 flex-1">
+                    <div class="flex items-center gap-2">
+                      <span class="truncate font-medium">{speaker.name}</span>
+                      <span class={`shrink-0 rounded-full px-2 py-0.5 text-[10px] ${heosStateClass(summary)}`}>{heosStateLabel(summary)}</span>
+                    </div>
+                    <div class="mt-0.5 truncate text-[11px] text-white/55">{heosTitleLine(summary, speaker.model || 'Bereit')}</div>
+                    <div class="mt-0.5 truncate text-[10px] text-white/35">{heosMetaLine(summary, speaker.model || '')}</div>
+                  </div>
+                </div>
               </button>
-              <button
-                type="button"
-                class="h-8 min-w-8 px-3 rounded-lg border border-white/10 bg-white/8 hover:bg-white/12 text-white/80 text-sm font-semibold transition disabled:opacity-50"
-                on:click={() => void adjustVolumeForSelected(5)}
-                disabled={heosVolumeBusy}
-                aria-label="Lautstärke erhöhen"
-              >
-                +
-              </button>
-            </div>
+            {/each}
           </div>
+
+          {#if watchedPid}
+            <div class="mt-4 rounded-lg border border-white/10 bg-white/5 p-4">
+              <div class="mb-3 flex items-center justify-between">
+                <div class="text-xs font-medium text-white/65">Lautstärke</div>
+                <div class="text-xs font-medium tabular-nums text-white/50">{heosVolumeLevel ?? '--'}</div>
+              </div>
+
+              {#if heosVolumeError}
+                <div class="mb-2 text-xs text-red-200">{heosVolumeError}</div>
+              {/if}
+
+              <div class="flex items-center gap-3">
+                <button
+                  type="button"
+                  class="inline-flex h-8 min-w-8 items-center justify-center rounded-lg border border-white/10 bg-white/10 px-3 text-sm font-semibold text-white/80 transition hover:bg-white/15 disabled:opacity-50"
+                  on:click={() => void adjustVolumeForCurrent(-5)}
+                  disabled={heosVolumeBusy}
+                  aria-label="Lautstärke verringern"
+                >
+                  -
+                </button>
+                <input
+                  class="heos-range min-w-0 flex-1"
+                  type="range"
+                  min="0"
+                  max="100"
+                  step="1"
+                  value={heosVolumeLevel ?? 0}
+                  disabled={heosVolumeBusy}
+                  on:change={(event) => {
+                    const value = Number((event.currentTarget as HTMLInputElement).value);
+                    void setVolumeForCurrent(value);
+                  }}
+                />
+                <button
+                  type="button"
+                  class="inline-flex h-8 min-w-8 items-center justify-center rounded-lg border border-white/10 bg-white/10 px-3 text-sm font-semibold text-white/80 transition hover:bg-white/15 disabled:opacity-50"
+                  on:click={() => void adjustVolumeForCurrent(5)}
+                  disabled={heosVolumeBusy}
+                  aria-label="Lautstärke erhöhen"
+                >
+                  +
+                </button>
+              </div>
+            </div>
+          {/if}
         {/if}
       </div>
     </div>
@@ -1113,81 +504,10 @@
 {/if}
 
 <style>
-  /* Light background (tone=dark): white panel with dark text */
-  .heos-tone-dark :global(.text-white) {
-    color: rgb(24 24 27) !important;
-  }
-  .heos-tone-dark :global(.text-white\/80) {
-    color: rgba(24, 24, 27, 0.8) !important;
-  }
-  .heos-tone-dark :global(.text-white\/60) {
-    color: rgba(24, 24, 27, 0.62) !important;
-  }
-  .heos-tone-dark :global(.text-white\/50) {
-    color: rgba(24, 24, 27, 0.54) !important;
-  }
-  .heos-tone-dark :global(.text-white\/45) {
-    color: rgba(24, 24, 27, 0.5) !important;
-  }
-  .heos-tone-dark :global(.text-white\/40) {
-    color: rgba(24, 24, 27, 0.45) !important;
-  }
-  .heos-tone-dark :global(.text-white\/35) {
-    color: rgba(24, 24, 27, 0.42) !important;
-  }
-  .heos-tone-dark :global(.text-white\/30) {
-    color: rgba(24, 24, 27, 0.34) !important;
-  }
-  .heos-tone-dark :global(.border-white\/10) {
-    border-color: rgba(24, 24, 27, 0.16) !important;
-  }
-  .heos-tone-dark :global(.border-white\/8) {
-    border-color: rgba(24, 24, 27, 0.13) !important;
-  }
-  .heos-tone-dark :global(.border-white\/5) {
-    border-color: rgba(24, 24, 27, 0.08) !important;
-  }
-  .heos-tone-dark :global(.border-white\/30) {
-    border-color: rgba(24, 24, 27, 0.2) !important;
-  }
-  .heos-tone-dark :global(.bg-white\/5) {
-    background-color: rgba(24, 24, 27, 0.05) !important;
-  }
-  .heos-tone-dark :global(.bg-white\/8) {
-    background-color: rgba(24, 24, 27, 0.08) !important;
-  }
-  .heos-tone-dark :global(.bg-white\/10) {
-    background-color: rgba(24, 24, 27, 0.1) !important;
-  }
-  .heos-tone-dark :global(.bg-white\/15) {
-    background-color: rgba(24, 24, 27, 0.15) !important;
-  }
-  .heos-tone-dark :global(.bg-white\/\[\.03\]) {
-    background-color: rgba(24, 24, 27, 0.04) !important;
-  }
-  .heos-tone-dark :global(.text-cyan-300) {
-    color: rgb(8, 145, 178) !important;
-  }
-  .heos-tone-dark :global(.text-cyan-400) {
-    color: rgb(6, 182, 212) !important;
-  }
-  .heos-tone-dark :global(.text-red-300) {
-    color: rgb(220, 38, 38) !important;
-  }
-  .heos-tone-dark :global(.bg-cyan-400\/15) {
-    background-color: rgba(6, 182, 212, 0.12) !important;
-  }
-  .heos-tone-dark :global(.bg-cyan-400\/10) {
-    background-color: rgba(6, 182, 212, 0.08) !important;
-  }
-  .heos-tone-dark :global(.bg-cyan-600) {
-    background-color: rgb(8, 145, 178) !important;
-  }
-
   @keyframes speakerCardIn {
     from {
       opacity: 0;
-      transform: translateX(-12px);
+      transform: translateX(-10px);
     }
     to {
       opacity: 1;
@@ -1195,51 +515,33 @@
     }
   }
 
-  .heos-tone-dark .heos-range {
-    background: linear-gradient(to right, rgba(0,0,0,0.08), rgba(8,145,178,0.35)) !important;
-  }
-  .heos-tone-dark .heos-range::-webkit-slider-thumb {
-    background: rgb(8, 145, 178) !important;
-    box-shadow: 0 0 6px rgba(8,145,178,0.3) !important;
-  }
-  .heos-tone-dark .heos-range::-webkit-slider-thumb:hover {
-    box-shadow: 0 0 10px rgba(8,145,178,0.5) !important;
-  }
-  .heos-tone-dark .heos-range::-moz-range-thumb {
-    background: rgb(8, 145, 178) !important;
-    box-shadow: 0 0 6px rgba(8,145,178,0.3) !important;
-  }
-
   .heos-range {
     -webkit-appearance: none;
     appearance: none;
     height: 4px;
     border-radius: 9999px;
-    background: linear-gradient(to right, rgba(255,255,255,0.1), rgba(34,211,238,0.5));
+    background: linear-gradient(to right, rgba(255,255,255,0.12), rgba(52,211,153,0.55));
     outline: none;
   }
+
   .heos-range::-webkit-slider-thumb {
     -webkit-appearance: none;
     appearance: none;
     width: 16px;
     height: 16px;
     border-radius: 50%;
-    background: #22d3ee;
+    background: #34d399;
     cursor: pointer;
-    box-shadow: 0 0 6px rgba(34,211,238,0.4);
-    transition: transform 0.15s ease, box-shadow 0.15s ease;
+    box-shadow: 0 0 8px rgba(52,211,153,0.45);
   }
-  .heos-range::-webkit-slider-thumb:hover {
-    transform: scale(1.2);
-    box-shadow: 0 0 10px rgba(34,211,238,0.6);
-  }
+
   .heos-range::-moz-range-thumb {
     width: 16px;
     height: 16px;
-    border-radius: 50%;
-    background: #22d3ee;
-    cursor: pointer;
     border: none;
-    box-shadow: 0 0 6px rgba(34,211,238,0.4);
+    border-radius: 50%;
+    background: #34d399;
+    cursor: pointer;
+    box-shadow: 0 0 8px rgba(52,211,153,0.45);
   }
 </style>

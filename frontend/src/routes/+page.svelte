@@ -41,7 +41,6 @@
   import { generateRecurringPatternSuggestions } from '$lib/planner/recurringPatterns';
   import { getEdgePlayerWidgetEnabledFromStorage } from '$lib/edge';
   import { getDashboardGlassBlurEnabledFromStorage, getDashboardTextStyleFromStorage, getDashboardBgDimmingFromStorage, DASHBOARD_BG_DIMMING_DEFAULT } from '$lib/dashboard';
-  import { musicPlayerState } from '$lib/stores/musicPlayer';
   import { heosPlaybackStatus } from '$lib/stores/heosPlayback';
   import { clockStyleClasses, normalizeClockStyle, type ClockStyle } from '$lib/clockStyle';
   import { getLoginRedirectPath, resolveStoredUser } from '$lib/auth';
@@ -1289,12 +1288,10 @@
           {/if}
         {/if}
 
-        {#if standbyMode && musicWidgetEnabled && (($musicPlayerState.playing && $musicPlayerState.now) || $heosPlaybackStatus.isExternal)}
+        {#if standbyMode && musicWidgetEnabled && $heosPlaybackStatus.isExternal}
           <div class="standby-music mt-2 pb-4 text-white">
             <div class="relative h-24 w-24 overflow-hidden rounded-none shadow-lg shadow-black/30">
-              {#if $musicPlayerState.now?.coverUrl}
-                <img src={$musicPlayerState.now.coverUrl} alt="" class="h-full w-full object-cover" loading="lazy" />
-              {:else if $heosPlaybackStatus.isExternal && $heosPlaybackStatus.imageUrl}
+              {#if $heosPlaybackStatus.imageUrl}
                 <img src={$heosPlaybackStatus.imageUrl} alt="" class="h-full w-full object-cover" loading="lazy" />
               {:else}
                 <div class="h-full w-full bg-white/10 flex items-center justify-center">
@@ -1303,15 +1300,8 @@
               {/if}
               <div class="absolute inset-0 bg-gradient-to-t from-black/70 via-black/15 to-transparent"></div>
               <div class="absolute inset-x-0 bottom-0 p-2">
-                {#if $musicPlayerState.now}
-                  <div class="text-sm font-semibold text-white leading-tight line-clamp-1">{$musicPlayerState.now.artist}</div>
-                  <div class="text-[11px] text-white/70 leading-tight line-clamp-1">{$musicPlayerState.now.title}</div>
-                {:else if $heosPlaybackStatus.isExternal}
-                  <div class="text-sm font-semibold text-white leading-tight line-clamp-1">{$heosPlaybackStatus.artist ?? 'Musik'}</div>
-                  <div class="text-[11px] text-white/70 leading-tight line-clamp-1">{$heosPlaybackStatus.title ?? 'Wiedergabe'}</div>
-                {:else}
-                  <div class="text-[11px] text-white/60">Keine Wiedergabe</div>
-                {/if}
+                <div class="text-sm font-semibold text-white leading-tight line-clamp-1">{$heosPlaybackStatus.artist ?? $heosPlaybackStatus.source ?? 'Musik'}</div>
+                <div class="text-[11px] text-white/70 leading-tight line-clamp-1">{$heosPlaybackStatus.title ?? $heosPlaybackStatus.album ?? 'Wiedergabe'}</div>
               </div>
             </div>
           </div>
@@ -1372,13 +1362,11 @@
                 </div>
               {/if}
 
-              {#if musicWidgetEnabled && (($musicPlayerState.playing && $musicPlayerState.now) || $heosPlaybackStatus.isExternal)}
+              {#if musicWidgetEnabled && $heosPlaybackStatus.isExternal}
                 <div class="standby-music mt-10 mb-6">
                   <div class="flex items-center gap-5">
                     <div class="relative w-28 h-28 overflow-hidden rounded-lg shadow-2xl shadow-black/50 shrink-0">
-                      {#if $musicPlayerState.now?.coverUrl}
-                        <img src={$musicPlayerState.now.coverUrl} alt="" class="h-full w-full object-cover" loading="lazy" />
-                      {:else if $heosPlaybackStatus.isExternal && $heosPlaybackStatus.imageUrl}
+                      {#if $heosPlaybackStatus.imageUrl}
                         <img src={$heosPlaybackStatus.imageUrl} alt="" class="h-full w-full object-cover" loading="lazy" />
                       {:else}
                         <div class="h-full w-full bg-white/10 flex items-center justify-center">
@@ -1389,15 +1377,8 @@
                     </div>
 
                     <div class="min-w-0">
-                      {#if $musicPlayerState.now}
-                        <div class="text-lg font-semibold text-white leading-tight truncate">{$musicPlayerState.now.artist}</div>
-                        <div class="text-white/60 text-sm mt-1 leading-snug line-clamp-2">{$musicPlayerState.now.title}</div>
-                      {:else if $heosPlaybackStatus.isExternal}
-                        <div class="text-lg font-semibold text-white leading-tight truncate">{$heosPlaybackStatus.artist ?? 'Musik'}</div>
-                        <div class="text-white/60 text-sm mt-1 leading-snug line-clamp-2">{$heosPlaybackStatus.title ?? 'Wiedergabe'}</div>
-                      {:else}
-                        <div class="text-white/40 text-sm">Keine Wiedergabe</div>
-                      {/if}
+                      <div class="text-lg font-semibold text-white leading-tight truncate">{$heosPlaybackStatus.artist ?? $heosPlaybackStatus.source ?? 'Musik'}</div>
+                      <div class="text-white/60 text-sm mt-1 leading-snug line-clamp-2">{$heosPlaybackStatus.title ?? $heosPlaybackStatus.album ?? 'Wiedergabe'}</div>
                     </div>
                   </div>
                 </div>
@@ -1491,12 +1472,10 @@
                 {/if}
               </div>
 
-              {#if musicWidgetEnabled && (($musicPlayerState.playing && $musicPlayerState.now) || $heosPlaybackStatus.isExternal)}
+              {#if musicWidgetEnabled && $heosPlaybackStatus.isExternal}
                 <div class="standby-music mt-6 md:hidden">
                   <div class="relative h-24 w-24 overflow-hidden rounded-none shadow-lg shadow-black/30">
-                    {#if $musicPlayerState.now?.coverUrl}
-                      <img src={$musicPlayerState.now.coverUrl} alt="" class="h-full w-full object-cover" loading="lazy" />
-                    {:else if $heosPlaybackStatus.isExternal && $heosPlaybackStatus.imageUrl}
+                    {#if $heosPlaybackStatus.imageUrl}
                       <img src={$heosPlaybackStatus.imageUrl} alt="" class="h-full w-full object-cover" loading="lazy" />
                     {:else}
                       <div class="h-full w-full bg-white/10 flex items-center justify-center">
@@ -1505,15 +1484,8 @@
                     {/if}
                     <div class="absolute inset-0 bg-gradient-to-t from-black/70 via-black/15 to-transparent"></div>
                     <div class="absolute inset-x-0 bottom-0 p-2">
-                      {#if $musicPlayerState.now}
-                        <div class="text-sm font-semibold text-white leading-tight line-clamp-1">{$musicPlayerState.now.artist}</div>
-                        <div class="text-[11px] text-white/70 leading-tight line-clamp-1">{$musicPlayerState.now.title}</div>
-                      {:else if $heosPlaybackStatus.isExternal}
-                        <div class="text-sm font-semibold text-white leading-tight line-clamp-1">{$heosPlaybackStatus.artist ?? 'Musik'}</div>
-                        <div class="text-[11px] text-white/70 leading-tight line-clamp-1">{$heosPlaybackStatus.title ?? 'Wiedergabe'}</div>
-                      {:else}
-                        <div class="text-[11px] text-white/60">Keine Wiedergabe</div>
-                      {/if}
+                      <div class="text-sm font-semibold text-white leading-tight line-clamp-1">{$heosPlaybackStatus.artist ?? $heosPlaybackStatus.source ?? 'Musik'}</div>
+                      <div class="text-[11px] text-white/70 leading-tight line-clamp-1">{$heosPlaybackStatus.title ?? $heosPlaybackStatus.album ?? 'Wiedergabe'}</div>
                     </div>
                   </div>
                 </div>
@@ -1666,13 +1638,11 @@
                 </div>
               {/if}
 
-              {#if musicWidgetEnabled && ($musicPlayerState.now || $heosPlaybackStatus.isExternal)}
+              {#if musicWidgetEnabled && $heosPlaybackStatus.isExternal}
                 <div class="standby-music mt-10 mb-6">
                   <div class="flex items-center gap-5">
                     <div class="relative w-28 h-28 overflow-hidden rounded-lg shadow-2xl shadow-black/50 shrink-0">
-                      {#if $musicPlayerState.now?.coverUrl}
-                        <img src={$musicPlayerState.now.coverUrl} alt="" class="h-full w-full object-cover" loading="lazy" />
-                      {:else if $heosPlaybackStatus.isExternal && $heosPlaybackStatus.imageUrl}
+                      {#if $heosPlaybackStatus.imageUrl}
                         <img src={$heosPlaybackStatus.imageUrl} alt="" class="h-full w-full object-cover" loading="lazy" />
                       {:else}
                         <div class="h-full w-full bg-white/10 flex items-center justify-center">
@@ -1683,15 +1653,8 @@
                     </div>
 
                     <div class="min-w-0">
-                      {#if $musicPlayerState.now}
-                        <div class="text-lg font-semibold text-white leading-tight truncate">{$musicPlayerState.now.artist}</div>
-                        <div class="text-white/60 text-sm mt-1 leading-snug line-clamp-2">{$musicPlayerState.now.title}</div>
-                      {:else if $heosPlaybackStatus.isExternal}
-                        <div class="text-lg font-semibold text-white leading-tight truncate">{$heosPlaybackStatus.artist ?? 'Musik'}</div>
-                        <div class="text-white/60 text-sm mt-1 leading-snug line-clamp-2">{$heosPlaybackStatus.title ?? 'Wiedergabe'}</div>
-                      {:else}
-                        <div class="text-white/40 text-sm">Keine Wiedergabe</div>
-                      {/if}
+                      <div class="text-lg font-semibold text-white leading-tight truncate">{$heosPlaybackStatus.artist ?? $heosPlaybackStatus.source ?? 'Musik'}</div>
+                      <div class="text-white/60 text-sm mt-1 leading-snug line-clamp-2">{$heosPlaybackStatus.title ?? $heosPlaybackStatus.album ?? 'Wiedergabe'}</div>
                     </div>
                   </div>
                 </div>
@@ -1787,13 +1750,11 @@
                 {/if}
               </div>
 
-              {#if musicWidgetEnabled && ($musicPlayerState.now || $heosPlaybackStatus.isExternal)}
+              {#if musicWidgetEnabled && $heosPlaybackStatus.isExternal}
                 <div class="standby-music mt-6 md:hidden">
                   <div class="flex items-center gap-4">
                     <div class="h-14 w-14 overflow-hidden rounded-none shadow-lg shadow-black/30 shrink-0">
-                      {#if $musicPlayerState.now?.coverUrl}
-                        <img src={$musicPlayerState.now.coverUrl} alt="" class="h-full w-full object-cover" loading="lazy" />
-                      {:else if $heosPlaybackStatus.isExternal && $heosPlaybackStatus.imageUrl}
+                      {#if $heosPlaybackStatus.imageUrl}
                         <img src={$heosPlaybackStatus.imageUrl} alt="" class="h-full w-full object-cover" loading="lazy" />
                       {:else}
                         <div class="h-full w-full bg-white/10 flex items-center justify-center">
@@ -1802,15 +1763,8 @@
                       {/if}
                     </div>
                     <div class="min-w-0">
-                      {#if $musicPlayerState.now}
-                        <div class="text-base font-semibold text-white truncate">{$musicPlayerState.now.artist}</div>
-                        <div class="text-white/50 text-sm truncate">{$musicPlayerState.now.title}</div>
-                      {:else if $heosPlaybackStatus.isExternal}
-                        <div class="text-base font-semibold text-white truncate">{$heosPlaybackStatus.artist ?? 'Musik'}</div>
-                        <div class="text-white/50 text-sm truncate">{$heosPlaybackStatus.title ?? 'Wiedergabe'}</div>
-                      {:else}
-                        <div class="text-white/40 text-sm">Keine Wiedergabe</div>
-                      {/if}
+                      <div class="text-base font-semibold text-white truncate">{$heosPlaybackStatus.artist ?? $heosPlaybackStatus.source ?? 'Musik'}</div>
+                      <div class="text-white/50 text-sm truncate">{$heosPlaybackStatus.title ?? $heosPlaybackStatus.album ?? 'Wiedergabe'}</div>
                     </div>
                   </div>
                 </div>

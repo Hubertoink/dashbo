@@ -104,10 +104,6 @@
   export let edgeTestMessage: string | null;
   export let edgeTestOk: boolean | null;
 
-  export let scanEdgeNow: () => void | Promise<void>;
-  export let edgeScanBusy: boolean;
-  export let edgeScanMessage: string | null;
-
   export let edgeHeosEnabled: boolean;
   export let saveEdgeHeosEnabled: () => void | Promise<void>;
   export let edgeHeosHosts: string;
@@ -516,7 +512,7 @@
             1) Lokalen <span class="font-semibold text-white">dashbo-edge</span> Container starten (im Heimnetz, nicht auf Mittwald).
           </div>
           <div class="rounded-lg border border-white/10 bg-white/5 p-3">
-            2) Im Bereich <span class="font-semibold text-white">Musik-Player → Edge-Service Verbindung</span> Base-URL und Token eintragen und speichern.
+            2) Im Bereich <span class="font-semibold text-white">Musik-Anzeige → Edge-Service Verbindung</span> Base-URL und Token eintragen und speichern.
           </div>
           <div class="rounded-lg border border-white/10 bg-white/5 p-3">
             3) Hier bei <span class="font-semibold text-white">Philips Hue</span>: Bridge-Button drücken, dann <span class="font-semibold text-white">Bridge verbinden</span> klicken.
@@ -923,9 +919,9 @@
     </div>
   </WidgetSettingsCard>
 
-  <!-- Musik Widget -->
+  <!-- Musik-Anzeige Widget -->
   <WidgetSettingsCard
-    title="Musik-Player"
+    title="Musik-Anzeige"
     icon="🎵"
     kicker="music"
     enabled={edgePlayerWidgetEnabled}
@@ -950,7 +946,7 @@
             Setup-Anleitung
           </button>
         </div>
-        <div class="text-[11px] text-white/50">Für lokale Musik und HEOS-Steuerung wird der Edge-Service benötigt.</div>
+        <div class="text-[11px] text-white/50">Für HEOS-Status, Coverbilder und Speaker-Informationen wird der Edge-Service benötigt.</div>
 
         <div class="grid md:grid-cols-3 gap-2">
           <input
@@ -984,21 +980,8 @@
             Verbindung testen
           </button>
 
-          <button
-            class="h-8 px-3 rounded-lg bg-white/20 hover:bg-white/25 text-xs font-medium disabled:opacity-50"
-            on:click={scanEdgeNow}
-            disabled={edgeScanBusy || !edgeBaseUrl.trim()}
-            title="Scanne die Musikbibliothek auf dem Edge (force)"
-          >
-            Rescan starten
-          </button>
-
           {#if edgeTestMessage}
             <div class={edgeTestOk ? 'text-emerald-300 text-xs' : 'text-red-300 text-xs'}>{edgeTestMessage}</div>
-          {/if}
-
-          {#if edgeScanMessage}
-            <div class="text-white/70 text-xs">{edgeScanMessage}</div>
           {/if}
         </div>
       </div>
@@ -1006,7 +989,7 @@
       <!-- HEOS Einstellungen -->
       <div class="rounded-xl border border-white/10 bg-white/5 p-3">
         <div class="flex items-center justify-between mb-2">
-          <div class="text-sm font-medium text-white/90">HEOS Multi-Room</div>
+          <div class="text-sm font-medium text-white/90">HEOS Anzeige</div>
           <label class="flex items-center gap-2 text-sm text-white/80">
             <input
               type="checkbox"
@@ -1161,7 +1144,7 @@
             </div>
           </div>
         {:else}
-          <div class="text-[11px] text-white/50">HEOS ist deaktiviert. Aktiviere HEOS, um Speaker zu laden und Gruppen zu steuern.</div>
+          <div class="text-[11px] text-white/50">HEOS ist deaktiviert. Aktiviere HEOS, um Speaker-Status und aktuelle Wiedergabe anzuzeigen.</div>
         {/if}
       </div>
 
@@ -1169,7 +1152,7 @@
         <div class="flex items-start justify-between gap-3">
           <div class="min-w-0">
             <div class="text-sm font-medium text-white/90">Debug Log</div>
-            <div class="text-[11px] text-white/50">Temporärer Ablauf-Trace für lokale Musik, HEOS und Edge-Antwortzeiten.</div>
+            <div class="text-[11px] text-white/50">Temporärer Ablauf-Trace für HEOS, Now-Playing-Status und Edge-Antwortzeiten.</div>
           </div>
 
           <button

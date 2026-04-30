@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onDestroy, onMount } from 'svelte';
+  import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
   import { page } from '$app/stores';
   import { fade, fly } from 'svelte/transition';
@@ -307,10 +307,6 @@
   let edgeTestMessage: string | null = null;
   let edgeTestOk: boolean | null = null;
   let edgeSetupOpen = false;
-  let edgeScanBusy = false;
-  let edgeScanMessage: string | null = null;
-  let edgeScanPollId = 0;
-  let edgeScanPollTimer: ReturnType<typeof setTimeout> | null = null;
 
   type HeosPlayerDto = { pid: number; name: string; model?: string };
   let heosGroupPlayers: HeosPlayerDto[] = [];
@@ -478,109 +474,6 @@
     await dissolveHeosGroupByPid(pid);
   }
 
-  type EdgeMusicStatusDto = {
-    ok: boolean;
-    scanning: boolean;
-    lastScanAt: string | null;
-    lastError: string | null;
-    libraryPath: string;
-    counts: { tracks: number; albums: number };
-    progress?: {
-      phase?: string;
-      startedAt?: string;
-      updatedAt?: string;
-      dirsDone?: number;
-      filesTotal?: number;
-      filesDone?: number;
-      tracksBuilt?: number;
-      albumsBuilt?: number;
-      coversDone?: number;
-      coversTotal?: number;
-      currentRelPath?: string | null;
-    } | null;
-  };
-
-  function edgeScanPercent(st: EdgeMusicStatusDto | null): number | null {
-    const total = st?.progress?.filesTotal;
-    const done = st?.progress?.filesDone;
-    if (typeof total !== 'number' || total <= 0) return null;
-    if (typeof done !== 'number' || done < 0) return 0;
-    return Math.max(0, Math.min(100, Math.floor((done / total) * 100)));
-  }
-
-  function edgeScanPhaseLabel(phase: string | undefined): string {
-    const p = String(phase || '').toLowerCase();
-    if (p === 'walking') return 'Dateien sammeln';
-    if (p === 'metadata') return 'Tags lesen';
-    if (p === 'covers') return 'Cover prüfen';
-    if (p === 'done') return 'Fertig';
-    if (p === 'error') return 'Fehler';
-    return p || 'Scan';
-  }
-
-  function stopEdgeScanPolling() {
-    if (edgeScanPollTimer) {
-      clearTimeout(edgeScanPollTimer);
-      edgeScanPollTimer = null;
-    }
-    edgeScanPollId += 1;
-  }
-
-  async function fetchEdgeMusicStatus(): Promise<EdgeMusicStatusDto> {
-    return await edgeFetchJson<EdgeMusicStatusDto>(edgeBaseUrl, '/api/music/status', edgeToken || undefined);
-  }
-
-  async function pollEdgeScanUntilDone(opts?: { timeoutMs?: number }) {
-    const timeoutMs = Math.max(10_000, Number(opts?.timeoutMs ?? 180_000));
-    const id = ++edgeScanPollId;
-    const startedAt = Date.now();
-
-    const tick = async () => {
-      if (id !== edgeScanPollId) return;
-      try {
-        const st = await fetchEdgeMusicStatus();
-        if (id !== edgeScanPollId) return;
-
-        if (st.scanning) {
-          const pct = edgeScanPercent(st);
-          const phase = edgeScanPhaseLabel(st.progress?.phase);
-          const total = st.progress?.filesTotal;
-          const done = st.progress?.filesDone;
-          const cur = st.progress?.currentRelPath ? ` · ${st.progress.currentRelPath}` : '';
-          const countAlbums = st.progress?.albumsBuilt ?? st.counts?.albums ?? 0;
-          const countTracks = st.progress?.tracksBuilt ?? st.counts?.tracks ?? 0;
-
-          if (pct != null && typeof total === 'number' && typeof done === 'number') {
-            edgeScanMessage = `${phase}: ${pct}% (${done}/${total}) · ${countAlbums} Alben · ${countTracks} Tracks${cur}`;
-          } else {
-            edgeScanMessage = `${phase}… · ${countAlbums} Alben · ${countTracks} Tracks${cur}`;
-          }
-        } else {
-          if (st.lastError) {
-            edgeScanMessage = `Scan beendet mit Fehler: ${st.lastError}`;
-          } else {
-            edgeScanMessage = `Scan abgeschlossen. (${st.counts?.albums ?? 0} Alben · ${st.counts?.tracks ?? 0} Tracks)`;
-          }
-          return;
-        }
-
-        if (Date.now() - startedAt > timeoutMs) {
-          edgeScanMessage = 'Scan läuft im Hintergrund… (Status später erneut prüfen)';
-          return;
-        }
-
-        edgeScanPollTimer = setTimeout(() => {
-          void tick();
-        }, 1500);
-      } catch (err) {
-        if (id !== edgeScanPollId) return;
-        edgeScanMessage = err instanceof Error ? err.message : 'Status konnte nicht geladen werden.';
-      }
-    };
-
-    await tick();
-  }
-
   function isFirstRunHidden(): boolean {
     if (typeof localStorage === 'undefined') return false;
     return localStorage.getItem('dashbo_first_run_hidden') === '1';
@@ -712,38 +605,6 @@
       edgeTestBusy = false;
     }
   }
-
-  async function scanEdgeNow() {
-    if (!edgeBaseUrl) return;
-    stopEdgeScanPolling();
-    edgeScanBusy = true;
-    edgeScanMessage = null;
-    try {
-      const r = await edgeFetchJson<{ ok: boolean; started?: boolean; queued?: boolean }>(edgeBaseUrl, '/api/music/scan?force=1', edgeToken || undefined, { method: 'POST' });
-      if (r && typeof r === 'object') {
-        if (r.queued) {
-          edgeScanMessage = 'Scan angefordert; wird nach aktuellem Scan gestartet.';
-        } else if (r.started) {
-          edgeScanMessage = 'Scan gestartet…';
-        } else {
-          edgeScanMessage = 'Scan nicht gestartet (bereits aktiv).';
-        }
-      } else {
-        edgeScanMessage = 'Scan gestartet…';
-      }
-      showToast('Rescan auf Edge angefordert');
-      // If scan is running (or queued), poll status until it completes.
-      void pollEdgeScanUntilDone();
-    } catch (err) {
-      edgeScanMessage = err instanceof Error ? err.message : 'Scan fehlgeschlagen.';
-    } finally {
-      edgeScanBusy = false;
-    }
-  }
-
-  onDestroy(() => {
-    stopEdgeScanPolling();
-  });
 
   function hideFirstRun() {
     firstRunHidden = true;
@@ -1939,9 +1800,6 @@
       {edgeTestBusy}
       {edgeTestMessage}
       {edgeTestOk}
-      {scanEdgeNow}
-      {edgeScanBusy}
-      {edgeScanMessage}
       bind:edgeHeosEnabled
       {saveEdgeHeosEnabled}
       bind:edgeHeosHosts
