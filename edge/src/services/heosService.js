@@ -536,12 +536,11 @@ function getStatus() {
 }
 
 async function playStream(pid, url, name, opts) {
-  const encodeHeosAttribute = (value) => encodeURIComponent(String(value || '').trim());
   const attrs = {
     pid: Number(pid),
-    url: encodeHeosAttribute(url)
+    url: String(url || '').trim()
   };
-  if (name) attrs.name = encodeHeosAttribute(name);
+  if (name) attrs.name = String(name);
 
   // If multiple HEOS hosts are configured, target the host that actually contains the pid.
   // This makes play_stream more reliable in setups where each host only reports its local players.

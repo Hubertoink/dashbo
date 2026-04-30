@@ -2,7 +2,7 @@ const express = require('express');
 const cors = require('cors');
 
 const { requireEdgeAuth } = require('./middleware/edgeAuth');
-const { musicRouter } = require('./routes/music');
+const { musicRouter, heosStreamRouter } = require('./routes/music');
 const { heosRouter } = require('./routes/heos');
 const { hueRouter } = require('./routes/hue');
 
@@ -75,6 +75,8 @@ app.get('/health', (req, res) => {
     buildSha: edgeBuildSha,
   });
 });
+
+app.use('/heos-stream', heosStreamRouter);
 
 // All API routes require the shared Edge token.
 app.use('/api', requireEdgeAuth);

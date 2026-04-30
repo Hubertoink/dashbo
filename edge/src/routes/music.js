@@ -7,6 +7,7 @@ const nodeID3 = require('node-id3');
 const { getMusicLibrary } = require('../services/musicLibrary');
 
 const musicRouter = express.Router();
+const heosStreamRouter = express.Router();
 
 // In-memory mapping for HEOS stream requests.
 // Key: heos pid -> { trackId, streamId, updatedAt, lastRequestedAt, requestCount, lastRange, lastUserAgent }
@@ -36,6 +37,15 @@ function makeHeosTargetEntry(trackId, streamId) {
     lastRange: null,
     lastUserAgent: null
   };
+}
+
+function requireHeosStreamToken(req, res, next) {
+  const configured = String(process.env.EDGE_TOKEN || '').trim();
+  if (!configured) return res.status(500).json({ error: 'edge_token_not_configured' });
+
+  const token = typeof req.params.token === 'string' ? req.params.token : '';
+  if (!token || token !== configured) return res.status(401).json({ error: 'unauthorized' });
+  next();
 }
 
 function markHeosStreamRequest(req, trackId) {
@@ -195,6 +205,30 @@ musicRouter.get('/tracks/:trackId/stream', async (req, res) => {
   await streamTrackAbsPath(abs, req, res);
 });
 
+musicRouter.get('/tracks/:trackId/heos/:pid/:streamId/stream.mp3', async (req, res) => {
+  const trackId = String(req.params.trackId || '').trim();
+  const abs = getMusicLibrary().resolveTrackAbsPath(trackId);
+  if (abs) {
+    const tracked = markHeosStreamRequest(req, trackId);
+    if (!tracked.ok && tracked.stale) {
+      return res.status(409).json({ error: 'stale_heos_stream', pid: tracked.pid, reason: tracked.reason });
+    }
+  }
+  await streamTrackAbsPath(abs, req, res);
+});
+
+heosStreamRouter.get('/:token/:trackId/:pid/:streamId/stream.mp3', requireHeosStreamToken, async (req, res) => {
+  const trackId = String(req.params.trackId || '').trim();
+  const abs = getMusicLibrary().resolveTrackAbsPath(trackId);
+  if (abs) {
+    const tracked = markHeosStreamRequest(req, trackId);
+    if (!tracked.ok && tracked.stale) {
+      return res.status(409).json({ error: 'stale_heos_stream', pid: tracked.pid, reason: tracked.reason });
+    }
+  }
+  await streamTrackAbsPath(abs, req, res);
+});
+
 musicRouter.get('/heos/target', (req, res) => {
   const pid = Number(req?.query?.pid);
   if (!Number.isFinite(pid) || pid === 0) return res.status(400).json({ ok: false, error: 'pid_required' });
@@ -278,4 +312,4 @@ musicRouter.get('/tracks/:trackId/meta', async (req, res) => {
   }
 });
 
-module.exports = { musicRouter };
+module.exports = { musicRouter, heosStreamRouter };

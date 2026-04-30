@@ -628,16 +628,14 @@
     const edgeBaseUrl = getEdgeBaseUrlFromStorage().replace(/\/+$/, '');
     const token = getEdgeTokenFromStorage();
     if (!edgeBaseUrl) throw new Error('Edge Base URL fehlt');
+    if (!token) throw new Error('Edge Token fehlt');
     if (!pid) throw new Error('HEOS pid fehlt');
     if (!trackId) throw new Error('Track fehlt');
     if (!streamId) throw new Error('Stream Session fehlt');
 
-    // HEOS cannot send Authorization headers reliably; use query token like the track stream endpoint.
-    const params = new URLSearchParams();
-    if (token) params.set('token', token);
-    const query = params.toString();
-    const suffix = query ? `?${query}` : '';
-    return `${edgeBaseUrl}/api/music/heos/stream/${encodeURIComponent(String(pid))}/${encodeURIComponent(streamId)}/${encodeURIComponent(trackId)}${suffix}`;
+    // HEOS cannot send Authorization headers reliably, and the heos-api package does not encode URL attributes.
+    // Keep the stream URL free of query strings and ampersands by carrying the token in the path.
+    return `${edgeBaseUrl}/heos-stream/${encodeURIComponent(token)}/${encodeURIComponent(trackId)}/${encodeURIComponent(String(pid))}/${encodeURIComponent(streamId)}/stream.mp3`;
   }
 
   async function setHeosTargetTrack(pid: number, trackId: string, streamId: string) {
