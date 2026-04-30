@@ -5,13 +5,14 @@ const mm = require('music-metadata');
 const nodeID3 = require('node-id3');
 
 const { getMusicLibrary } = require('../services/musicLibrary');
+const {
+  getHeosTarget,
+  markHeosTargetRequest,
+  setHeosTarget
+} = require('../services/heosStreamTargets');
 
 const musicRouter = express.Router();
 const heosStreamRouter = express.Router();
-
-// In-memory mapping for HEOS stream requests.
-// Key: heos pid -> { trackId, streamId, updatedAt, lastRequestedAt, requestCount, lastRange, lastUserAgent }
-const heosPidToTrack = new Map();
 
 function readQueryString(req, names) {
   for (const name of names) {
@@ -25,18 +26,6 @@ function readHeosPid(req) {
   const raw = req?.params?.heosPid ?? req?.params?.pid ?? req?.query?.heosPid ?? req?.query?.pid;
   const pid = Number(raw);
   return Number.isFinite(pid) && pid !== 0 ? pid : null;
-}
-
-function makeHeosTargetEntry(trackId, streamId) {
-  return {
-    trackId,
-    streamId: streamId || null,
-    updatedAt: Date.now(),
-    lastRequestedAt: null,
-    requestCount: 0,
-    lastRange: null,
-    lastUserAgent: null
-  };
 }
 
 function requireHeosStreamToken(req, res, next) {
@@ -53,24 +42,13 @@ function markHeosStreamRequest(req, trackId) {
   if (!pid) return { ok: true, tracked: false };
 
   const streamId = readQueryString(req, ['sid', 'streamId', 'session']);
-  const existing = heosPidToTrack.get(pid) || null;
-
-  if (existing?.streamId && streamId && existing.streamId !== streamId) {
-    return { ok: false, stale: true, pid, reason: 'stream_id_mismatch' };
-  }
-  if (existing?.trackId && streamId && existing.trackId !== trackId) {
-    return { ok: false, stale: true, pid, reason: 'track_id_mismatch' };
-  }
-
-  const entry = existing?.trackId === trackId ? existing : makeHeosTargetEntry(trackId, streamId);
-  if (streamId && !entry.streamId) entry.streamId = streamId;
-  entry.lastRequestedAt = Date.now();
-  entry.requestCount = Number(entry.requestCount || 0) + 1;
-  entry.lastRange = req?.headers?.range ? String(req.headers.range) : null;
-  entry.lastUserAgent = req?.headers?.['user-agent'] ? String(req.headers['user-agent']).slice(0, 180) : null;
-  heosPidToTrack.set(pid, entry);
-
-  return { ok: true, tracked: true, pid, entry };
+  return markHeosTargetRequest({
+    pid,
+    trackId,
+    streamId,
+    range: req?.headers?.range,
+    userAgent: req?.headers?.['user-agent']
+  });
 }
 
 function getAudioMimeByExt(ext) {
@@ -233,7 +211,7 @@ musicRouter.get('/heos/target', (req, res) => {
   const pid = Number(req?.query?.pid);
   if (!Number.isFinite(pid) || pid === 0) return res.status(400).json({ ok: false, error: 'pid_required' });
 
-  const entry = heosPidToTrack.get(pid) || null;
+  const entry = getHeosTarget(pid);
   res.json({ ok: true, pid, target: entry });
 });
 
@@ -248,8 +226,7 @@ musicRouter.post('/heos/target', (req, res) => {
   const abs = getMusicLibrary().resolveTrackAbsPath(trackId);
   if (!abs) return res.status(404).json({ ok: false, error: 'not_found' });
 
-  const entry = makeHeosTargetEntry(trackId, streamId);
-  heosPidToTrack.set(pid, entry);
+  const entry = setHeosTarget(pid, trackId, streamId);
   res.json({ ok: true, pid, trackId, streamId: entry.streamId });
 });
 
@@ -259,7 +236,7 @@ musicRouter.get('/heos/stream/:pid/:streamId/:trackId', async (req, res) => {
   if (!pid) return res.status(400).json({ error: 'pid_required' });
   if (!trackId) return res.status(400).json({ error: 'trackId_required' });
 
-  const entry = heosPidToTrack.get(pid);
+  const entry = getHeosTarget(pid);
   if (entry?.streamId && entry.streamId !== String(req.params.streamId || '').trim()) {
     return res.status(409).json({ error: 'stale_heos_stream', pid, reason: 'stream_id_mismatch' });
   }
@@ -282,7 +259,7 @@ musicRouter.get('/heos/stream', async (req, res) => {
   const pid = Number(req?.query?.pid);
   if (!Number.isFinite(pid) || pid === 0) return res.status(400).json({ error: 'pid_required' });
 
-  const entry = heosPidToTrack.get(pid);
+  const entry = getHeosTarget(pid);
   if (!entry || !entry.trackId) return res.status(409).json({ error: 'no_target', pid });
   const streamId = readQueryString(req, ['sid', 'streamId', 'session']);
   if (entry.streamId && streamId && entry.streamId !== streamId) {

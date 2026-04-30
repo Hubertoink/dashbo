@@ -39,7 +39,6 @@
 
   const HEOS_DASHBO_MARKER = 'DashbO |';
   const HEOS_START_GRACE_MS = 75_000;
-  const HEOS_STREAM_REQUEST_TIMEOUT_ATTEMPTS = 18;
 
   let heosStatusPollTimer: ReturnType<typeof setInterval> | null = null;
   let spotifyStatusPollTimer: ReturnType<typeof setInterval> | null = null;
@@ -126,7 +125,7 @@
     const edgeToken = getEdgeTokenFromStorage();
     if (!edgeBaseUrl) return;
 
-    await edgeFetchJson(edgeBaseUrl, '/api/heos/play_state', edgeToken || undefined, {
+    await edgeFetchJson(edgeBaseUrl, '/api/heos/dashbo_play_state', edgeToken || undefined, {
       method: 'POST',
       headers: buildHeosHeaders(),
       body: JSON.stringify({ pid, state: 'stop' })
@@ -583,152 +582,55 @@
     }, 1000);
   }
 
-  function sleep(ms: number) {
-    const t = Math.max(0, Math.floor(ms));
-    return new Promise<void>((resolve) => setTimeout(resolve, t));
-  }
+  type DashboHeosSessionResponse = {
+    ok: boolean;
+    pid?: number;
+    trackId?: string;
+    streamId?: string;
+    started?: boolean;
+    resumed?: boolean;
+    restarted?: boolean;
+    state?: string;
+    target?: {
+      trackId?: string;
+      streamId?: string | null;
+      updatedAt?: number;
+      lastRequestedAt?: number | null;
+      requestCount?: number;
+      lastUserAgent?: string | null;
+    } | null;
+  };
 
-  function makeHeosStreamId(track: NowPlayingTrack): string {
-    const randomPart = Math.random().toString(36).slice(2, 10);
-    return `${track.trackId}-${Date.now()}-${randomPart}`.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 96);
-  }
-
-  function buildHeosStreamName(track: NowPlayingTrack): string {
-    const title = String(track.title || 'Track')
-      .replace(/[&?=]/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim();
-    return `${HEOS_DASHBO_MARKER} ${title}`.slice(0, 120);
-  }
-
-  async function forceHeosPlayStream(pid: number, url: string, name: string) {
+  async function playDashboTrackOnHeos(pid: number, track: NowPlayingTrack, opts?: { stopFirst?: boolean }): Promise<DashboHeosSessionResponse> {
     const edgeBaseUrl = getEdgeBaseUrlFromStorage();
     const edgeToken = getEdgeTokenFromStorage();
     if (!edgeBaseUrl) throw new Error('Edge Base URL fehlt');
     if (!pid) throw new Error('HEOS pid fehlt');
-    if (!url) throw new Error('Stream URL fehlt');
+    if (!track?.trackId) throw new Error('Track fehlt');
 
-    await edgeFetchJson(edgeBaseUrl, '/api/heos/play_stream', edgeToken || undefined, {
+    return edgeFetchJson<DashboHeosSessionResponse>(edgeBaseUrl, '/api/heos/play_dashbo_track', edgeToken || undefined, {
       method: 'POST',
       headers: buildHeosHeaders(),
-      body: JSON.stringify({ pid, url, name })
-    });
-
-    // Ensure state is really 'play' after replacing the stream.
-    try {
-      await edgeFetchJson(edgeBaseUrl, '/api/heos/play_state', edgeToken || undefined, {
-        method: 'POST',
-        headers: buildHeosHeaders(),
-        body: JSON.stringify({ pid, state: 'play' })
-      });
-    } catch {
-      // ignore; play_stream often starts playback implicitly
-    }
-  }
-
-  function buildHeosTrackStreamUrl(pid: number, trackId: string, streamId: string): string {
-    const edgeBaseUrl = getEdgeBaseUrlFromStorage().replace(/\/+$/, '');
-    const token = getEdgeTokenFromStorage();
-    if (!edgeBaseUrl) throw new Error('Edge Base URL fehlt');
-    if (!token) throw new Error('Edge Token fehlt');
-    if (!pid) throw new Error('HEOS pid fehlt');
-    if (!trackId) throw new Error('Track fehlt');
-    if (!streamId) throw new Error('Stream Session fehlt');
-
-    // HEOS cannot send Authorization headers reliably, and the heos-api package does not encode URL attributes.
-    // Keep the stream URL free of query strings and ampersands by carrying the token in the path.
-    return `${edgeBaseUrl}/heos-stream/${encodeURIComponent(token)}/${encodeURIComponent(trackId)}/${encodeURIComponent(String(pid))}/${encodeURIComponent(streamId)}/stream.mp3`;
-  }
-
-  async function setHeosTargetTrack(pid: number, trackId: string, streamId: string) {
-    const edgeBaseUrl = getEdgeBaseUrlFromStorage();
-    const edgeToken = getEdgeTokenFromStorage();
-    if (!edgeBaseUrl) throw new Error('Edge Base URL fehlt');
-    if (!pid) throw new Error('HEOS pid fehlt');
-    if (!trackId) throw new Error('Track fehlt');
-    if (!streamId) throw new Error('Stream Session fehlt');
-
-    await edgeFetchJson(edgeBaseUrl, '/api/music/heos/target', edgeToken || undefined, {
-      method: 'POST',
-      headers: buildHeosHeaders(),
-      body: JSON.stringify({ pid, trackId, streamId })
+      body: JSON.stringify({ pid, trackId: track.trackId, name: track.title, stopFirst: Boolean(opts?.stopFirst) })
     });
   }
 
-  async function fetchHeosTargetStatus(pid: number): Promise<any | null> {
-    const edgeBaseUrl = getEdgeBaseUrlFromStorage();
-    const edgeToken = getEdgeTokenFromStorage();
-    if (!edgeBaseUrl || !pid) return null;
-
-    const r = await edgeFetchJson<any>(edgeBaseUrl, `/api/music/heos/target?pid=${encodeURIComponent(String(pid))}`, edgeToken || undefined, {
-      method: 'GET',
-      headers: buildHeosHeaders()
-    });
-    return r?.target ?? null;
-  }
-
-  async function watchHeosStreamStart(
+  async function setDashboHeosPlaybackState(
     pid: number,
-    track: NowPlayingTrack,
-    streamId: string,
-    url: string,
-    name: string,
-    startSeq: number
-  ) {
-    const trackId = track.trackId;
-    const target = activePlaybackTarget;
-    for (let attempt = 0; attempt < HEOS_STREAM_REQUEST_TIMEOUT_ATTEMPTS; attempt += 1) {
-      if (!isLatestPlaybackStart(startSeq) || !isHeosStartGraceActive(pid, track, streamId)) return;
-      try {
-        const status = await fetchHeosTargetStatus(pid);
-        const statusTrackId = typeof status?.trackId === 'string' ? status.trackId : '';
-        const statusStreamId = typeof status?.streamId === 'string' ? status.streamId : '';
-        const updatedAt = Number(status?.updatedAt || 0);
-        const lastRequestedAt = Number(status?.lastRequestedAt || 0);
-        if (
-          statusTrackId === trackId &&
-          (!statusStreamId || statusStreamId === streamId) &&
-          lastRequestedAt > 0 &&
-          (!updatedAt || lastRequestedAt >= updatedAt)
-        ) {
-          clearHeosStartGrace(pid, track.trackId, streamId);
-          heosActive = true;
-          heosPlaying = true;
-          setNowPlaying(track, true, target);
-          return;
-        }
+    state: 'play' | 'pause' | 'stop',
+    track?: NowPlayingTrack | null,
+    opts?: { forceRestart?: boolean }
+  ): Promise<DashboHeosSessionResponse> {
+    const edgeBaseUrl = getEdgeBaseUrlFromStorage();
+    const edgeToken = getEdgeTokenFromStorage();
+    if (!edgeBaseUrl) throw new Error('Edge Base URL fehlt');
+    if (!pid) throw new Error('HEOS pid fehlt');
 
-        if (attempt === 3 || attempt === 7 || attempt === 12) {
-          setNowPlaying(track, false, target, {
-            status: 'loading',
-            statusText: `Sende erneut an ${playbackTargetLabel(target)}...`
-          });
-          await forceHeosPlayStreamWithRetry(pid, url, name);
-        }
-      } catch {}
-      await sleep(1000);
-    }
-
-    if (isLatestPlaybackStart(startSeq) && isHeosStartGraceActive(pid, track, streamId)) {
-      clearHeosStartGrace(pid, track.trackId, streamId);
-      heosActive = false;
-      heosPlaying = false;
-      stopHeosPolling();
-      setNowPlaying(track, false, activePlaybackTarget, {
-        status: 'error',
-        statusText: `${playbackTargetLabel()} erreicht Dashbo Edge nicht. IP/Firewall Port 8787 prüfen.`
-      });
-    }
-  }
-
-  async function forceHeosPlayStreamWithRetry(pid: number, url: string, name: string) {
-    try {
-      await forceHeosPlayStream(pid, url, name);
-      return;
-    } catch {
-      await sleep(300);
-      await forceHeosPlayStream(pid, url, name);
-    }
+    return edgeFetchJson<DashboHeosSessionResponse>(edgeBaseUrl, '/api/heos/dashbo_play_state', edgeToken || undefined, {
+      method: 'POST',
+      headers: buildHeosHeaders(),
+      body: JSON.stringify({ pid, state, trackId: track?.trackId, name: track?.title, forceRestart: Boolean(opts?.forceRestart) })
+    });
   }
 
   async function startLocalPlayback(track: NowPlayingTrack) {
@@ -801,57 +703,57 @@
 
     try {
       if (heosEnabled && heosPid && edgeBaseUrl) {
-        heosStreamId = makeHeosStreamId(track);
-        beginHeosStartGrace(heosPid, track, heosStreamId);
         stopLocalAudio();
         if (wasHeosActive) {
           setNowPlaying(track, false, activePlaybackTarget, {
             status: 'loading',
-            statusText: `Stoppe alten Stream auf ${playbackTargetLabel()}...`
+            statusText: `Wechsle Stream auf ${playbackTargetLabel()}...`
           });
-          await stopHeosTarget(heosPid).catch(() => undefined);
-          if (!isLatestPlaybackStart(startSeq)) return;
         }
-        await setHeosTargetTrack(heosPid, track.trackId, heosStreamId);
-        if (!isLatestPlaybackStart(startSeq)) return;
         setNowPlaying(track, false, activePlaybackTarget, {
           status: 'loading',
           statusText: `Warte auf ${playbackTargetLabel()}...`
         });
-        const url = buildHeosTrackStreamUrl(heosPid, track.trackId, heosStreamId);
-        const name = buildHeosStreamName(track);
-        await forceHeosPlayStreamWithRetry(heosPid, url, name);
+        const response = await playDashboTrackOnHeos(heosPid, track, { stopFirst: false });
         if (!isLatestPlaybackStart(startSeq)) return;
+        heosStreamId = typeof response?.streamId === 'string' ? response.streamId : null;
+        if (heosStreamId) beginHeosStartGrace(heosPid, track, heosStreamId);
         heosActive = true;
-        heosPlaying = false;
+        heosPlaying = Boolean(response?.started);
         startHeosPolling(heosPid, knownDuration);
-        setNowPlaying(track, false, activePlaybackTarget, {
-          status: 'loading',
-          statusText: `${playbackTargetLabel()} verbindet...`
-        });
         void ensureHeosDuration(track);
-        void watchHeosStreamStart(heosPid, track, heosStreamId, url, name, startSeq);
+        if (response?.started) {
+          clearHeosStartGrace(heosPid, track.trackId, heosStreamId);
+          setNowPlaying(track, true, activePlaybackTarget);
+          return;
+        }
+
+        heosActive = false;
+        heosPlaying = false;
+        clearHeosStartGrace(heosPid, track.trackId, heosStreamId);
+        stopHeosPolling();
+        setNowPlaying(track, false, activePlaybackTarget, {
+          status: 'error',
+          statusText: `${playbackTargetLabel()} hat den Dashbo-Stream nicht angefordert.`
+        });
         return;
       }
 
       if (!isLatestPlaybackStart(startSeq)) return;
       await startLocalPlayback(track);
     } catch (err) {
-      // If HEOS fails, fall back to local playback so the player doesn't get stuck.
       if (heosEnabled && heosPid) {
         const msg = err instanceof Error ? err.message : String(err || 'HEOS play failed');
         console.error('[HEOS] play_stream failed:', msg);
-        try {
-          heosActive = false;
-          heosPlaying = false;
-          clearHeosStartGrace(heosPid, track.trackId, heosStreamId);
-          stopHeosPolling();
-          if (!isLatestPlaybackStart(startSeq)) return;
-          await startLocalPlayback(track);
-          return;
-        } catch {
-          // fall through
-        }
+        heosActive = false;
+        heosPlaying = false;
+        clearHeosStartGrace(heosPid, track.trackId, heosStreamId);
+        stopHeosPolling();
+        setNowPlaying(track, false, activePlaybackTarget, {
+          status: 'error',
+          statusText: `HEOS konnte ${playbackTargetLabel()} nicht starten.`
+        });
+        return;
       }
 
       heosActive = false;
@@ -867,8 +769,6 @@
     const heosEnabled = getEdgeHeosEnabledFromStorage();
     const heosPid = activePlaybackTarget.kind === 'heos' ? activePlaybackTarget.pid : null;
     const edgeBaseUrl = getEdgeBaseUrlFromStorage();
-    const edgeToken = getEdgeTokenFromStorage();
-
     const trackRaw = current();
     const track = trackRaw ? normalizeTrack(trackRaw) : null;
 
@@ -878,60 +778,50 @@
     }
 
     if (heosEnabled && heosPid && edgeBaseUrl && track) {
-      // If HEOS is selected but not active yet, start stream for the current track.
       if (!heosActive) {
-        const startSeq = ++playbackStartSeq;
-        const heosStreamId = makeHeosStreamId(track);
-        try {
-          beginHeosStartGrace(heosPid, track, heosStreamId);
-          stopLocalAudio();
-          setNowPlaying(track, false, activePlaybackTarget, {
-            status: 'loading',
-            statusText: `Sende an ${playbackTargetLabel()}...`
-          });
-          await setHeosTargetTrack(heosPid, track.trackId, heosStreamId);
-          if (!isLatestPlaybackStart(startSeq)) return;
-          const url = buildHeosTrackStreamUrl(heosPid, track.trackId, heosStreamId);
-          const name = buildHeosStreamName(track);
-          await forceHeosPlayStreamWithRetry(heosPid, url, name);
-          if (!isLatestPlaybackStart(startSeq)) return;
-          heosActive = true;
+        await startAt(index);
+        return;
+      }
+
+      try {
+        const nextState = heosPlaying ? 'pause' : 'play';
+        setNowPlaying(track, heosPlaying, activePlaybackTarget, {
+          status: 'loading',
+          statusText: nextState === 'pause' ? `Pausiere ${playbackTargetLabel()}...` : `Setze ${playbackTargetLabel()} fort...`
+        });
+        const response = await setDashboHeosPlaybackState(heosPid, nextState, track);
+        if (nextState === 'pause') {
           heosPlaying = false;
-          heosAutoAdvanceTrackId = null;
-          startHeosPolling(heosPid, typeof track.durationSec === 'number' && Number.isFinite(track.durationSec) ? track.durationSec : 0);
-          setNowPlaying(track, false, activePlaybackTarget, {
-            status: 'loading',
-            statusText: `${playbackTargetLabel()} verbindet...`
-          });
-          void ensureHeosDuration(track);
-          void watchHeosStreamStart(heosPid, track, heosStreamId, url, name, startSeq);
+          setNowPlaying(track, false, activePlaybackTarget);
           return;
-        } catch (err) {
-          const msg = err instanceof Error ? err.message : String(err || 'HEOS play failed');
-          console.error('[HEOS] play_stream failed (toggle):', msg);
-          heosActive = false;
-          heosPlaying = false;
-          clearHeosStartGrace(heosPid, track.trackId, heosStreamId);
-          stopHeosPolling();
-          // fall through to local
         }
-      } else {
-        try {
-          const state = heosPlaying ? 'pause' : 'play';
-          await edgeFetchJson(edgeBaseUrl, '/api/heos/play_state', edgeToken || undefined, {
-            method: 'POST',
-            headers: buildHeosHeaders(),
-            body: JSON.stringify({ pid: heosPid, state })
-          });
-          heosPlaying = !heosPlaying;
-          setNowPlaying(track, heosPlaying, activePlaybackTarget);
-          return;
-        } catch {
+
+        if (response?.restarted && !response?.started) {
           heosActive = false;
           heosPlaying = false;
           stopHeosPolling();
-          // fall through to local
+          setNowPlaying(track, false, activePlaybackTarget, {
+            status: 'error',
+            statusText: `${playbackTargetLabel()} hat den Dashbo-Stream nicht fortgesetzt.`
+          });
+          return;
         }
+
+        const streamId = typeof response?.streamId === 'string' ? response.streamId : response?.target?.streamId || null;
+        if (streamId) clearHeosStartGrace(heosPid, track.trackId, streamId);
+        heosActive = true;
+        heosPlaying = true;
+        startHeosPolling(heosPid, typeof track.durationSec === 'number' && Number.isFinite(track.durationSec) ? track.durationSec : heosDurationSec);
+        setNowPlaying(track, true, activePlaybackTarget);
+        return;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err || 'HEOS play state failed');
+        console.error('[HEOS] dashbo_play_state failed:', msg);
+        setNowPlaying(track, heosPlaying, activePlaybackTarget, {
+          status: 'error',
+          statusText: `${playbackTargetLabel()} konnte nicht gesteuert werden.`
+        });
+        return;
       }
     }
 

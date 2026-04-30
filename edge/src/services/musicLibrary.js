@@ -496,6 +496,10 @@ class MusicLibrary {
     return { ...a, tracks };
   }
 
+  getTrack(trackId) {
+    return this._tracks.get(String(trackId || '')) || null;
+  }
+
   resolveTrackAbsPath(trackId) {
     const t = this._tracks.get(String(trackId || ''));
     if (!t) return null;

@@ -17,8 +17,19 @@ const {
   setGroup,
   unGroup
 } = require('../services/heosService');
+const { getMusicLibrary } = require('../services/musicLibrary');
+const {
+  clearHeosTarget,
+  getHeosTarget,
+  hasRequestedTarget,
+  makeHeosStreamId,
+  setHeosTarget
+} = require('../services/heosStreamTargets');
 
 const heosRouter = express.Router();
+
+const DASHBO_STREAM_NAME_PREFIX = 'DashbO |';
+const DEFAULT_DASHBO_STREAM_WAIT_MS = 18000;
 
 function parseHeosHostsHeader(req) {
   const raw = req.get('x-heos-hosts');
@@ -110,6 +121,147 @@ function normalizePlaybackState(raw) {
   return state === 'play' || state === 'pause' || state === 'stop' ? state : 'unknown';
 }
 
+function extractPlaybackStateResponse(resp) {
+  const parsed = resp?.heos?.message?.parsed;
+  return normalizePlaybackState(parsed?.state ?? parsed?.play_state ?? parsed?.playState ?? resp?.payload?.state);
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, Math.max(0, Math.floor(Number(ms) || 0))));
+}
+
+function getDashboPublicBaseUrl() {
+  const publicBase = normalizePublicBaseUrl(process.env.EDGE_PUBLIC_BASE_URL || process.env.EDGE_STREAM_BASE_URL);
+  if (!publicBase) throw new Error('edge_public_base_url_required');
+  const u = new URL(publicBase);
+  if (isLocalhostHostname(u.hostname)) throw new Error('edge_public_base_url_unreachable');
+  return u.origin;
+}
+
+function getDashboStreamToken() {
+  const token = String(process.env.EDGE_TOKEN || '').trim();
+  if (!token) throw new Error('edge_token_not_configured');
+  return token;
+}
+
+function buildDashboHeosStreamUrl(pid, trackId, streamId) {
+  const publicBase = getDashboPublicBaseUrl();
+  const token = getDashboStreamToken();
+  return `${publicBase}/heos-stream/${encodeURIComponent(token)}/${encodeURIComponent(trackId)}/${encodeURIComponent(String(pid))}/${encodeURIComponent(streamId)}/stream.mp3`;
+}
+
+function buildDashboStreamName(track, fallbackName) {
+  const rawTitle = fallbackName || track?.title || track?.name || 'Track';
+  const title = String(rawTitle)
+    .replace(/[&?=]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return `${DASHBO_STREAM_NAME_PREFIX} ${title || 'Track'}`.slice(0, 120);
+}
+
+function serializeDashboTarget(pid) {
+  const target = getHeosTarget(pid);
+  if (!target) return null;
+  return {
+    trackId: target.trackId,
+    streamId: target.streamId,
+    updatedAt: target.updatedAt,
+    lastRequestedAt: target.lastRequestedAt,
+    requestCount: target.requestCount,
+    lastRange: target.lastRange,
+    lastUserAgent: target.lastUserAgent
+  };
+}
+
+async function waitForDashboStreamRequest(pid, trackId, streamId, timeoutMs) {
+  const until = Date.now() + Math.max(0, Number(timeoutMs || 0));
+  while (Date.now() <= until) {
+    if (hasRequestedTarget(pid, trackId, streamId)) return true;
+    await sleep(250);
+  }
+  return hasRequestedTarget(pid, trackId, streamId);
+}
+
+function readDashboTrack(trackId) {
+  const id = String(trackId || '').trim();
+  if (!id) throw new Error('trackId_required');
+  const library = getMusicLibrary();
+  const track = library.getTrack(id);
+  if (!track || !library.resolveTrackAbsPath(id)) throw new Error('track_not_found');
+  return track;
+}
+
+async function startDashboHeosTrack(opts) {
+  const pid = Number(opts?.pid);
+  if (!Number.isFinite(pid) || pid === 0) throw new Error('pid_required');
+
+  const track = readDashboTrack(opts?.trackId);
+  const trackId = String(track.id || opts.trackId).trim();
+  const streamId = makeHeosStreamId(trackId);
+  const streamUrl = buildDashboHeosStreamUrl(pid, trackId, streamId);
+  const streamName = buildDashboStreamName(track, opts?.name);
+  const hosts = opts?.hosts;
+  const waitMs = Math.max(1000, Math.min(30000, Number(opts?.requestTimeoutMs || DEFAULT_DASHBO_STREAM_WAIT_MS)));
+
+  const existing = getHeosTarget(pid);
+  if (!opts?.stopFirst && existing?.trackId === trackId && Number(existing.requestCount || 0) > 0) {
+    const resumeResponse = await setPlayState(pid, 'play', { hosts });
+    await sleep(500);
+    await setPlayState(pid, 'play', { hosts }).catch(() => undefined);
+    return {
+      ok: true,
+      pid,
+      trackId,
+      streamId: existing.streamId,
+      streamUrl: buildDashboHeosStreamUrl(pid, trackId, existing.streamId || streamId),
+      streamName,
+      started: true,
+      resumed: true,
+      reused: true,
+      retried: false,
+      target: serializeDashboTarget(pid),
+      response: resumeResponse,
+      debug: sanitizeUrlForDebug(buildDashboHeosStreamUrl(pid, trackId, existing.streamId || streamId))
+    };
+  }
+
+  setHeosTarget(pid, trackId, streamId);
+
+  if (opts?.stopFirst) {
+    await setPlayState(pid, 'stop', { hosts }).catch(() => undefined);
+    await sleep(250);
+  }
+
+  const playResponse = await playStream(pid, streamUrl, streamName, { hosts });
+  await setPlayState(pid, 'play', { hosts }).catch(() => undefined);
+
+  const firstWaitMs = Math.min(12000, waitMs);
+  let started = await waitForDashboStreamRequest(pid, trackId, streamId, firstWaitMs);
+  let retried = false;
+  let retryResponse = null;
+
+  if (!started && waitMs > firstWaitMs) {
+    retried = true;
+    retryResponse = await playStream(pid, streamUrl, streamName, { hosts });
+    await setPlayState(pid, 'play', { hosts }).catch(() => undefined);
+    started = await waitForDashboStreamRequest(pid, trackId, streamId, waitMs - firstWaitMs);
+  }
+
+  return {
+    ok: true,
+    pid,
+    trackId,
+    streamId,
+    streamUrl,
+    streamName,
+    started,
+    retried,
+    target: serializeDashboTarget(pid),
+    response: retryResponse || playResponse,
+    debug: sanitizeUrlForDebug(streamUrl)
+  };
+}
+
 heosRouter.get('/players', (req, res) => {
   (async () => {
     const hosts = parseHeosHostsHeader(req);
@@ -140,6 +292,80 @@ heosRouter.post('/scan', (req, res) => {
       return res.json({ ok: true, players: [], ...getStatus() });
     }
     res.status(502).json({ ok: false, error, ...getStatus() });
+  });
+});
+
+heosRouter.post('/play_dashbo_track', (req, res) => {
+  (async () => {
+    const hosts = parseHeosHostsHeader(req);
+    const result = await startDashboHeosTrack({
+      pid: req?.body?.pid,
+      trackId: req?.body?.trackId,
+      name: req?.body?.name,
+      stopFirst: Boolean(req?.body?.stopFirst),
+      requestTimeoutMs: req?.body?.requestTimeoutMs,
+      hosts
+    });
+    res.json(result);
+  })().catch((err) => {
+    const error = normalizeHeosError(err);
+    const status = error === 'track_not_found' ? 404 : error.endsWith('_required') ? 400 : 502;
+    res.status(status).json({ ok: false, error });
+  });
+});
+
+heosRouter.post('/dashbo_play_state', (req, res) => {
+  (async () => {
+    const pid = Number(req?.body?.pid);
+    const state = String(req?.body?.state || '').trim().toLowerCase();
+    if (!Number.isFinite(pid) || pid === 0) return res.status(400).json({ ok: false, error: 'pid_required' });
+    if (!['play', 'pause', 'stop'].includes(state)) return res.status(400).json({ ok: false, error: 'state_required' });
+
+    const hosts = parseHeosHostsHeader(req);
+    if (state === 'pause') {
+      const r = await setPlayState(pid, 'pause', { hosts });
+      return res.json({ ok: true, pid, state: 'pause', target: serializeDashboTarget(pid), response: r });
+    }
+
+    if (state === 'stop') {
+      const r = await setPlayState(pid, 'stop', { hosts });
+      clearHeosTarget(pid);
+      return res.json({ ok: true, pid, state: 'stop', target: null, response: r });
+    }
+
+    const existing = getHeosTarget(pid);
+    const trackId = String(req?.body?.trackId || existing?.trackId || '').trim();
+    if (!trackId) return res.status(400).json({ ok: false, error: 'trackId_required' });
+
+    const shouldRestart = Boolean(req?.body?.forceRestart) || !existing || !existing.lastRequestedAt || Number(existing.requestCount || 0) < 1;
+    if (shouldRestart) {
+      const result = await startDashboHeosTrack({
+        pid,
+        trackId,
+        name: req?.body?.name,
+        stopFirst: false,
+        requestTimeoutMs: req?.body?.requestTimeoutMs,
+        hosts
+      });
+      return res.json({ ...result, state: result.started ? 'play' : 'unknown', resumed: false, restarted: true });
+    }
+
+    const r = await setPlayState(pid, 'play', { hosts });
+    await sleep(500);
+    await setPlayState(pid, 'play', { hosts }).catch(() => undefined);
+
+    let observedState = 'unknown';
+    try {
+      observedState = extractPlaybackStateResponse(await getPlayState(pid, { hosts }));
+    } catch {
+      observedState = 'unknown';
+    }
+
+    res.json({ ok: true, pid, state: 'play', resumed: true, restarted: false, observedState, target: serializeDashboTarget(pid), response: r });
+  })().catch((err) => {
+    const error = normalizeHeosError(err);
+    const status = error === 'track_not_found' ? 404 : error.endsWith('_required') ? 400 : 502;
+    res.status(status).json({ ok: false, error });
   });
 });
 
