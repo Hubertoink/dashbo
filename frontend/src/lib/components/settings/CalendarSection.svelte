@@ -1,11 +1,21 @@
 <script lang="ts">
-  import type { OutlookConnectionDto, OutlookStatusDto, PersonColorKey, PersonDto, TagColorKey, TagDto } from '$lib/api';
+  import type { CalendarSyncFeedDto, OutlookConnectionDto, OutlookStatusDto, PersonColorKey, PersonDto, TagColorKey, TagDto } from '$lib/api';
 
+  import CalendarSyncSection from '$lib/components/settings/CalendarSyncSection.svelte';
   import OutlookSection from '$lib/components/settings/OutlookSection.svelte';
   import PersonsSection from '$lib/components/settings/PersonsSection.svelte';
   import TagsSection from '$lib/components/settings/TagsSection.svelte';
 
   export let authed: boolean;
+  export let isAdmin: boolean;
+
+  export let calendarSyncFeed: CalendarSyncFeedDto | null;
+  export let calendarSyncBusy: boolean;
+  export let calendarSyncError: string | null;
+  export let doEnableCalendarSyncFeed: () => void | Promise<void>;
+  export let doRegenerateCalendarSyncFeed: () => void | Promise<void>;
+  export let doDisableCalendarSyncFeed: () => void | Promise<void>;
+  export let copyCalendarSyncUrl: (kind: 'webcal' | 'https') => void | Promise<void>;
 
   export let tags: TagDto[];
   export let newTagName: string;
@@ -63,6 +73,18 @@
   <h2 class="text-lg font-semibold text-white/90 mb-4">Kalender</h2>
 
   <div class="space-y-4">
+    <CalendarSyncSection
+      {authed}
+      {isAdmin}
+      {calendarSyncFeed}
+      {calendarSyncBusy}
+      {calendarSyncError}
+      {doEnableCalendarSyncFeed}
+      {doRegenerateCalendarSyncFeed}
+      {doDisableCalendarSyncFeed}
+      {copyCalendarSyncUrl}
+    />
+
     <div class="bg-white/5 rounded-xl p-4" id="section-recurring-suggestions">
       <div class="flex items-center justify-between mb-2">
         <div class="font-medium">Wiederkehrende Termine</div>

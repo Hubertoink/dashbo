@@ -16,6 +16,7 @@ const { todosRouter } = require('./routes/todos');
 const { newsRouter } = require('./routes/news');
 const { spotifyRouter } = require('./routes/spotify');
 const { scribblesRouter } = require('./routes/scribbles');
+const { calendarSyncRouter } = require('./routes/calendarSync');
 const { ensureDbInitialized } = require('./db');
 
 function createApp() {
@@ -60,6 +61,7 @@ function createApp() {
   app.use('/news', newsRouter);
   app.use('/spotify', spotifyRouter);
   app.use('/scribbles', scribblesRouter);
+  app.use('/calendar-sync', calendarSyncRouter);
   app.use('/weather', weatherRouter);
   app.use('/holidays', holidaysRouter);
 

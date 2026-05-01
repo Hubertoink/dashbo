@@ -659,6 +659,52 @@ async function initDb() {
   await p.query('CREATE INDEX IF NOT EXISTS calendar_invites_calendar_id_idx ON calendar_invites (calendar_id);');
   await p.query('CREATE INDEX IF NOT EXISTS calendar_invites_expires_idx ON calendar_invites (expires_at);');
 
+  await p.query(`
+    CREATE TABLE IF NOT EXISTS calendar_sync_feeds (
+      id BIGSERIAL PRIMARY KEY,
+      calendar_id BIGINT NOT NULL UNIQUE,
+      token TEXT NOT NULL UNIQUE,
+      created_by_user_id BIGINT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      disabled_at TIMESTAMPTZ,
+      last_accessed_at TIMESTAMPTZ
+    );
+  `);
+
+  await p.query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'calendar_sync_feeds_calendar_id_fkey'
+      ) THEN
+        ALTER TABLE calendar_sync_feeds
+        ADD CONSTRAINT calendar_sync_feeds_calendar_id_fkey
+        FOREIGN KEY (calendar_id)
+        REFERENCES calendars(id)
+        ON DELETE CASCADE;
+      END IF;
+    END $$;
+  `);
+
+  await p.query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'calendar_sync_feeds_created_by_user_id_fkey'
+      ) THEN
+        ALTER TABLE calendar_sync_feeds
+        ADD CONSTRAINT calendar_sync_feeds_created_by_user_id_fkey
+        FOREIGN KEY (created_by_user_id)
+        REFERENCES users(id)
+        ON DELETE SET NULL;
+      END IF;
+    END $$;
+  `);
+
+  await p.query('CREATE INDEX IF NOT EXISTS calendar_sync_feeds_calendar_id_idx ON calendar_sync_feeds (calendar_id);');
+  await p.query('CREATE INDEX IF NOT EXISTS calendar_sync_feeds_token_idx ON calendar_sync_feeds (token);');
+
   // Outlook (Microsoft Graph) per-user OAuth tokens (read-only)
   await p.query(`
     CREATE TABLE IF NOT EXISTS outlook_tokens (

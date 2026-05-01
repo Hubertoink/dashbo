@@ -10,6 +10,10 @@
     setBackground,
     deleteBackgroundImage,
     fetchOutlookStatus,
+    fetchCalendarSyncFeed,
+    enableCalendarSyncFeed,
+    regenerateCalendarSyncFeed,
+    disableCalendarSyncFeed,
     fetchHueStatus,
     pairHueBridge,
     listOutlookConnections,
@@ -55,6 +59,7 @@
     type TagColorKey,
     type PersonDto,
     type PersonColorKey,
+    type CalendarSyncFeedDto,
     type OutlookStatusDto,
     type OutlookConnectionDto,
     type HueStatusDto,
@@ -290,6 +295,10 @@
   let outlookConnections: OutlookConnectionDto[] = [];
   let outlookError: string | null = null;
   let outlookBusy = false;
+
+  let calendarSyncFeed: CalendarSyncFeedDto | null = null;
+  let calendarSyncBusy = false;
+  let calendarSyncError: string | null = null;
 
   let outlookColorMenuFor: number | null = null;
 
@@ -826,6 +835,21 @@
     }
   }
 
+  async function refreshCalendarSyncFeed() {
+    calendarSyncError = null;
+    if (!authed || !isAdmin) {
+      calendarSyncFeed = null;
+      return;
+    }
+    try {
+      calendarSyncFeed = await fetchCalendarSyncFeed();
+    } catch (err) {
+      calendarSyncFeed = null;
+      const msg = err instanceof Error ? err.message : String(err);
+      calendarSyncError = msg.includes('API 403') ? 'Nur Admins können den Kalender-Feed verwalten.' : 'Kalender-Feed konnte nicht geladen werden.';
+    }
+  }
+
   async function refreshHueStatus() {
     if (!authed) {
       hueStatus = null;
@@ -944,6 +968,8 @@
     me = null;
     users = [];
     persons = [];
+    calendarSyncFeed = null;
+    calendarSyncError = null;
     outlookStatus = null;
     outlookError = null;
     void goto('/login');
@@ -969,6 +995,8 @@
     users = [];
     persons = [];
     tags = [];
+    calendarSyncFeed = null;
+    calendarSyncError = null;
     outlookConnections = [];
     outlookStatus = null;
     outlookError = null;
@@ -1046,6 +1074,68 @@
       outlookError = 'Farbe konnte nicht gespeichert werden.';
     } finally {
       outlookBusy = false;
+    }
+  }
+
+  async function doEnableCalendarSyncFeed() {
+    if (!authed || !isAdmin || calendarSyncBusy) return;
+    calendarSyncBusy = true;
+    calendarSyncError = null;
+    try {
+      calendarSyncFeed = await enableCalendarSyncFeed();
+      showToast('Kalender-Feed aktiviert');
+    } catch {
+      calendarSyncError = 'Kalender-Feed konnte nicht aktiviert werden.';
+    } finally {
+      calendarSyncBusy = false;
+    }
+  }
+
+  async function doRegenerateCalendarSyncFeed() {
+    if (!authed || !isAdmin || calendarSyncBusy) return;
+    const ok = window.confirm('Den Kalender-Feed neu generieren? Bestehende Abos mit dem alten Link verlieren den Zugriff.');
+    if (!ok) return;
+    calendarSyncBusy = true;
+    calendarSyncError = null;
+    try {
+      calendarSyncFeed = await regenerateCalendarSyncFeed();
+      showToast('Kalender-Feed neu generiert');
+    } catch {
+      calendarSyncError = 'Kalender-Feed konnte nicht neu generiert werden.';
+    } finally {
+      calendarSyncBusy = false;
+    }
+  }
+
+  async function doDisableCalendarSyncFeed() {
+    if (!authed || !isAdmin || calendarSyncBusy) return;
+    const ok = window.confirm('Den Kalender-Feed deaktivieren? Bestehende Kalender-Abos können dann keine Termine mehr abrufen.');
+    if (!ok) return;
+    calendarSyncBusy = true;
+    calendarSyncError = null;
+    try {
+      calendarSyncFeed = await disableCalendarSyncFeed();
+      showToast('Kalender-Feed deaktiviert');
+    } catch {
+      calendarSyncError = 'Kalender-Feed konnte nicht deaktiviert werden.';
+    } finally {
+      calendarSyncBusy = false;
+    }
+  }
+
+  async function copyCalendarSyncUrl(kind: 'webcal' | 'https') {
+    const link = kind === 'webcal' ? calendarSyncFeed?.webcalUrl : calendarSyncFeed?.url;
+    if (!link) {
+      calendarSyncError = 'Kein Kalender-Feed aktiv.';
+      return;
+    }
+
+    calendarSyncError = null;
+    try {
+      await navigator.clipboard.writeText(link);
+      showToast(kind === 'webcal' ? 'Webcal-Link kopiert' : 'HTTPS-Link kopiert');
+    } catch {
+      calendarSyncError = 'Link konnte nicht kopiert werden.';
     }
   }
 
@@ -1441,6 +1531,7 @@
     await refreshUsers();
     await refreshPersons();
     await refreshOutlook();
+    await refreshCalendarSyncFeed();
     await refreshHueStatus();
   });
 
@@ -1682,6 +1773,14 @@
 
     <CalendarSection
       {authed}
+      {isAdmin}
+      {calendarSyncFeed}
+      {calendarSyncBusy}
+      {calendarSyncError}
+      {doEnableCalendarSyncFeed}
+      {doRegenerateCalendarSyncFeed}
+      {doDisableCalendarSyncFeed}
+      {copyCalendarSyncUrl}
       bind:recurringSuggestionsEnabled
       bind:recurringSuggestionsWeekly
       bind:recurringSuggestionsBiweekly

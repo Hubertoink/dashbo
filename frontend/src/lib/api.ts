@@ -233,6 +233,31 @@ export async function fetchEvents(from: Date, to: Date): Promise<EventDto[]> {
   return api<EventDto[]>(`/events?${qs.toString()}`);
 }
 
+export type CalendarSyncFeedDto = {
+  enabled: boolean;
+  url: string | null;
+  webcalUrl: string | null;
+  createdAt: string | null;
+  updatedAt: string | null;
+  disabledAt: string | null;
+};
+
+export async function fetchCalendarSyncFeed(): Promise<CalendarSyncFeedDto> {
+  return api<CalendarSyncFeedDto>('/calendar-sync/feed');
+}
+
+export async function enableCalendarSyncFeed(): Promise<CalendarSyncFeedDto> {
+  return api<CalendarSyncFeedDto>('/calendar-sync/feed', { method: 'POST' });
+}
+
+export async function regenerateCalendarSyncFeed(): Promise<CalendarSyncFeedDto> {
+  return api<CalendarSyncFeedDto>('/calendar-sync/feed/regenerate', { method: 'POST' });
+}
+
+export async function disableCalendarSyncFeed(): Promise<CalendarSyncFeedDto> {
+  return api<CalendarSyncFeedDto>('/calendar-sync/feed', { method: 'DELETE' });
+}
+
 export async function fetchOutlookStatus(): Promise<OutlookStatusDto> {
   return api<OutlookStatusDto>('/outlook/status');
 }
