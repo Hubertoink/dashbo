@@ -16,6 +16,7 @@
   } from '$lib/edge';
 
   export let tone: 'light' | 'dark' = 'light';
+  export let variant: 'card' | 'launcher' = 'card';
 
   type HeosPlayerDto = { pid: number; name: string; model?: string | null };
 
@@ -277,65 +278,85 @@
   });
 </script>
 
-<div class="relative min-h-[112px] overflow-hidden rounded-lg border border-white/10 bg-black/45 text-white shadow-lg shadow-black/20 backdrop-blur-md">
-  {#if displayImageUrl}
-    <img src={displayImageUrl} alt="" class="absolute inset-0 h-full w-full object-cover opacity-28 blur-sm scale-105" loading="lazy" />
-    <div class="absolute inset-0 bg-gradient-to-r from-black/90 via-black/70 to-black/45"></div>
-  {:else}
-    <div class="absolute inset-0 bg-gradient-to-br from-zinc-950 via-zinc-900 to-black"></div>
+{#if variant === 'launcher'}
+  {#if heosEnabled}
+    <button
+      type="button"
+      class={`h-10 w-10 shrink-0 flex items-center justify-center rounded-full backdrop-blur-sm active:scale-95 transition-all duration-200 ${
+        tone === 'dark'
+          ? 'border border-black/20 bg-black/10 text-emerald-700 hover:bg-black/15 hover:text-emerald-800'
+          : 'border border-white/15 bg-white/8 text-emerald-300/90 hover:bg-white/15 hover:text-emerald-200'
+      }`}
+      on:click={toggleSpeakerPicker}
+      aria-label="HEOS Anzeige öffnen"
+      title="HEOS Anzeige"
+    >
+      <svg viewBox="0 0 24 24" class="h-5 w-5" fill="currentColor" aria-hidden="true">
+        <path d="M4 10v4c0 1.1.9 2 2 2h2l5 4V4L8 8H6c-1.1 0-2 .9-2 2zm13.5 2c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z" />
+      </svg>
+    </button>
   {/if}
+{:else}
+  <div class="relative min-h-[112px] overflow-hidden rounded-lg border border-white/10 bg-black/45 text-white shadow-lg shadow-black/20 backdrop-blur-md">
+    {#if displayImageUrl}
+      <img src={displayImageUrl} alt="" class="absolute inset-0 h-full w-full object-cover opacity-28 blur-sm scale-105" loading="lazy" />
+      <div class="absolute inset-0 bg-gradient-to-r from-black/90 via-black/70 to-black/45"></div>
+    {:else}
+      <div class="absolute inset-0 bg-gradient-to-br from-zinc-950 via-zinc-900 to-black"></div>
+    {/if}
 
-  <div class="relative flex h-full min-h-[112px] items-center gap-3 p-3">
-    <div class="h-20 w-20 shrink-0 overflow-hidden rounded-lg border border-white/10 bg-white/10 shadow-md shadow-black/25">
-      {#if displayImageUrl}
-        <img src={displayImageUrl} alt="" class="h-full w-full object-cover" loading="lazy" />
-      {:else}
-        <div class="flex h-full w-full items-center justify-center bg-white/5">
-          <svg viewBox="0 0 24 24" class="h-8 w-8 text-white/25" fill="currentColor">
-            <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z" />
-          </svg>
-        </div>
-      {/if}
-    </div>
-
-    <div class="min-w-0 flex-1 self-stretch py-1">
-      <div class="mb-1 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wide text-white/50">
-        <span class={`h-1.5 w-1.5 rounded-full ${nowPlayingActive ? 'bg-emerald-300' : 'bg-white/30'}`}></span>
-        <span>{statusLabel}</span>
-        <span class="text-white/25">·</span>
-        <span class="truncate">{sourceLabel}</span>
-        {#if watchedName}
-          <span class="hidden min-w-0 truncate text-white/35 sm:inline">{watchedName}</span>
+    <div class="relative flex h-full min-h-[112px] items-center gap-3 p-3">
+      <div class="h-20 w-20 shrink-0 overflow-hidden rounded-lg border border-white/10 bg-white/10 shadow-md shadow-black/25">
+        {#if displayImageUrl}
+          <img src={displayImageUrl} alt="" class="h-full w-full object-cover" loading="lazy" />
+        {:else}
+          <div class="flex h-full w-full items-center justify-center bg-white/5">
+            <svg viewBox="0 0 24 24" class="h-8 w-8 text-white/25" fill="currentColor">
+              <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z" />
+            </svg>
+          </div>
         {/if}
       </div>
 
-      <div class="truncate text-base font-semibold leading-tight text-white">{displayArtist}</div>
-      <div class="mt-0.5 line-clamp-2 text-sm leading-snug text-white/70">{displayTitle}</div>
-      {#if displayAlbum && displayAlbum !== displayTitle}
-        <div class="mt-1 truncate text-[11px] text-white/40">{displayAlbum}</div>
-      {/if}
-      {#if heosEnabled && $heosPlaybackStatus?.error}
-        <div class="mt-1 truncate text-[11px] text-red-200">{$heosPlaybackStatus.error}</div>
-      {/if}
-    </div>
+      <div class="min-w-0 flex-1 self-stretch py-1">
+        <div class="mb-1 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wide text-white/50">
+          <span class={`h-1.5 w-1.5 rounded-full ${nowPlayingActive ? 'bg-emerald-300' : 'bg-white/30'}`}></span>
+          <span>{statusLabel}</span>
+          <span class="text-white/25">·</span>
+          <span class="truncate">{sourceLabel}</span>
+          {#if watchedName}
+            <span class="hidden min-w-0 truncate text-white/35 sm:inline">{watchedName}</span>
+          {/if}
+        </div>
 
-    <div class="flex shrink-0 flex-col items-center gap-1 self-stretch py-1">
-      {#if heosEnabled}
-        <button
-          type="button"
-          class="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-white/10 text-white/75 transition hover:bg-white/20 hover:text-white"
-          on:click={toggleSpeakerPicker}
-          aria-label="HEOS Speaker wählen"
-          title="HEOS Speaker wählen"
-        >
-          <svg viewBox="0 0 24 24" class="h-4 w-4" fill="currentColor">
-            <path d="M4 10v4c0 1.1.9 2 2 2h2l5 4V4L8 8H6c-1.1 0-2 .9-2 2zm13.5 2c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z" />
-          </svg>
-        </button>
-      {/if}
+        <div class="truncate text-base font-semibold leading-tight text-white">{displayArtist}</div>
+        <div class="mt-0.5 line-clamp-2 text-sm leading-snug text-white/70">{displayTitle}</div>
+        {#if displayAlbum && displayAlbum !== displayTitle}
+          <div class="mt-1 truncate text-[11px] text-white/40">{displayAlbum}</div>
+        {/if}
+        {#if heosEnabled && $heosPlaybackStatus?.error}
+          <div class="mt-1 truncate text-[11px] text-red-200">{$heosPlaybackStatus.error}</div>
+        {/if}
+      </div>
+
+      <div class="flex shrink-0 flex-col items-center gap-1 self-stretch py-1">
+        {#if heosEnabled}
+          <button
+            type="button"
+            class="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-white/10 text-white/75 transition hover:bg-white/20 hover:text-white"
+            on:click={toggleSpeakerPicker}
+            aria-label="HEOS Speaker wählen"
+            title="HEOS Speaker wählen"
+          >
+            <svg viewBox="0 0 24 24" class="h-4 w-4" fill="currentColor">
+              <path d="M4 10v4c0 1.1.9 2 2 2h2l5 4V4L8 8H6c-1.1 0-2 .9-2 2zm13.5 2c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z" />
+            </svg>
+          </button>
+        {/if}
+      </div>
     </div>
   </div>
-</div>
+{/if}
 
 <svelte:window on:keydown={speakerOpen ? handleSpeakerKeydown : undefined} />
 

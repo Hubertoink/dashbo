@@ -42,6 +42,7 @@
   import { getEdgePlayerWidgetEnabledFromStorage } from '$lib/edge';
   import { getDashboardGlassBlurEnabledFromStorage, getDashboardTextStyleFromStorage, getDashboardBgDimmingFromStorage, DASHBOARD_BG_DIMMING_DEFAULT } from '$lib/dashboard';
   import { heosPlaybackStatus } from '$lib/stores/heosPlayback';
+  import { spotifyPlaybackStatus } from '$lib/stores/spotifyPlayback';
   import { clockStyleClasses, normalizeClockStyle, type ClockStyle } from '$lib/clockStyle';
   import { getLoginRedirectPath, resolveStoredUser } from '$lib/auth';
 
@@ -180,11 +181,12 @@
   let expandedWidget: 'todo' | 'news' | 'scribble' | null = null;
 
   // Count active widgets in sidebar to enable compact mode when > 3
+  $: musicWidgetVisible = musicWidgetEnabled && (Boolean($heosPlaybackStatus?.isActive) || Boolean($spotifyPlaybackStatus?.enabled && $spotifyPlaybackStatus?.active));
   $: activeWidgetCount = [
     todoEnabled,
     newsEnabled,
     scribbleEnabled,
-    musicWidgetEnabled
+    musicWidgetVisible
   ].filter(Boolean).length;
   $: compactWidgets = activeWidgetCount > 3;
 
@@ -1227,22 +1229,29 @@
       <div class="w-[30%] lg:w-[34%] min-w-[260px] lg:min-w-[320px] hidden md:flex flex-col p-4 lg:p-6 xl:p-10 h-screen">
         <div class="text-white flex items-start justify-between gap-3">
           <WeatherWidget {tone} />
-          {#if hueEnabled}
-            <button
-              type="button"
-              class={`mt-1 h-10 w-10 shrink-0 flex items-center justify-center rounded-full backdrop-blur-sm active:scale-95 transition-all duration-200 ${
-                tone === 'dark'
-                  ? 'border border-black/20 bg-black/10 text-amber-700 hover:bg-black/15 hover:text-amber-800'
-                  : 'border border-white/15 bg-white/8 text-amber-300/90 hover:bg-white/15 hover:text-amber-200'
-              }`}
-              on:click={openHueModal}
-              aria-label="Philips Hue öffnen"
-              title="Philips Hue"
-            >
-              <svg viewBox="0 0 24 24" class="h-5 w-5" fill="currentColor" aria-hidden="true">
-                <path d="M9 21h6v-1H9v1zm3-19C8.69 2 6 4.69 6 8c0 2.39 1.42 4.44 3.46 5.39.33.15.54.49.54.86V16h4v-1.75c0-.37.21-.71.54-.86A5.99 5.99 0 0 0 18 8c0-3.31-2.69-6-6-6z"/>
-              </svg>
-            </button>
+          {#if musicWidgetEnabled || hueEnabled}
+            <div class="mt-1 flex shrink-0 items-center gap-2">
+              {#if musicWidgetEnabled}
+                <MusicWidget {tone} variant="launcher" />
+              {/if}
+              {#if hueEnabled}
+                <button
+                  type="button"
+                  class={`h-10 w-10 shrink-0 flex items-center justify-center rounded-full backdrop-blur-sm active:scale-95 transition-all duration-200 ${
+                    tone === 'dark'
+                      ? 'border border-black/20 bg-black/10 text-amber-700 hover:bg-black/15 hover:text-amber-800'
+                      : 'border border-white/15 bg-white/8 text-amber-300/90 hover:bg-white/15 hover:text-amber-200'
+                  }`}
+                  on:click={openHueModal}
+                  aria-label="Philips Hue öffnen"
+                  title="Philips Hue"
+                >
+                  <svg viewBox="0 0 24 24" class="h-5 w-5" fill="currentColor" aria-hidden="true">
+                    <path d="M9 21h6v-1H9v1zm3-19C8.69 2 6 4.69 6 8c0 2.39 1.42 4.44 3.46 5.39.33.15.54.49.54.86V16h4v-1.75c0-.37.21-.71.54-.86A5.99 5.99 0 0 0 18 8c0-3.31-2.69-6-6-6z"/>
+                  </svg>
+                </button>
+              {/if}
+            </div>
           {/if}
         </div>
 
@@ -1281,7 +1290,7 @@
             </div>
           {/if}
 
-          {#if musicWidgetEnabled}
+          {#if musicWidgetVisible}
             <div class="mt-2 pb-4 text-white" transition:slide={{ duration: 300 }}>
               <MusicWidget {tone} />
             </div>
