@@ -206,7 +206,13 @@ async function fetchGoogleEmpty(accessToken, path, options = {}) {
 }
 
 function hasScope(scope, required) {
-  return String(scope || '').split(/\s+/).includes(required);
+  const requiredScope = String(required || '').trim().toLowerCase();
+  if (!requiredScope) return false;
+
+  return String(scope || '')
+    .split(/\s+/)
+    .map((value) => value.trim().toLowerCase())
+    .some((value) => value === requiredScope || value.endsWith(`/${requiredScope}`));
 }
 
 async function getOutlookConnection({ userId, connectionId }) {

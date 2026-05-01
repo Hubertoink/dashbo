@@ -36,12 +36,25 @@ Mittwald sollte ENV Variablen/Secrets pro Projekt/Service unterstützen. Nutze a
 **Optional**
 - OpenWeatherMap: `OWM_API_KEY` usw.
 
-**Outlook (privat, pro User, read-only)**
+**Outlook (privat, pro User, Anzeige + Sofort-Sync)**
 - `OUTLOOK_CLIENT_ID`
 - `OUTLOOK_CLIENT_SECRET`
 - `OUTLOOK_REDIRECT_URI=https://dashbohub.de/api/outlook/callback`
+- Optional explizit: `OUTLOOK_SCOPES=offline_access Calendars.ReadWrite User.Read Tasks.ReadWrite`
 
-Wichtig: dieselbe Redirect URL auch in der Azure App Registration eintragen.
+Wichtig: In der Azure App Registration muessen delegierte Berechtigungen fuer `Calendars.ReadWrite`, `offline_access` und `User.Read` eingetragen sein.
+
+**Google Calendar (optional, pro User, Sofort-Sync)**
+- `GOOGLE_CLIENT_ID`
+- `GOOGLE_CLIENT_SECRET`
+- `GOOGLE_REDIRECT_URI=https://dashbohub.de/api/google/callback`
+- Optional explizit: `GOOGLE_SCOPES=openid email profile https://www.googleapis.com/auth/calendar`
+
+Wichtig: dieselbe Redirect URL auch in der jeweiligen OAuth App Registration eintragen.
+
+Wichtig fuer Updates bestehender Installationen:
+- Wenn Outlook bereits frueher nur mit Leserechten verbunden wurde, muessen Nutzer die Outlook-Verbindung in Dashbo einmal trennen und neu verbinden.
+- Sonst bleibt das alte Token ohne `Calendars.ReadWrite` bestehen und der Sofort-Sync kann nicht aktiviert werden.
 
 **Wichtig fuer die DB auf Mittwald**
 - Das Backend kann DB-Zugangsdaten robuster ueber `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` lesen.

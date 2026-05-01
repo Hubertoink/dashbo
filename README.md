@@ -83,16 +83,34 @@ Eine vollständige Übersicht inkl. Erklärung, Defaults und Beispielen findest 
 
 **Hinweis:** Der Wetter‑Ort wird pro User in den Settings gespeichert (z.B. `weather.location`).
 
-### Outlook (optional)
+### Outlook / Google Kalender (optional)
 
-In `/settings` kann jeder User seinen Outlook‑Kalender verbinden (OAuth). Dafür brauchst du eine Azure App Registration.
+In `/settings` kann jeder User Outlook und optional Google Calendar verbinden. Der Webcal/ICS-Feed ist fuer abonnierende Kalender-Apps gedacht; der Sofort-Sync schreibt Termine direkt in einen eigenen `Dashbo`-Kalender beim jeweiligen Provider.
+
+Outlook:
 
 - Redirect URI (Docker/nginx): `http://localhost:8080/api/outlook/callback`
-- API Permissions (delegated): `Calendars.Read`, `offline_access`, `User.Read`
+- API Permissions (delegated): `Calendars.ReadWrite`, `offline_access`, `User.Read`
 - ENV:
    - `OUTLOOK_CLIENT_ID`
    - `OUTLOOK_CLIENT_SECRET`
    - `OUTLOOK_REDIRECT_URI`
+   - optional `OUTLOOK_SCOPES`
+
+Google Calendar:
+
+- Redirect URI (Docker/nginx): `http://localhost:8080/api/google/callback`
+- OAuth Scope: `https://www.googleapis.com/auth/calendar`
+- ENV:
+   - `GOOGLE_CLIENT_ID`
+   - `GOOGLE_CLIENT_SECRET`
+   - `GOOGLE_REDIRECT_URI`
+   - optional `GOOGLE_SCOPES`
+
+Wichtig:
+
+- Bestehende Outlook-Verbindungen aus aelteren Versionen muessen einmal getrennt und neu verbunden werden, damit `Calendars.ReadWrite` wirklich im Token enthalten ist.
+- Fuer Outlook/Google Web sollte beim ICS-Abo die `https://...ics`-URL verwendet werden. `webcal://` ist eher fuer Apple Calendar und lokale Kalender-Apps gedacht.
 
 ### Spotify (optional, Now Playing)
 

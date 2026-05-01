@@ -58,7 +58,7 @@ async function createOutlookAuthUrl({ userId }) {
     response_mode: 'query',
     scope: cfg.scopes,
     state,
-    prompt: 'select_account',
+    prompt: 'consent',
   });
 
   return `${cfg.authorizeUrl}?${params.toString()}`;

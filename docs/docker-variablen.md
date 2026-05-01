@@ -87,6 +87,11 @@ Betroffene Dateien:
 - `GOOGLE_SUCCESS_REDIRECT` (Default: `/settings`) – UI-Redirect nach Erfolg
 - `GOOGLE_ERROR_REDIRECT` (Default: `/settings?google=error`) – UI-Redirect bei Fehler
 
+Hinweise fuer bestehende Installationen:
+
+- Outlook-Verbindungen aus aelteren Dashbo-Versionen enthalten oft nur `Calendars.Read`. Fuer den Sofort-Sync muessen Nutzer Outlook einmal trennen und neu verbinden.
+- Fuer Outlook/Google Web den Kalender-Feed besser ueber die `https://...ics`-URL abonnieren. `webcal://` ist eher fuer Apple Calendar und andere lokale Kalender-Apps geeignet.
+
 ### Philips Hue (optional)
 
 - `HUE_BRIDGE_URL` (Default: leer) – Basis-URL deiner Hue Bridge (v2 API)

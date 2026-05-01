@@ -29,7 +29,7 @@
   export let doDisableDirectCalendarTarget: (targetId: number) => void | Promise<void>;
 
   $: feedEnabled = Boolean(calendarSyncFeed?.enabled && calendarSyncFeed?.url);
-  $: displayUrl = calendarSyncFeed?.webcalUrl || calendarSyncFeed?.url || '';
+  $: displayUrl = calendarSyncFeed?.url || calendarSyncFeed?.webcalUrl || '';
 
   function providerLabel(provider: CalendarSyncProvider | string): string {
     return provider === 'google' ? 'Google' : 'Outlook';
@@ -79,20 +79,20 @@
           />
           <button
             class="h-9 px-3 rounded-lg bg-white/20 hover:bg-white/25 text-xs font-medium disabled:opacity-50"
-            on:click={() => copyCalendarSyncUrl('webcal')}
+            on:click={() => copyCalendarSyncUrl('https')}
             disabled={calendarSyncBusy}
           >
-            Webcal kopieren
+            Outlook/Google kopieren
           </button>
         </div>
 
         <div class="flex flex-wrap items-center gap-2">
           <button
             class="h-9 px-3 rounded-lg bg-white/10 hover:bg-white/15 text-xs font-medium disabled:opacity-50"
-            on:click={() => copyCalendarSyncUrl('https')}
+            on:click={() => copyCalendarSyncUrl('webcal')}
             disabled={calendarSyncBusy}
           >
-            HTTPS kopieren
+            Webcal kopieren
           </button>
           <button
             class="h-9 px-3 rounded-lg bg-white/10 hover:bg-white/15 text-xs font-medium disabled:opacity-50"
