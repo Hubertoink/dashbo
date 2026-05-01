@@ -14,7 +14,13 @@
     enableCalendarSyncFeed,
     regenerateCalendarSyncFeed,
     disableCalendarSyncFeed,
+    fetchCalendarProviderSyncTargets,
+    enableCalendarProviderSyncTarget,
+    syncCalendarProviderSyncTarget,
+    deleteCalendarProviderSyncTarget,
     fetchHueStatus,
+    getGoogleAuthUrl,
+    listGoogleConnections,
     pairHueBridge,
     listOutlookConnections,
     getOutlookAuthUrl,
@@ -60,6 +66,9 @@
     type PersonDto,
     type PersonColorKey,
     type CalendarSyncFeedDto,
+    type CalendarProviderSyncTargetDto,
+    type CalendarSyncProvider,
+    type GoogleConnectionDto,
     type OutlookStatusDto,
     type OutlookConnectionDto,
     type HueStatusDto,
@@ -299,6 +308,12 @@
   let calendarSyncFeed: CalendarSyncFeedDto | null = null;
   let calendarSyncBusy = false;
   let calendarSyncError: string | null = null;
+
+  let calendarProviderSyncTargets: CalendarProviderSyncTargetDto[] = [];
+  let calendarProviderSyncBusy = false;
+  let calendarProviderSyncError: string | null = null;
+
+  let googleConnections: GoogleConnectionDto[] = [];
 
   let outlookColorMenuFor: number | null = null;
 
@@ -835,6 +850,18 @@
     }
   }
 
+  async function refreshGoogle() {
+    if (!authed) {
+      googleConnections = [];
+      return;
+    }
+    try {
+      googleConnections = await listGoogleConnections();
+    } catch {
+      googleConnections = [];
+    }
+  }
+
   async function refreshCalendarSyncFeed() {
     calendarSyncError = null;
     if (!authed || !isAdmin) {
@@ -847,6 +874,21 @@
       calendarSyncFeed = null;
       const msg = err instanceof Error ? err.message : String(err);
       calendarSyncError = msg.includes('API 403') ? 'Nur Admins können den Kalender-Feed verwalten.' : 'Kalender-Feed konnte nicht geladen werden.';
+    }
+  }
+
+  async function refreshCalendarProviderSyncTargets() {
+    calendarProviderSyncError = null;
+    if (!authed || !isAdmin) {
+      calendarProviderSyncTargets = [];
+      return;
+    }
+    try {
+      calendarProviderSyncTargets = await fetchCalendarProviderSyncTargets();
+    } catch (err) {
+      calendarProviderSyncTargets = [];
+      const msg = err instanceof Error ? err.message : String(err);
+      calendarProviderSyncError = msg.includes('API 403') ? 'Nur Admins können den Sofort-Sync verwalten.' : 'Sofort-Sync konnte nicht geladen werden.';
     }
   }
 
@@ -931,6 +973,9 @@
       await refreshTags();
       await refreshPersons();
       await refreshOutlook();
+      await refreshGoogle();
+      await refreshCalendarSyncFeed();
+      await refreshCalendarProviderSyncTargets();
       await refreshHueStatus();
     } catch {
       authError = 'Login fehlgeschlagen';
@@ -970,6 +1015,9 @@
     persons = [];
     calendarSyncFeed = null;
     calendarSyncError = null;
+    calendarProviderSyncTargets = [];
+    calendarProviderSyncError = null;
+    googleConnections = [];
     outlookStatus = null;
     outlookError = null;
     void goto('/login');
@@ -997,6 +1045,9 @@
     tags = [];
     calendarSyncFeed = null;
     calendarSyncError = null;
+    calendarProviderSyncTargets = [];
+    calendarProviderSyncError = null;
+    googleConnections = [];
     outlookConnections = [];
     outlookStatus = null;
     outlookError = null;
@@ -1041,6 +1092,7 @@
     try {
       await disconnectOutlook();
       await refreshOutlook();
+      await refreshCalendarProviderSyncTargets();
     } catch {
       outlookError = 'Outlook Verbindung konnte nicht getrennt werden.';
     } finally {
@@ -1055,6 +1107,7 @@
     try {
       await disconnectOutlookConnection(id);
       await refreshOutlook();
+      await refreshCalendarProviderSyncTargets();
     } catch {
       outlookError = 'Outlook Verbindung konnte nicht getrennt werden.';
     } finally {
@@ -1074,6 +1127,81 @@
       outlookError = 'Farbe konnte nicht gespeichert werden.';
     } finally {
       outlookBusy = false;
+    }
+  }
+
+  async function doGoogleConnect() {
+    if (!authed || calendarProviderSyncBusy) return;
+    calendarProviderSyncBusy = true;
+    calendarProviderSyncError = null;
+    try {
+      const { url } = await getGoogleAuthUrl();
+      window.location.href = url;
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      calendarProviderSyncError = msg.includes('google_not_configured')
+        ? 'Google ist noch nicht konfiguriert (GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET / GOOGLE_REDIRECT_URI).'
+        : 'Google Verbindung konnte nicht gestartet werden.';
+      console.error(e);
+    } finally {
+      calendarProviderSyncBusy = false;
+    }
+  }
+
+  function directSyncErrorMessage(raw: string): string {
+    if (raw.includes('outlook_calendars_readwrite_required')) return 'Outlook bitte neu verbinden, damit Calendars.ReadWrite freigegeben ist.';
+    if (raw.includes('google_calendar_scope_required')) return 'Google bitte neu verbinden, damit Kalender-Schreibrechte freigegeben sind.';
+    if (raw.includes('provider_connection_not_found')) return 'Das verbundene Konto wurde nicht gefunden.';
+    if (raw.includes('google_not_configured')) return 'Google OAuth ist noch nicht konfiguriert.';
+    return raw || 'Sofort-Sync fehlgeschlagen.';
+  }
+
+  async function doEnableDirectCalendarSync(provider: CalendarSyncProvider, connectionId: number) {
+    if (!authed || !isAdmin || calendarProviderSyncBusy) return;
+    calendarProviderSyncBusy = true;
+    calendarProviderSyncError = null;
+    try {
+      calendarProviderSyncTargets = await enableCalendarProviderSyncTarget({ provider, connectionId });
+      showToast(provider === 'google' ? 'Google Sofort-Sync aktiviert' : 'Outlook Sofort-Sync aktiviert');
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      calendarProviderSyncError = directSyncErrorMessage(msg);
+    } finally {
+      calendarProviderSyncBusy = false;
+    }
+  }
+
+  async function doSyncDirectCalendarTarget(targetId: number) {
+    if (!authed || !isAdmin || calendarProviderSyncBusy) return;
+    calendarProviderSyncBusy = true;
+    calendarProviderSyncError = null;
+    try {
+      const result = await syncCalendarProviderSyncTarget(targetId);
+      calendarProviderSyncTargets = result.targets;
+      showToast('Sofort-Sync ausgeführt');
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      calendarProviderSyncError = directSyncErrorMessage(msg);
+    } finally {
+      calendarProviderSyncBusy = false;
+    }
+  }
+
+  async function doDisableDirectCalendarTarget(targetId: number) {
+    if (!authed || !isAdmin || calendarProviderSyncBusy) return;
+    const ok = window.confirm('Diesen Sofort-Sync entfernen? Bereits von Dashbo gespiegelt Termine werden im externen Dashbo-Kalender gelöscht.');
+    if (!ok) return;
+    calendarProviderSyncBusy = true;
+    calendarProviderSyncError = null;
+    try {
+      const result = await deleteCalendarProviderSyncTarget(targetId);
+      calendarProviderSyncTargets = result.targets;
+      showToast('Sofort-Sync entfernt');
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      calendarProviderSyncError = directSyncErrorMessage(msg);
+    } finally {
+      calendarProviderSyncBusy = false;
     }
   }
 
@@ -1531,7 +1659,9 @@
     await refreshUsers();
     await refreshPersons();
     await refreshOutlook();
+    await refreshGoogle();
     await refreshCalendarSyncFeed();
+    await refreshCalendarProviderSyncTargets();
     await refreshHueStatus();
   });
 
@@ -1777,10 +1907,18 @@
       {calendarSyncFeed}
       {calendarSyncBusy}
       {calendarSyncError}
+      {calendarProviderSyncTargets}
+      {calendarProviderSyncBusy}
+      {calendarProviderSyncError}
+      {googleConnections}
       {doEnableCalendarSyncFeed}
       {doRegenerateCalendarSyncFeed}
       {doDisableCalendarSyncFeed}
       {copyCalendarSyncUrl}
+      {doGoogleConnect}
+      {doEnableDirectCalendarSync}
+      {doSyncDirectCalendarTarget}
+      {doDisableDirectCalendarTarget}
       bind:recurringSuggestionsEnabled
       bind:recurringSuggestionsWeekly
       bind:recurringSuggestionsBiweekly

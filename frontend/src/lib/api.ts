@@ -258,6 +258,43 @@ export async function disableCalendarSyncFeed(): Promise<CalendarSyncFeedDto> {
   return api<CalendarSyncFeedDto>('/calendar-sync/feed', { method: 'DELETE' });
 }
 
+export type CalendarSyncProvider = 'outlook' | 'google';
+
+export type CalendarProviderSyncTargetDto = {
+  id: number;
+  provider: CalendarSyncProvider;
+  providerConnectionId: number;
+  providerUserId: number;
+  connectionLabel: string;
+  connectionEmail: string | null;
+  externalCalendarId: string | null;
+  externalCalendarName: string;
+  enabled: boolean;
+  lastSyncedAt: string | null;
+  lastError: string | null;
+  createdAt: string | null;
+  updatedAt: string | null;
+};
+
+export async function fetchCalendarProviderSyncTargets(): Promise<CalendarProviderSyncTargetDto[]> {
+  return api<CalendarProviderSyncTargetDto[]>('/calendar-sync/targets');
+}
+
+export async function enableCalendarProviderSyncTarget(input: {
+  provider: CalendarSyncProvider;
+  connectionId: number;
+}): Promise<CalendarProviderSyncTargetDto[]> {
+  return api<CalendarProviderSyncTargetDto[]>('/calendar-sync/targets', { method: 'POST', body: JSON.stringify(input) });
+}
+
+export async function syncCalendarProviderSyncTarget(id: number): Promise<{ ok: true; result: unknown; targets: CalendarProviderSyncTargetDto[] }> {
+  return api<{ ok: true; result: unknown; targets: CalendarProviderSyncTargetDto[] }>(`/calendar-sync/targets/${id}/sync`, { method: 'POST' });
+}
+
+export async function deleteCalendarProviderSyncTarget(id: number): Promise<{ ok: true; targets: CalendarProviderSyncTargetDto[] }> {
+  return api<{ ok: true; targets: CalendarProviderSyncTargetDto[] }>(`/calendar-sync/targets/${id}`, { method: 'DELETE' });
+}
+
 export async function fetchOutlookStatus(): Promise<OutlookStatusDto> {
   return api<OutlookStatusDto>('/outlook/status');
 }
@@ -280,6 +317,36 @@ export async function setOutlookConnectionColor(id: number, color: TagColorKey):
 
 export async function disconnectOutlookConnection(id: number): Promise<{ ok: true }> {
   return api<{ ok: true }>(`/outlook/connections/${id}/disconnect`, { method: 'POST' });
+}
+
+export type GoogleStatusDto = {
+  connected: boolean;
+  expiresAt: string | null;
+  scope: string | null;
+};
+
+export type GoogleConnectionDto = {
+  id: number;
+  email: string | null;
+  displayName: string | null;
+  expiresAt: string | null;
+  scope: string | null;
+};
+
+export async function fetchGoogleStatus(): Promise<GoogleStatusDto> {
+  return api<GoogleStatusDto>('/google/status');
+}
+
+export async function getGoogleAuthUrl(): Promise<{ url: string }> {
+  return api<{ url: string }>('/google/auth-url', { method: 'POST' });
+}
+
+export async function listGoogleConnections(): Promise<GoogleConnectionDto[]> {
+  return api<GoogleConnectionDto[]>('/google/connections');
+}
+
+export async function disconnectGoogleConnection(id: number): Promise<{ ok: true }> {
+  return api<{ ok: true }>(`/google/connections/${id}/disconnect`, { method: 'POST' });
 }
 
 export async function fetchHueStatus(): Promise<HueStatusDto> {

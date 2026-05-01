@@ -9,7 +9,7 @@ function getOutlookConfig({ allowMissing = false } = {}) {
   const clientId = process.env.OUTLOOK_CLIENT_ID;
   const clientSecret = process.env.OUTLOOK_CLIENT_SECRET;
   const redirectUri = process.env.OUTLOOK_REDIRECT_URI;
-  const scopes = (process.env.OUTLOOK_SCOPES || 'offline_access Calendars.Read User.Read Tasks.ReadWrite').trim();
+  const scopes = (process.env.OUTLOOK_SCOPES || 'offline_access Calendars.ReadWrite User.Read Tasks.ReadWrite').trim();
 
   if (!clientId || !clientSecret || !redirectUri) {
     if (allowMissing) return null;
@@ -241,6 +241,7 @@ async function getOutlookStatus({ userId }) {
 
 async function disconnectOutlook({ userId }) {
   const pool = getPool();
+  await pool.query("DELETE FROM calendar_sync_targets WHERE provider = 'outlook' AND provider_user_id = $1;", [userId]);
   await pool.query('DELETE FROM outlook_connections WHERE user_id = $1;', [userId]);
   await pool.query('DELETE FROM outlook_tokens WHERE user_id = $1;', [userId]);
   return { ok: true };
@@ -338,6 +339,7 @@ async function setOutlookConnectionColor({ userId, connectionId, color }) {
 
 async function disconnectOutlookConnection({ userId, connectionId }) {
   const pool = getPool();
+  await pool.query("DELETE FROM calendar_sync_targets WHERE provider = 'outlook' AND provider_user_id = $1 AND provider_connection_id = $2;", [userId, Number(connectionId)]);
   const r = await pool.query('DELETE FROM outlook_connections WHERE user_id = $1 AND id = $2;', [userId, Number(connectionId)]);
   return { ok: r.rowCount > 0 };
 }

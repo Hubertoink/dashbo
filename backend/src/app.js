@@ -11,6 +11,7 @@ const { tagsRouter } = require('./routes/tags');
 const { personsRouter } = require('./routes/persons');
 const { ensureUploadDir } = require('./services/mediaService');
 const { outlookRouter } = require('./routes/outlook');
+const { googleRouter } = require('./routes/google');
 const { hueRouter } = require('./routes/hue');
 const { todosRouter } = require('./routes/todos');
 const { newsRouter } = require('./routes/news');
@@ -56,6 +57,7 @@ function createApp() {
   app.use('/persons', personsRouter);
   app.use('/events', eventsRouter);
   app.use('/outlook', outlookRouter);
+  app.use('/google', googleRouter);
   app.use('/hue', hueRouter);
   app.use('/todos', todosRouter);
   app.use('/news', newsRouter);

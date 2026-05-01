@@ -73,9 +73,19 @@ Betroffene Dateien:
 - `OUTLOOK_CLIENT_SECRET` (Default: leer) – App Secret
 - `OUTLOOK_REDIRECT_URI` (Default: leer in compose, empfohlen gesetzt) – OAuth Callback URL
   - Docker/nginx Beispiel: `OUTLOOK_REDIRECT_URI=http://localhost:8080/api/outlook/callback`
-- `OUTLOOK_SCOPES` (Default: `offline_access Calendars.Read User.Read Tasks.ReadWrite`) – OAuth Scopes
+- `OUTLOOK_SCOPES` (Default: `offline_access Calendars.ReadWrite User.Read Tasks.ReadWrite`) – OAuth Scopes für Outlook-Anzeige und Dashbo-Sofort-Sync
 - `OUTLOOK_SUCCESS_REDIRECT` (Default: `/settings`) – UI-Redirect nach Erfolg
 - `OUTLOOK_ERROR_REDIRECT` (Default: `/settings?outlook=error`) – UI-Redirect bei Fehler
+
+### Google OAuth
+
+- `GOOGLE_CLIENT_ID` (Default: leer) – Google OAuth Client ID
+- `GOOGLE_CLIENT_SECRET` (Default: leer) – Google OAuth Client Secret
+- `GOOGLE_REDIRECT_URI` (Default: leer in compose, empfohlen gesetzt) – OAuth Callback URL
+  - Docker/nginx Beispiel: `GOOGLE_REDIRECT_URI=http://localhost:8080/api/google/callback`
+- `GOOGLE_SCOPES` (Default: `openid email profile https://www.googleapis.com/auth/calendar`) – OAuth Scopes für Google Calendar Sofort-Sync
+- `GOOGLE_SUCCESS_REDIRECT` (Default: `/settings`) – UI-Redirect nach Erfolg
+- `GOOGLE_ERROR_REDIRECT` (Default: `/settings?google=error`) – UI-Redirect bei Fehler
 
 ### Philips Hue (optional)
 

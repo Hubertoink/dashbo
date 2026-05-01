@@ -799,6 +799,161 @@ async function initDb() {
     CREATE INDEX IF NOT EXISTS outlook_connections_user_id_idx ON outlook_connections (user_id);
   `);
 
+  await p.query(`
+    CREATE TABLE IF NOT EXISTS google_oauth_states (
+      state TEXT PRIMARY KEY,
+      user_id BIGINT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      expires_at TIMESTAMPTZ NOT NULL
+    );
+  `);
+
+  await p.query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'google_oauth_states_user_id_fkey'
+      ) THEN
+        ALTER TABLE google_oauth_states
+        ADD CONSTRAINT google_oauth_states_user_id_fkey
+        FOREIGN KEY (user_id)
+        REFERENCES users(id)
+        ON DELETE CASCADE;
+      END IF;
+    END $$;
+  `);
+
+  await p.query('CREATE INDEX IF NOT EXISTS google_oauth_states_user_id_idx ON google_oauth_states (user_id);');
+
+  await p.query(`
+    CREATE TABLE IF NOT EXISTS google_connections (
+      id BIGSERIAL PRIMARY KEY,
+      user_id BIGINT NOT NULL,
+      google_user_id TEXT NOT NULL,
+      email TEXT,
+      display_name TEXT,
+      access_token TEXT NOT NULL,
+      refresh_token TEXT,
+      scope TEXT,
+      expires_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE (user_id, google_user_id)
+    );
+  `);
+
+  await p.query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'google_connections_user_id_fkey'
+      ) THEN
+        ALTER TABLE google_connections
+        ADD CONSTRAINT google_connections_user_id_fkey
+        FOREIGN KEY (user_id)
+        REFERENCES users(id)
+        ON DELETE CASCADE;
+      END IF;
+    END $$;
+  `);
+
+  await p.query('CREATE INDEX IF NOT EXISTS google_connections_user_id_idx ON google_connections (user_id);');
+
+  await p.query(`
+    CREATE TABLE IF NOT EXISTS calendar_sync_targets (
+      id BIGSERIAL PRIMARY KEY,
+      calendar_id BIGINT NOT NULL,
+      provider TEXT NOT NULL,
+      provider_user_id BIGINT NOT NULL,
+      provider_connection_id BIGINT NOT NULL,
+      external_calendar_id TEXT,
+      external_calendar_name TEXT NOT NULL DEFAULT 'Dashbo',
+      enabled BOOLEAN NOT NULL DEFAULT TRUE,
+      last_synced_at TIMESTAMPTZ,
+      last_error TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE (calendar_id, provider, provider_user_id, provider_connection_id)
+    );
+  `);
+
+  await p.query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'calendar_sync_targets_calendar_id_fkey'
+      ) THEN
+        ALTER TABLE calendar_sync_targets
+        ADD CONSTRAINT calendar_sync_targets_calendar_id_fkey
+        FOREIGN KEY (calendar_id)
+        REFERENCES calendars(id)
+        ON DELETE CASCADE;
+      END IF;
+    END $$;
+  `);
+
+  await p.query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'calendar_sync_targets_provider_user_id_fkey'
+      ) THEN
+        ALTER TABLE calendar_sync_targets
+        ADD CONSTRAINT calendar_sync_targets_provider_user_id_fkey
+        FOREIGN KEY (provider_user_id)
+        REFERENCES users(id)
+        ON DELETE CASCADE;
+      END IF;
+    END $$;
+  `);
+
+  await p.query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'calendar_sync_targets_provider_chk'
+      ) THEN
+        ALTER TABLE calendar_sync_targets
+        ADD CONSTRAINT calendar_sync_targets_provider_chk
+        CHECK (provider IN ('outlook', 'google'));
+      END IF;
+    END $$;
+  `);
+
+  await p.query('CREATE INDEX IF NOT EXISTS calendar_sync_targets_calendar_id_idx ON calendar_sync_targets (calendar_id);');
+  await p.query('CREATE INDEX IF NOT EXISTS calendar_sync_targets_enabled_idx ON calendar_sync_targets (enabled);');
+
+  await p.query(`
+    CREATE TABLE IF NOT EXISTS calendar_sync_event_mappings (
+      id BIGSERIAL PRIMARY KEY,
+      target_id BIGINT NOT NULL,
+      sync_key TEXT NOT NULL,
+      external_event_id TEXT NOT NULL,
+      payload_hash TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      last_synced_at TIMESTAMPTZ,
+      UNIQUE (target_id, sync_key)
+    );
+  `);
+
+  await p.query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'calendar_sync_event_mappings_target_id_fkey'
+      ) THEN
+        ALTER TABLE calendar_sync_event_mappings
+        ADD CONSTRAINT calendar_sync_event_mappings_target_id_fkey
+        FOREIGN KEY (target_id)
+        REFERENCES calendar_sync_targets(id)
+        ON DELETE CASCADE;
+      END IF;
+    END $$;
+  `);
+
+  await p.query('CREATE INDEX IF NOT EXISTS calendar_sync_event_mappings_target_id_idx ON calendar_sync_event_mappings (target_id);');
+
   // Bind events to user (family) and optionally to a person
   await p.query(`
     ALTER TABLE events

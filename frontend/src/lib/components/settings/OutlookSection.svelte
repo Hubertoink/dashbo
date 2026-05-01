@@ -36,11 +36,10 @@
   }
 </script>
 
-<!-- Outlook (privat, nur anzeigen) -->
 <div class="bg-white/5 rounded-xl p-4" id="section-outlook">
   <div class="flex items-center justify-between mb-3">
     <div class="font-medium">Outlook Kalender</div>
-    <div class="text-white/50 text-xs">Privat · nur anzeigen</div>
+    <div class="text-white/50 text-xs">Privat · Anzeige & Sync</div>
   </div>
 
   {#if !authed}

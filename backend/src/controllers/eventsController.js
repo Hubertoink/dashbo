@@ -9,6 +9,7 @@ const {
 } = require('../services/eventsService');
 
 const { listOutlookEventsBetweenForCalendarAdmins } = require('../services/outlookService');
+const { triggerCalendarSync } = require('../services/calendarProviderSyncService');
 
 const idSchema = z.coerce.number().int().positive();
 
@@ -60,6 +61,7 @@ async function createEvent(req, res) {
   const body = req.validatedBody;
   try {
     const created = await insertEvent({ calendarId, createdByUserId: userId, ...body });
+    triggerCalendarSync({ calendarId });
     res.status(201).json(created);
   } catch (e) {
     const status = Number(e?.status || 500);
@@ -98,6 +100,7 @@ async function updateEvent(req, res) {
           })
         : await patchEvent({ calendarId, userId, id: parsedId.data, patch });
     if (!updated) return res.status(404).json({ error: 'not_found' });
+    triggerCalendarSync({ calendarId });
     res.json(updated);
   } catch (e) {
     const status = Number(e?.status || 500);
@@ -124,6 +127,7 @@ async function deleteEvent(req, res) {
       ? await removeEventOccurrence({ calendarId, id: parsedId.data, occurrenceStartAt })
       : await removeEvent({ calendarId, id: parsedId.data });
   if (!ok) return res.status(404).json({ error: 'not_found' });
+  triggerCalendarSync({ calendarId });
   res.status(204).end();
 }
 

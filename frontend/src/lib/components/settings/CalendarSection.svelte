@@ -1,5 +1,16 @@
 <script lang="ts">
-  import type { CalendarSyncFeedDto, OutlookConnectionDto, OutlookStatusDto, PersonColorKey, PersonDto, TagColorKey, TagDto } from '$lib/api';
+  import type {
+    CalendarProviderSyncTargetDto,
+    CalendarSyncFeedDto,
+    CalendarSyncProvider,
+    GoogleConnectionDto,
+    OutlookConnectionDto,
+    OutlookStatusDto,
+    PersonColorKey,
+    PersonDto,
+    TagColorKey,
+    TagDto
+  } from '$lib/api';
 
   import CalendarSyncSection from '$lib/components/settings/CalendarSyncSection.svelte';
   import OutlookSection from '$lib/components/settings/OutlookSection.svelte';
@@ -12,10 +23,18 @@
   export let calendarSyncFeed: CalendarSyncFeedDto | null;
   export let calendarSyncBusy: boolean;
   export let calendarSyncError: string | null;
+  export let calendarProviderSyncTargets: CalendarProviderSyncTargetDto[];
+  export let calendarProviderSyncBusy: boolean;
+  export let calendarProviderSyncError: string | null;
+  export let googleConnections: GoogleConnectionDto[];
   export let doEnableCalendarSyncFeed: () => void | Promise<void>;
   export let doRegenerateCalendarSyncFeed: () => void | Promise<void>;
   export let doDisableCalendarSyncFeed: () => void | Promise<void>;
   export let copyCalendarSyncUrl: (kind: 'webcal' | 'https') => void | Promise<void>;
+  export let doGoogleConnect: () => void | Promise<void>;
+  export let doEnableDirectCalendarSync: (provider: CalendarSyncProvider, connectionId: number) => void | Promise<void>;
+  export let doSyncDirectCalendarTarget: (targetId: number) => void | Promise<void>;
+  export let doDisableDirectCalendarTarget: (targetId: number) => void | Promise<void>;
 
   export let tags: TagDto[];
   export let newTagName: string;
@@ -79,10 +98,20 @@
       {calendarSyncFeed}
       {calendarSyncBusy}
       {calendarSyncError}
+      {calendarProviderSyncTargets}
+      {calendarProviderSyncBusy}
+      {calendarProviderSyncError}
+      {outlookConnections}
+      {googleConnections}
       {doEnableCalendarSyncFeed}
       {doRegenerateCalendarSyncFeed}
       {doDisableCalendarSyncFeed}
       {copyCalendarSyncUrl}
+      {doOutlookConnect}
+      {doGoogleConnect}
+      {doEnableDirectCalendarSync}
+      {doSyncDirectCalendarTarget}
+      {doDisableDirectCalendarTarget}
     />
 
     <div class="bg-white/5 rounded-xl p-4" id="section-recurring-suggestions">

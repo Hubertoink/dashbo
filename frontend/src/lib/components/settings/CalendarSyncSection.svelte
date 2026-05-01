@@ -1,19 +1,48 @@
 <script lang="ts">
-  import type { CalendarSyncFeedDto } from '$lib/api';
+  import type {
+    CalendarProviderSyncTargetDto,
+    CalendarSyncFeedDto,
+    CalendarSyncProvider,
+    GoogleConnectionDto,
+    OutlookConnectionDto
+  } from '$lib/api';
 
   export let authed: boolean;
   export let isAdmin: boolean;
   export let calendarSyncFeed: CalendarSyncFeedDto | null;
   export let calendarSyncBusy: boolean;
   export let calendarSyncError: string | null;
+  export let calendarProviderSyncTargets: CalendarProviderSyncTargetDto[];
+  export let calendarProviderSyncBusy: boolean;
+  export let calendarProviderSyncError: string | null;
+  export let outlookConnections: OutlookConnectionDto[];
+  export let googleConnections: GoogleConnectionDto[];
 
   export let doEnableCalendarSyncFeed: () => void | Promise<void>;
   export let doRegenerateCalendarSyncFeed: () => void | Promise<void>;
   export let doDisableCalendarSyncFeed: () => void | Promise<void>;
   export let copyCalendarSyncUrl: (kind: 'webcal' | 'https') => void | Promise<void>;
+  export let doOutlookConnect: () => void | Promise<void>;
+  export let doGoogleConnect: () => void | Promise<void>;
+  export let doEnableDirectCalendarSync: (provider: CalendarSyncProvider, connectionId: number) => void | Promise<void>;
+  export let doSyncDirectCalendarTarget: (targetId: number) => void | Promise<void>;
+  export let doDisableDirectCalendarTarget: (targetId: number) => void | Promise<void>;
 
   $: feedEnabled = Boolean(calendarSyncFeed?.enabled && calendarSyncFeed?.url);
   $: displayUrl = calendarSyncFeed?.webcalUrl || calendarSyncFeed?.url || '';
+
+  function providerLabel(provider: CalendarSyncProvider | string): string {
+    return provider === 'google' ? 'Google' : 'Outlook';
+  }
+
+  function targetFor(provider: CalendarSyncProvider, connectionId: number): CalendarProviderSyncTargetDto | null {
+    return calendarProviderSyncTargets.find((target) => target.provider === provider && target.providerConnectionId === connectionId) ?? null;
+  }
+
+  function connectionLabel(connection: OutlookConnectionDto | GoogleConnectionDto): string {
+    if (connection.displayName && connection.email && connection.displayName !== connection.email) return `${connection.displayName} (${connection.email})`;
+    return connection.displayName || connection.email || `Konto ${connection.id}`;
+  }
 
   function formatSyncDate(value: string | null | undefined): string {
     if (!value) return '';
@@ -105,5 +134,116 @@
     {#if calendarSyncError}
       <div class="mt-2 text-red-400 text-xs">{calendarSyncError}</div>
     {/if}
+
+    <div class="mt-4 border-t border-white/10 pt-4">
+      <div class="mb-3 flex items-center justify-between gap-3">
+        <div>
+          <div class="text-sm font-medium text-white/85">Sofort-Sync</div>
+          <div class="text-[11px] text-white/45">Spiegelt Dashbo-Termine direkt in eigene Outlook- und Google-Kalender.</div>
+        </div>
+        <div class="text-xs rounded-full px-2 py-1 {calendarProviderSyncTargets.length > 0 ? 'bg-cyan-400/15 text-cyan-100' : 'bg-white/10 text-white/45'}">
+          {calendarProviderSyncTargets.length > 0 ? `${calendarProviderSyncTargets.length} aktiv` : 'Optional'}
+        </div>
+      </div>
+
+      {#if calendarProviderSyncTargets.length > 0}
+        <div class="mb-3 space-y-2">
+          {#each calendarProviderSyncTargets as target (target.id)}
+            <div class="flex items-center justify-between gap-3 border-t border-white/10 pt-2 first:border-t-0 first:pt-0">
+              <div class="min-w-0">
+                <div class="text-sm text-white/85 truncate">{providerLabel(target.provider)} · {target.connectionLabel}</div>
+                <div class="text-[11px] {target.lastError ? 'text-rose-300' : 'text-white/45'} truncate">
+                  {target.lastError ? target.lastError : target.lastSyncedAt ? `Synchronisiert: ${formatSyncDate(target.lastSyncedAt)}` : 'Noch nicht synchronisiert'}
+                </div>
+              </div>
+              <div class="flex shrink-0 items-center gap-2">
+                <button
+                  class="h-8 px-3 rounded-lg bg-white/10 hover:bg-white/15 text-xs font-medium disabled:opacity-50"
+                  on:click={() => doSyncDirectCalendarTarget(target.id)}
+                  disabled={calendarProviderSyncBusy}
+                >
+                  Jetzt syncen
+                </button>
+                <button
+                  class="h-8 px-3 rounded-lg bg-rose-500/15 hover:bg-rose-500/20 text-xs font-medium text-rose-100 disabled:opacity-50"
+                  on:click={() => doDisableDirectCalendarTarget(target.id)}
+                  disabled={calendarProviderSyncBusy}
+                >
+                  Entfernen
+                </button>
+              </div>
+            </div>
+          {/each}
+        </div>
+      {/if}
+
+      <div class="space-y-3">
+        <div class="flex items-start justify-between gap-3 border-t border-white/10 pt-3">
+          <div class="min-w-0">
+            <div class="text-sm font-medium text-white/80">Outlook</div>
+            <div class="text-[11px] text-white/45">Erstellt einen Kalender „Dashbo“ im verbundenen Outlook-Konto.</div>
+          </div>
+          <button class="h-8 px-3 rounded-lg bg-white/10 hover:bg-white/15 text-xs font-medium disabled:opacity-50" on:click={doOutlookConnect} disabled={calendarProviderSyncBusy}>
+            Outlook verbinden
+          </button>
+        </div>
+        {#if outlookConnections.length > 0}
+          <div class="space-y-2">
+            {#each outlookConnections as connection (connection.id)}
+              {@const target = targetFor('outlook', connection.id)}
+              <div class="flex items-center justify-between gap-3 text-sm">
+                <div class="min-w-0 truncate text-white/65">{connectionLabel(connection)}</div>
+                {#if target}
+                  <span class="text-xs text-emerald-200">Aktiv</span>
+                {:else}
+                  <button
+                    class="h-8 px-3 rounded-lg bg-white/20 hover:bg-white/25 text-xs font-medium disabled:opacity-50"
+                    on:click={() => doEnableDirectCalendarSync('outlook', connection.id)}
+                    disabled={calendarProviderSyncBusy}
+                  >
+                    Aktivieren
+                  </button>
+                {/if}
+              </div>
+            {/each}
+          </div>
+        {/if}
+
+        <div class="flex items-start justify-between gap-3 border-t border-white/10 pt-3">
+          <div class="min-w-0">
+            <div class="text-sm font-medium text-white/80">Google Calendar</div>
+            <div class="text-[11px] text-white/45">Erstellt einen Kalender „Dashbo“ im verbundenen Google-Konto.</div>
+          </div>
+          <button class="h-8 px-3 rounded-lg bg-white/10 hover:bg-white/15 text-xs font-medium disabled:opacity-50" on:click={doGoogleConnect} disabled={calendarProviderSyncBusy}>
+            Google verbinden
+          </button>
+        </div>
+        {#if googleConnections.length > 0}
+          <div class="space-y-2">
+            {#each googleConnections as connection (connection.id)}
+              {@const target = targetFor('google', connection.id)}
+              <div class="flex items-center justify-between gap-3 text-sm">
+                <div class="min-w-0 truncate text-white/65">{connectionLabel(connection)}</div>
+                {#if target}
+                  <span class="text-xs text-emerald-200">Aktiv</span>
+                {:else}
+                  <button
+                    class="h-8 px-3 rounded-lg bg-white/20 hover:bg-white/25 text-xs font-medium disabled:opacity-50"
+                    on:click={() => doEnableDirectCalendarSync('google', connection.id)}
+                    disabled={calendarProviderSyncBusy}
+                  >
+                    Aktivieren
+                  </button>
+                {/if}
+              </div>
+            {/each}
+          </div>
+        {/if}
+      </div>
+
+      {#if calendarProviderSyncError}
+        <div class="mt-2 text-red-400 text-xs">{calendarProviderSyncError}</div>
+      {/if}
+    </div>
   {/if}
 </div>

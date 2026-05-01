@@ -63,9 +63,15 @@ services:
       OUTLOOK_CLIENT_ID: ${OUTLOOK_CLIENT_ID:-}
       OUTLOOK_CLIENT_SECRET: ${OUTLOOK_CLIENT_SECRET:-}
       OUTLOOK_REDIRECT_URI: ${OUTLOOK_REDIRECT_URI:-}
-      OUTLOOK_SCOPES: ${OUTLOOK_SCOPES:-offline_access Calendars.Read User.Read Tasks.ReadWrite}
+      OUTLOOK_SCOPES: ${OUTLOOK_SCOPES:-offline_access Calendars.ReadWrite User.Read Tasks.ReadWrite}
       OUTLOOK_SUCCESS_REDIRECT: ${OUTLOOK_SUCCESS_REDIRECT:-/settings}
       OUTLOOK_ERROR_REDIRECT: ${OUTLOOK_ERROR_REDIRECT:-/settings?outlook=error}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI:-}
+      GOOGLE_SCOPES: ${GOOGLE_SCOPES:-openid email profile https://www.googleapis.com/auth/calendar}
+      GOOGLE_SUCCESS_REDIRECT: ${GOOGLE_SUCCESS_REDIRECT:-/settings}
+      GOOGLE_ERROR_REDIRECT: ${GOOGLE_ERROR_REDIRECT:-/settings?google=error}
       HUE_BRIDGE_URL: ${HUE_BRIDGE_URL:-}
       HUE_APP_KEY: ${HUE_APP_KEY:-}
       HUE_ALLOW_SELF_SIGNED: ${HUE_ALLOW_SELF_SIGNED:-true}
